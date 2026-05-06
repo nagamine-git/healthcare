@@ -111,6 +111,17 @@ npm run build
 | `recompute [YYYY-MM-DD]` | 指定日のスコアを再計算（省略時は本日） |
 | `regenerate-advice [YYYY-MM-DD]` | LLM コメントを強制再生成 |
 
+## Healthcare が触ってよい Calendar イベント
+
+LLM が再提案で時刻/内容を **上書きできる** イベントは、以下のいずれか:
+
+1. Healthcare の「Calendar に追加」で作ったイベント (自動で `extendedProperties.private.hc_managed=1` 付与)
+2. ユーザーが手動で作った既存イベントで、**説明欄に `[hc-adjustable]` を含む** もの
+
+例: 「【筋トレ】全身：基礎代謝最大化メニュー」「【有酸素＆腹筋＆ふくらはぎ】...」を Healthcare の判断で時間/内容調整させたい場合は、各イベントの説明欄に `[hc-adjustable]` を 1 行入れておく。
+
+調整不可 (会議、固定予定) のイベントは LLM が触らず、そこを避けて提案する。
+
 ## ライセンス・スコープ
 
 個人専用。Garmin Connect の利用規約を遵守し、自分のデータのみを取り扱う。
