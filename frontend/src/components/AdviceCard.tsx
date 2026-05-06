@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Advice, AdviceAction, GcalScheduleResult } from "../lib/api";
+import type { Advice, AdviceAction, AdvicePriority, GcalScheduleResult } from "../lib/api";
 
 type Props = {
   advice: Advice | null;
@@ -19,14 +19,29 @@ const CATEGORY_LABEL: Record<AdviceAction["category"], string> = {
   other: "その他",
 };
 
-const CATEGORY_COLOR: Record<AdviceAction["category"], string> = {
-  training: "bg-rose-900/40 text-rose-200 border-rose-800/60",
-  cardio: "bg-amber-900/40 text-amber-200 border-amber-800/60",
-  recovery: "bg-sky-900/40 text-sky-200 border-sky-800/60",
-  mobility: "bg-violet-900/40 text-violet-200 border-violet-800/60",
-  nutrition: "bg-emerald-900/40 text-emerald-200 border-emerald-800/60",
-  rest: "bg-slate-800/60 text-slate-300 border-slate-700",
-  other: "bg-slate-800/60 text-slate-300 border-slate-700",
+// カテゴリは slate 単色で統一 (情報過多を避ける)
+const CATEGORY_BADGE = "border border-slate-700 bg-slate-800/40 text-slate-300";
+
+const PRIORITY_LABEL: Record<AdvicePriority, string> = {
+  critical: "今すぐ",
+  high: "本日中",
+  mid: "推奨",
+  low: "任意",
+};
+
+// 優先度は意味があるので 4 段階維持、しかし強度はおさえる
+const PRIORITY_COLOR: Record<AdvicePriority, string> = {
+  critical: "border border-rose-500/70 bg-rose-500/10 text-rose-300",
+  high: "border border-amber-500/60 bg-amber-500/10 text-amber-300",
+  mid: "border border-slate-600 bg-transparent text-slate-400",
+  low: "border border-slate-700 bg-transparent text-slate-500",
+};
+
+const PRIORITY_RANK: Record<AdvicePriority, number> = {
+  critical: 0,
+  high: 1,
+  mid: 2,
+  low: 3,
 };
 
 export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, pending }: Props) {
@@ -80,43 +95,67 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
         </p>
       ) : (
         <>
-          {/* Focus */}
+          {/* Headline (1行パンチライン) */}
+          {payload?.headline && (
+            <p className="mb-3 text-lg font-semibold leading-snug text-slate-50 sm:text-xl">
+              {payload.headline}
+            </p>
+          )}
+          {/* Focus (1-2 文の説明) */}
           {payload?.focus ? (
-            <p className="text-base leading-relaxed text-slate-100">{payload.focus}</p>
+            <p className="text-sm font-medium leading-relaxed text-slate-200">
+              {payload.focus}
+            </p>
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
+            <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-200">
               {advice.comment}
             </p>
           )}
 
-          {/* Actions list */}
+          {/* Actions list — priority 順、空なら "メンテナンス日" 表示 */}
+          {payload && payload.actions.length === 0 && (
+            <p className="mt-3 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+              本日推奨アクションなし。コンディションを維持してください。
+            </p>
+          )}
           {payload && payload.actions.length > 0 && (
             <ul className="mt-4 space-y-2">
-              {payload.actions.map((a, i) => (
-                <li
-                  key={`${a.time_jst}-${i}`}
-                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2"
-                >
-                  <span className="font-mono text-base tabular-nums text-emerald-300">
-                    {a.time_jst}
-                  </span>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${
-                      CATEGORY_COLOR[a.category] ?? CATEGORY_COLOR.other
-                    }`}
+              {[...payload.actions]
+                .sort(
+                  (a, b) =>
+                    (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) ||
+                    a.time_jst.localeCompare(b.time_jst),
+                )
+                .map((a, i) => (
+                  <li
+                    key={`${a.time_jst}-${i}`}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2"
                   >
-                    {CATEGORY_LABEL[a.category] ?? a.category}
-                  </span>
-                  <span className="text-slate-100">{a.title}</span>
-                  <span className="text-xs text-slate-500">{a.duration_min} 分</span>
-                  {a.intensity && (
-                    <span className="text-xs text-slate-400">· {a.intensity}</span>
-                  )}
-                  {a.why && (
-                    <span className="basis-full text-xs text-slate-500">{a.why}</span>
-                  )}
-                </li>
-              ))}
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] tracking-wider ${
+                        PRIORITY_COLOR[a.priority] ?? PRIORITY_COLOR.mid
+                      }`}
+                    >
+                      {PRIORITY_LABEL[a.priority] ?? a.priority}
+                    </span>
+                    <span className="font-mono text-base tabular-nums text-slate-200">
+                      {a.time_jst}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] tracking-wider ${CATEGORY_BADGE}`}
+                    >
+                      {CATEGORY_LABEL[a.category] ?? a.category}
+                    </span>
+                    <span className="text-slate-100">{a.title}</span>
+                    <span className="text-xs text-slate-500">{a.duration_min} 分</span>
+                    {a.intensity && (
+                      <span className="text-xs text-slate-400">· {a.intensity}</span>
+                    )}
+                    {a.why && (
+                      <span className="basis-full text-xs text-slate-500">{a.why}</span>
+                    )}
+                  </li>
+                ))}
             </ul>
           )}
 

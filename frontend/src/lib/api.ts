@@ -50,6 +50,8 @@ export type WeightMetric = {
   ts: string | null;
 };
 
+export type AdvicePriority = "critical" | "high" | "mid" | "low";
+
 export type AdviceAction = {
   time_jst: string; // HH:MM
   title: string;
@@ -62,11 +64,13 @@ export type AdviceAction = {
     | "nutrition"
     | "rest"
     | "other";
+  priority: AdvicePriority;
   intensity?: string;
   why?: string;
 };
 
 export type AdvicePayload = {
+  headline?: string;
   focus: string;
   actions: AdviceAction[];
   rationale: string;
@@ -94,11 +98,75 @@ export type DataSources = Partial<Record<
   string | null
 >>;
 
+export type NutritionField = {
+  value: number | null;
+  estimated: boolean;
+  today_actual: number | null;
+  avg_14d: number | null;
+};
+
+export type TargetRange = {
+  min: number | null;
+  ideal: number | null;
+  max: number | null;
+  unit: string;
+  /** "range": min-max 内が良い / "minimum": ideal 以上が良い / "exact": ideal 一点 */
+  kind: "range" | "minimum" | "exact" | "baseline_relative";
+};
+
+export type Nutrition = {
+  tdee: NutritionField & {
+    bmr?: number;
+    active_kcal_today?: number | null;
+    active_kcal_avg_14d?: number | null;
+  };
+  kcal_intake: NutritionField;
+  protein_g: NutritionField;
+  fat_g: NutritionField;
+  carb_g: NutritionField;
+  water_ml: NutritionField;
+  fiber_g?: NutritionField;
+  sugar_g?: NutritionField;
+  sodium_mg?: NutritionField;
+  targets: {
+    kcal_intake: TargetRange | null;
+    protein_g: TargetRange;
+    fat_g: TargetRange;
+    carb_g: TargetRange;
+    water_ml: TargetRange;
+    fiber_g?: TargetRange;
+    sugar_g?: TargetRange;
+    sodium_mg?: TargetRange;
+  };
+  logged_today: boolean;
+};
+
+export type SubContextEntry = {
+  current: number | null;
+  target: TargetRange;
+  /** 任意の追加メトリクス */
+  weekly_avg?: number | null;
+  morning?: number | null;
+  acute?: number | null;
+  chronic?: number | null;
+  acwr?: number | null;
+};
+
+export type SubContext = {
+  sleep?: SubContextEntry;
+  hrv?: SubContextEntry;
+  body_battery?: SubContextEntry;
+  load?: SubContextEntry;
+  weight?: SubContextEntry;
+  body_fat?: SubContextEntry;
+};
+
 export type TodayResponse = {
   date: string;
   score: SubScores | null;
   sub_reasons?: SubReasons;
   data_sources?: DataSources;
+  sub_context?: SubContext;
   metrics: {
     sleep: SleepMetric | null;
     hrv: HrvMetric | null;
@@ -106,6 +174,7 @@ export type TodayResponse = {
     summary: SummaryMetric | null;
     weight: WeightMetric | null;
   };
+  nutrition?: Nutrition;
   advice: Advice | null;
   sync: Record<string, SyncStatus>;
 };
@@ -141,6 +210,22 @@ export type GcalScheduleResult = {
   }>;
 };
 
+export type DebugSources = {
+  window_days: number;
+  sync: Record<string, { last_synced_at: string | null; last_error: string | null }>;
+  sleep: Array<Record<string, unknown>>;
+  hrv: Array<Record<string, unknown>>;
+  body_battery_daily: Array<Record<string, unknown>>;
+  body_battery_samples: Array<Record<string, unknown>>;
+  workouts: Array<Record<string, unknown>>;
+  daily_summary: Array<Record<string, unknown>>;
+  weights: Array<Record<string, unknown>>;
+  daily_score: Array<Record<string, unknown>>;
+  metric_summary: Array<{ source: string; metric_key: string; count: number; latest: string | null }>;
+  metric_recent: Array<Record<string, unknown>>;
+  llm_comments: Array<Record<string, unknown>>;
+};
+
 export const api = {
   today: () => request<TodayResponse>("/api/today"),
   timeseries: (metric: string, days = 28) =>
@@ -150,4 +235,5 @@ export const api = {
   regenerateAdvice: () => request<unknown>("/admin/llm/regenerate", { method: "POST" }),
   gcalStatus: () => request<GcalStatus>("/admin/gcal/status"),
   gcalSchedule: () => request<GcalScheduleResult>("/admin/gcal/schedule", { method: "POST" }),
+  debugSources: (days = 14) => request<DebugSources>(`/api/debug/sources?days=${days}`),
 };

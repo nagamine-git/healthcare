@@ -3,8 +3,9 @@ import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { MetricTile } from "../components/MetricTile";
 import { AdviceCard } from "../components/AdviceCard";
-import { SyncStatus } from "../components/SyncStatus";
 import { Sparkline } from "../components/Sparkline";
+import { NutritionPanel } from "../components/NutritionPanel";
+import { SyncMenu } from "../components/SyncMenu";
 
 function formatMinutes(min: number | null): string {
   if (min == null) return "--";
@@ -13,7 +14,16 @@ function formatMinutes(min: number | null): string {
   return `${h}時間${m.toString().padStart(2, "0")}分`;
 }
 
-export function TodayPage() {
+function fmtNum(v: number | null | undefined): string {
+  return v == null ? "--" : String(Math.round(v));
+}
+
+
+type Props = {
+  onOpenDebug?: () => void;
+};
+
+export function TodayPage({ onOpenDebug }: Props) {
   const qc = useQueryClient();
   const today = useQuery({ queryKey: ["today"], queryFn: api.today });
   const scoreSeries = useQuery({
@@ -37,8 +47,16 @@ export function TodayPage() {
     mutationFn: api.syncGarmin,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
+  const recompute = useMutation({
+    mutationFn: api.recompute,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
+  });
   const regenerate = useMutation({
     mutationFn: api.regenerateAdvice,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
+  });
+  const schedule = useMutation({
+    mutationFn: api.gcalSchedule,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
   const gcalStatus = useQuery({
@@ -66,13 +84,32 @@ export function TodayPage() {
   const score = data.score;
   const reasons = data.sub_reasons ?? {};
   // ideal = そのサブスコアが最大に到達したときの値 (採点ロジックの上限)
+  const ctx = data.sub_context ?? {};
+  const fmtSleep = ctx.sleep && ctx.sleep.current != null
+    ? `${formatMinutes(ctx.sleep.current)} (推奨 ${formatMinutes(ctx.sleep.target.min ?? 420)}–${formatMinutes(ctx.sleep.target.max ?? 540)})`
+    : undefined;
+  const fmtHrv = ctx.hrv?.current != null ? `${Math.round(ctx.hrv.current)} ms` : undefined;
+  const fmtBb =
+    ctx.body_battery && (ctx.body_battery.current != null || ctx.body_battery.morning != null)
+      ? `現在 ${fmtNum(ctx.body_battery.current)} (朝 ${fmtNum(ctx.body_battery.morning)})`
+      : undefined;
+  const fmtLoad = ctx.load?.acwr != null
+    ? `ACWR ${ctx.load.acwr.toFixed(2)} (推奨 ${ctx.load.target.min}–${ctx.load.target.max})`
+    : undefined;
+  const fmtWeight = ctx.weight && ctx.weight.current != null
+    ? `${ctx.weight.current.toFixed(1)} kg / 推奨 ${(ctx.weight.target.min ?? 0).toFixed(1)}–${(ctx.weight.target.max ?? 0).toFixed(1)} kg`
+    : undefined;
+  const fmtBf = ctx.body_fat && ctx.body_fat.current != null
+    ? `${ctx.body_fat.current.toFixed(1)}% / 推奨 ${(ctx.body_fat.target.min ?? 0).toFixed(1)}–${(ctx.body_fat.target.max ?? 0).toFixed(1)}%`
+    : undefined;
+
   const subs = [
-    { label: "睡眠", value: score?.sleep ?? null, ideal: 100, reason: reasons.sleep ?? undefined },
-    { label: "自律神経", value: score?.hrv ?? null, ideal: 100, reason: reasons.hrv ?? undefined },
-    { label: "エネルギー", value: score?.body_battery ?? null, ideal: 100, reason: reasons.body_battery ?? undefined },
-    { label: "運動負荷", value: score?.load ?? null, ideal: 85, reason: reasons.load ?? undefined },
-    { label: "体重", value: score?.weight ?? null, ideal: 80, reason: reasons.weight ?? undefined },
-    { label: "体脂肪率", value: score?.body_fat ?? null, ideal: 90, reason: reasons.body_fat ?? undefined },
+    { label: "睡眠", value: score?.sleep ?? null, ideal: 100, reason: reasons.sleep ?? undefined, realWorld: fmtSleep },
+    { label: "自律神経", value: score?.hrv ?? null, ideal: 100, reason: reasons.hrv ?? undefined, realWorld: fmtHrv },
+    { label: "エネルギー", value: score?.body_battery ?? null, ideal: 100, reason: reasons.body_battery ?? undefined, realWorld: fmtBb },
+    { label: "運動負荷", value: score?.load ?? null, ideal: 85, reason: reasons.load ?? undefined, realWorld: fmtLoad },
+    { label: "体重", value: score?.weight ?? null, ideal: 80, reason: reasons.weight ?? undefined, realWorld: fmtWeight },
+    { label: "体脂肪率", value: score?.body_fat ?? null, ideal: 90, reason: reasons.body_fat ?? undefined, realWorld: fmtBf },
   ];
 
   const sleep = data.metrics.sleep;
@@ -82,12 +119,52 @@ export function TodayPage() {
   const weight = data.metrics.weight;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-light tracking-wide text-slate-100">
-          {data.date}
-        </h1>
-        <span className="text-xs text-slate-500">Healthcare Dashboard</span>
+    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-6 px-4 pb-8 sm:px-8">
+      <header className="safe-area-top flex items-center justify-between pb-2 pt-3">
+        <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
+          <SyncMenu
+            lastSyncedLabel={
+              data.sync.garmin?.last_synced_at
+                ? `Garmin: ${formatRelative(data.sync.garmin.last_synced_at)}`
+                : undefined
+            }
+            items={[
+              {
+                label: "Garmin を再取得",
+                description: "Garmin Connect から最新データを取得",
+                onClick: () => sync.mutate(),
+                pending: sync.isPending,
+              },
+              {
+                label: "スコア再計算",
+                description: "本日のサブスコアと総合を更新",
+                onClick: () => recompute.mutate(),
+                pending: recompute.isPending,
+              },
+              {
+                label: "アドバイス再生成",
+                description: "Claude に最新データで助言を作り直してもらう",
+                onClick: () => regenerate.mutate(),
+                pending: regenerate.isPending,
+              },
+              {
+                label: gcalStatus.data?.configured ? "Calendar に追加" : "Calendar 未連携",
+                description: "推奨アクションを Google Calendar にイベント化",
+                onClick: () => gcalStatus.data?.configured && schedule.mutate(),
+                pending: schedule.isPending,
+                hidden: !gcalStatus.data?.configured,
+              },
+              {
+                label: "Debug ビュー",
+                description: "ソース別の生データを確認",
+                onClick: () => onOpenDebug?.(),
+                hidden: !onOpenDebug,
+              },
+            ]}
+          />
+        </div>
       </header>
 
       <AdviceCard
@@ -99,6 +176,8 @@ export function TodayPage() {
       />
 
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
+
+      <NutritionPanel nutrition={data.nutrition} />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <MetricTile
@@ -169,11 +248,15 @@ export function TodayPage() {
         />
       </section>
 
-      <SyncStatus
-        sync={data.sync}
-        onResync={() => sync.mutate()}
-        pending={sync.isPending}
-      />
     </main>
   );
+}
+
+function formatRelative(iso: string): string {
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  if (diff < 60_000) return "たった今";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 時間前`;
+  return new Date(iso).toLocaleDateString();
 }

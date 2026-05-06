@@ -15,6 +15,8 @@ export type Sub = {
    *  例: weight=80, body_fat=90, training_load=85, それ以外=100 */
   ideal: number;
   reason?: string;
+  /** 副題: 実世界の単位での「現状 → 目標」表記 (例: "356 / 480 分") */
+  realWorld?: string;
 };
 
 type Props = {
@@ -57,9 +59,11 @@ export function SubScoreRadar({ subs, total }: Props) {
   const measured = subs.filter((s) => s.value != null);
   const learning = subs.filter((s) => s.value == null);
 
+  // current(score) と target(ideal) を同じ data に詰めて 2 枚 polygon を重ねる
   const data = measured.map((s) => ({
     axis: s.label,
     score: s.value as number,
+    target: s.ideal,
   }));
 
   const canDrawRadar = data.length >= 3;
@@ -77,8 +81,14 @@ export function SubScoreRadar({ subs, total }: Props) {
           </span>
           <span className="text-xs text-slate-400">{totalLabel(total)}</span>
         </div>
-        <span className="text-[10px] text-slate-500">
-          各軸 0–100 (28日ベースライン基準)
+        <span className="flex items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-0.5 w-3 bg-emerald-400" />現状
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-0 w-3 border-t border-dashed border-slate-400" />
+            目標
+          </span>
         </span>
       </div>
 
@@ -104,9 +114,24 @@ export function SubScoreRadar({ subs, total }: Props) {
                   border: "1px solid #334155",
                   fontSize: 12,
                 }}
-                formatter={(v: number) => [Math.round(v).toString(), "score"]}
+                formatter={(v: number, name: string) => [
+                  Math.round(v).toString(),
+                  name === "target" ? "目標" : "現状",
+                ]}
               />
+              {/* 目標ライン (各軸の理想値、点線) */}
               <Radar
+                name="target"
+                dataKey="target"
+                stroke="#64748b"
+                fill="none"
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                isAnimationActive={false}
+              />
+              {/* 現状 (実線エメラルド) */}
+              <Radar
+                name="score"
                 dataKey="score"
                 stroke="#34d399"
                 fill="#34d399"
@@ -149,13 +174,13 @@ export function SubScoreRadar({ subs, total }: Props) {
 }
 
 function GapRow({ sub }: { sub: Sub }) {
-  const { label, value, ideal } = sub;
+  const { label, value, ideal, realWorld } = sub;
   const ratio = value == null ? 0 : Math.max(0, Math.min(1, value / ideal));
   const color = value == null ? "#475569" : gradientHsl(ratio);
   const gap = value == null ? null : Math.round(ideal - value);
   return (
     <div className="space-y-1">
-      <div className="flex items-baseline justify-between text-xs">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
         <span className="text-slate-300">{label}</span>
         <span className="tabular-nums text-slate-400">
           {value == null ? (
@@ -172,6 +197,9 @@ function GapRow({ sub }: { sub: Sub }) {
           )}
         </span>
       </div>
+      {realWorld && (
+        <div className="text-[10px] tabular-nums text-slate-500">{realWorld}</div>
+      )}
       <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
         <div
           className="h-full rounded-full transition-all"
