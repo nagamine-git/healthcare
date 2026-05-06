@@ -87,6 +87,11 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
 
     now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
     try:
+        # 同日の Healthcare 管理イベントを先に削除 (重複防止 + リプレース)
+        from app.integrations.gcal import delete_managed_events_for_date
+
+        deleted = delete_managed_events_for_date(d)
+
         if payload and isinstance(payload, dict) and payload.get("actions"):
             created = schedule_actions_from_payload(payload, target_date=now_jst)
         else:
@@ -96,4 +101,4 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Google Calendar 連携でエラー: {exc}",
         ) from exc
-    return {"date": d.isoformat(), "created": created}
+    return {"date": d.isoformat(), "deleted": deleted, "created": created}

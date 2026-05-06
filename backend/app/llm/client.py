@@ -29,6 +29,30 @@ _FALLBACK_MESSAGE = (
 )
 
 
+def _gather_recent_workouts(target: date_type, days: int = 7) -> list[dict[str, Any]]:
+    """直近 N 日のワークアウトを LLM に渡すために取得する。"""
+    from app.models import Workout
+
+    since = datetime.combine(target - timedelta(days=days), datetime.min.time())
+    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    with session_scope() as session:
+        rows = session.execute(
+            select(Workout).where(Workout.start >= since, Workout.start < end).order_by(Workout.start)
+        ).scalars().all()
+        out = []
+        for r in rows:
+            out.append(
+                {
+                    "date": r.start.date().isoformat(),
+                    "type": r.type,
+                    "duration_min": int(r.duration_s / 60) if r.duration_s else None,
+                    "distance_km": round(r.distance_m / 1000, 2) if r.distance_m else None,
+                    "training_load": r.training_load,
+                }
+            )
+        return out
+
+
 def _gather_today_payload(target: date_type) -> dict[str, Any]:
     from app.models import BodyBattery
 
@@ -205,6 +229,12 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
                 return {"status": "rate_limited"}
 
     today_payload = _gather_today_payload(target)
+    today_payload["recent_workouts_7d"] = _gather_recent_workouts(target, days=7)
+    # 栄養: 当日の摂取・PFC・水分・TDEE 推定 + 推奨値
+    from app.scoring.nutrition import aggregate_nutrition
+
+    with session_scope() as session:
+        today_payload["nutrition"] = aggregate_nutrition(session, target)
     baselines = _gather_baselines(target)
 
     # Calendar 既存予定を取り込む (gcal 未設定なら空リスト)

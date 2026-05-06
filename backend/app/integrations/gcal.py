@@ -118,6 +118,9 @@ def _calendar_service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
+_ADJUSTABLE_MARKER = "[hc-adjustable]"
+
+
 def list_events_for_date(
     target_date,
     *,
@@ -126,7 +129,11 @@ def list_events_for_date(
 ) -> list[dict[str, Any]]:
     """指定日 (JST) の予定一覧を返す。終日予定は除外。
 
-    認証情報が無い場合は空リストを返す (例外を投げない)。
+    各イベントに次のフラグを付与:
+    - ``is_hc_managed``: Healthcare が作った (extendedProperties.private.hc_managed=1)
+    - ``is_adjustable``: 上記 or description に ``[hc-adjustable]`` を含む
+
+    認証情報が無い場合は空リストを返す。
     """
     creds = load_credentials()
     if creds is None:
@@ -157,25 +164,56 @@ def list_events_for_date(
             start = ev.get("start", {}).get("dateTime")
             end = ev.get("end", {}).get("dateTime")
             if not start or not end:
-                # all-day or odd shape — skip
                 continue
-            # 自分が既に作った [Healthcare] イベントはスキップ
-            summary = ev.get("summary", "")
-            if summary.startswith("[Healthcare] "):
-                continue
+            summary = ev.get("summary", "") or "(no title)"
+            description = ev.get("description", "") or ""
+            ext = (ev.get("extendedProperties") or {}).get("private") or {}
+            is_managed = ext.get("hc_managed") == "1"
+            is_adjustable = is_managed or (_ADJUSTABLE_MARKER in description)
             transparency = ev.get("transparency", "opaque")
             events.append(
                 {
-                    "summary": summary or "(no title)",
+                    "id": ev.get("id"),
+                    "summary": summary,
                     "start": start,
                     "end": end,
                     "is_busy": transparency == "opaque",
+                    "is_hc_managed": is_managed,
+                    "is_adjustable": is_adjustable,
                 }
             )
         return events
     except Exception as exc:
         logger.warning("gcal_list_events_failed", error=str(exc))
         return []
+
+
+def delete_managed_events_for_date(
+    target_date, *, calendar_id: str = "primary"
+) -> int:
+    """指定日の Healthcare 管理イベントを全て削除する。返り値は削除件数。"""
+    creds = load_credentials()
+    if creds is None:
+        return 0
+    deleted = 0
+    try:
+        from googleapiclient.discovery import build
+
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        for ev in list_events_for_date(target_date, calendar_id=calendar_id):
+            if not ev.get("is_hc_managed"):
+                continue
+            ev_id = ev.get("id")
+            if not ev_id:
+                continue
+            try:
+                service.events().delete(calendarId=calendar_id, eventId=ev_id).execute()
+                deleted += 1
+            except Exception as exc:
+                logger.warning("gcal_delete_failed", id=ev_id, error=str(exc))
+    except Exception as exc:
+        logger.warning("gcal_delete_managed_failed", error=str(exc))
+    return deleted
 
 
 def create_event(
@@ -186,17 +224,21 @@ def create_event(
     description: str | None = None,
     calendar_id: str = "primary",
     color_id: str | None = None,
+    hc_action_id: str | None = None,
 ) -> dict[str, Any]:
+    """Healthcare 管理イベントとして作成する (extendedProperties.private.hc_managed=1)。"""
+    import uuid as _uuid
+
     service = _calendar_service()
     body: dict[str, Any] = {
         "summary": summary,
-        "start": {
-            "dateTime": start.isoformat(),
-            "timeZone": "Asia/Tokyo",
-        },
-        "end": {
-            "dateTime": end.isoformat(),
-            "timeZone": "Asia/Tokyo",
+        "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+        "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Tokyo"},
+        "extendedProperties": {
+            "private": {
+                "hc_managed": "1",
+                "hc_action_id": hc_action_id or str(_uuid.uuid4()),
+            }
         },
     }
     if description:

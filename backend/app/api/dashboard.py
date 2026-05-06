@@ -82,11 +82,76 @@ async def today() -> dict[str, Any]:
             "weight": weight_row.source if weight_row else None,
         }
 
+        # 各サブスコアの実世界の値とターゲット (UI 表示用)
+        from app.config import get_settings
+        from app.scoring.recompute import _training_load
+
+        s = get_settings()
+        acute, chronic = _training_load(session, d)
+        acwr = (acute / chronic) if (acute is not None and chronic and chronic > 0) else None
+        sub_context = {
+            "sleep": {
+                "current": sleep.total_min if sleep else None,
+                # 7-9h が WHO/AASM の推奨範囲
+                "target": {"min": 420, "ideal": 480, "max": 540, "unit": "分", "kind": "range"},
+            },
+            "hrv": {
+                "current": hrv.last_night_avg if hrv else None,
+                "weekly_avg": hrv.weekly_avg if hrv else None,
+                # HRV は個人差大、絶対値の目標は設定せずベースライン比で判断
+                "target": {"min": None, "ideal": None, "max": None, "unit": "ms", "kind": "baseline_relative"},
+            },
+            "body_battery": {
+                "current": bb_latest.value if bb_latest else None,
+                "morning": bb.morning_value if bb else None,
+                # Garmin の Body Battery: 50+ 良好、80+ 高い
+                "target": {"min": 50, "ideal": 80, "max": 100, "unit": "", "kind": "minimum"},
+            },
+            "load": {
+                "acute": acute,
+                "chronic": chronic,
+                "acwr": acwr,
+                "target": {
+                    "min": 0.8,
+                    "ideal": 1.0,
+                    "max": 1.3,
+                    "unit": "",
+                    "kind": "range",
+                },
+            },
+            "weight": {
+                "current": weight_row.weight_kg if weight_row else None,
+                "target": {
+                    "min": round(s.target_weight_kg - 1.0, 1),
+                    "ideal": s.target_weight_kg,
+                    "max": round(s.target_weight_kg + 1.0, 1),
+                    "unit": "kg",
+                    "kind": "range",
+                },
+            },
+            "body_fat": {
+                "current": weight_row.body_fat_pct if weight_row else None,
+                "target": {
+                    "min": round(s.target_body_fat_pct - s.body_fat_tolerance_pct, 1),
+                    "ideal": s.target_body_fat_pct,
+                    "max": round(s.target_body_fat_pct + s.body_fat_tolerance_pct, 1),
+                    "unit": "%",
+                    "kind": "range",
+                },
+            },
+        }
+
+        from app.scoring.nutrition import aggregate_nutrition
+
+        nutrition = aggregate_nutrition(session, d)
+
         return {
             "date": d.isoformat(),
             "score": _score_to_dict(score),
             "sub_reasons": sub_reasons,
             "data_sources": data_sources,
+            "sub_context": sub_context,
+            "nutrition": nutrition,
             "metrics": {
                 "sleep": _sleep_to_dict(sleep),
                 "hrv": _hrv_to_dict(hrv),
