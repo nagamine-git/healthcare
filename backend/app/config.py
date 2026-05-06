@@ -46,13 +46,14 @@ class Settings(BaseSettings):
     target_body_fat_pct: float = 14.0
     body_fat_tolerance_pct: float = 1.5
 
-    # 利用可能な機材 (LLM 用)
+    # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
     user_equipment: list[str] = Field(
         default_factory=lambda: [
-            "プッシュアップバー (小型)",
+            "ダンベル (2 / 4 / 8 / 12 / 16 / 20 kg のいずれか。10kg や 6kg などの中間サイズは持っていない)",
             "アブローラー",
             "フラットベンチ",
-            "ダンベル (2/4/8/12/16/20kg に調節可)",
+            "プッシュアップバー (小型・2 つ)",
+            "リュックサック (中身の重さで負荷調整可、ラッキング用)",
             "トレーニングマット",
         ]
     )
@@ -89,6 +90,32 @@ class Settings(BaseSettings):
     target_protein_g_per_kg: float = 2.0  # recomposition 想定
     target_water_ml_per_kg: float = 35.0
     # 摂取カロリー目標は TDEE (= 当日の active + basal energy 合計、Apple Health から推定) を基準にする
+
+    # --- トレーニング処方の開始重量 (前回実績が無いときの保守的スタート) ---
+    # 腰のケガ歴を考慮し、ヒンジ系は 8kg から、全般に控えめに開始。
+    # 利用可能な刻みは 2/4/8/12/16/20kg のみ なので、それ以外を絶対に使わない。
+    user_starting_weights: dict[str, str] = Field(
+        default_factory=lambda: {
+            "ダンベルベンチプレス": "8kg×2",
+            "ダンベルショルダープレス": "4kg×2",
+            "ダンベルロー (片手)": "8kg",
+            "ダンベルゴブレットスクワット": "8kg",
+            "ダンベルルーマニアンデッドリフト": "8kg×2",
+            "ダンベルヒップスラスト": "8kg×2",
+            "ダンベルカール": "4kg×2",
+            "プッシュアップ (プッシュアップバー)": "自重",
+            "アブローラー (膝つき)": "自重",
+            "カーフレイズ": "自重 or 8kg×2",
+            "ラッキング": "リュックサック 5kg 入り",
+        }
+    )
+    # 漸進性ルール: ダンベルが飛び石 (2→4→8→12→16→20) なので
+    # 「次の刻み」へジャンプ。+2kg ではなく次の利用可能サイズへ。
+    user_progression_rule: str = (
+        "double progression: 同一重量で目標 reps 上限 + RIR 1-2 を 2 セッション連続で達成できたら "
+        "**次に利用可能な重量** へ進む (例: 8kg → 12kg、12kg → 16kg)。達成できなければ重量維持して "
+        "reps を 1 ずつ伸ばすか RIR を改善する。中間サイズ (10kg / 6kg 等) は存在しない。"
+    )
 
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"

@@ -19,11 +19,27 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 候補種目: {training_options}
 - 週スプリットの参考: {weekly_split_hint}
 
+# 利用可能なダンベル重量 (絶対遵守)
+**2 / 4 / 8 / 12 / 16 / 20 kg のみ存在する**。これ以外の刻み (5, 6, 10, 14 kg 等) は **絶対に出さない**。
+両手なら ``8kg×2``、片手なら ``12kg`` のように表記。リュックサックでのラッキングは中身を 1kg 単位で
+調整できるので ``リュックサック 5kg`` 等は OK。
+
+# 重量ベースライン (前回処方が無い場合の保守的開始)
+{starting_weights}
+
+# 漸進性 (progressive overload) ルール
+{progression_rule}
+
 # 出力ルール
 - 全体で 450 字以内、絵文字なし、丁寧体、断定調を避けベースライン比で語る
 - 推奨時刻は本日の現在時刻以降を JST で 24h 表記、所要時間は分単位
-- 既存のカレンダー予定がある時間帯は **基本的に避ける** (会議等)。直前/直後 5 分のバッファも空けて提案する
-- ただし、``is_adjustable=true`` の予定は Healthcare が再提案で **置き換え可能**。コンディション上不要なら省略 / 内容や時刻を最適化して別タイトルで提案して良い
+- カレンダー予定の扱い (**最重要**):
+  - 会議・ミーティング等の **業務予定** は actions に入れない (時間帯を避ける)
+  - **トレーニング系の予定** (筋トレ / 有酸素 / ラッキング / HIIT / ストレッチ / モビリティ / 食事 / 水分 等) は **actions に必ず含める**。「【筋トレ】全身：基礎代謝最大化メニュー」のような既定予定がカレンダーにあったら、その時刻・タイトルで action を 1 件作り、**exercises 配列に具体メニューを書く**
+    - ``is_adjustable=true`` のものは内容/時刻を調整して別タイトルで提案して良い
+    - ``is_adjustable=false`` でも 元のタイトル・時刻はそのまま、**exercises だけ具体的に** 埋める (利用者は曖昧なメニュー名から具体処方を得たい)
+    - priority は予定の重要度に応じて (本日のメイン session = high、軽い補助 = mid)
+  - 健康関連でない予定 (打合せ等) は actions に入れず、それを避けて他のアクションを組む
 - 専門用語 (例: ラッキング, Z2, RPE, ACWR) を使う場合は、初出に括弧で **短い補足を必ず付ける**。例: 「ラッキング (重い荷物を背負って歩く)」「Z2 (会話可能な低強度有酸素、心拍 110-130)」「RPE 6 (10 段階の主観強度、ややきつい)」
 - ケガ歴を尊重: 腰に高負荷をかけるヒンジ系は安全重量に抑える
 - 仕事のパフォーマンスを最優先。HRV/Body Battery が低い日は強度を落とす
@@ -51,7 +67,33 @@ SYSTEM_PERSONA_TEMPLATE = """\
 必ず ``submit_advice`` ツールを 1 回呼び出して、構造化されたデータとして提出してください。
 プレーンテキストでは返さず、ツール呼び出しの input に全情報を入れる。
 
-トレーニングの場合は **必ず候補種目から選び**、扱う重量を intensity に明示する。
+# トレーニング処方の指針 (科学的根拠ベース)
+training/cardio の action では **必ず ``exercises`` 配列を埋める**。曖昧な「全身メニュー」だけは禁止。
+以下の枠組みで具体的な処方を返す:
+
+- **目的別 set/rep**:
+  - 筋肥大 (recomposition の主目的): 8-12 reps × 3-4 sets, RIR 1-3, 休憩 60-90s
+  - 筋力: 3-6 reps × 3-5 sets, RIR 1-2, 休憩 2-3 分
+  - 筋持久力: 15-20+ reps, RIR 0-1, 休憩 30-60s
+- **週次ボリューム**: 1 部位あたり 10-20 set/週 (recomposition 中位)
+- **重量選定 (最重要)**: 利用者のダンベル (2/4/8/12/16/20kg) から、提示する RIR を満たせる重さを選ぶ
+  - **基本は前回処方を参照**: ``recent_training_prescriptions_21d`` に同種目の処方があれば、そこから double progression で漸進。重量を勝手に上げない
+  - 前回処方が無い種目は、上記「重量ベースライン」から始める (慎重)
+  - **De-load 判定**: ``days_since_last_strength_training`` が 7 日以上空いている場合、前回処方から **-10〜-20%** で再スタート (筋量と神経適応の減衰を考慮)
+    - 例: 14 日空いたら -15%、21 日以上は開始重量に戻す
+  - 16kg はヒンジ系 (RDL/デッドリフト/グッドモーニング) では **絶対に使わない** (上限 12kg、腰の既往)
+  - 20kg は安定したベンチ系・片手 row・ゴブレットスクワット 等で慎重に
+  - **前回 RIR が 0-1 (限界寸前) なら重量据え置きで rep を伸ばす方を優先**
+- **HIIT**: 週 1-2 回まで。Tabata 20s ON / 10s OFF × 8 ラウンド = 4 分が標準
+- **有酸素**:
+  - Z2 (心拍 110-130): 30-60 分、ベース有酸素キャパ向上
+  - HIIT 後の clean-up や Active recovery: Z1 (110 未満) 15-30 分
+- **腰のケガ歴**: 腰が丸まる動作 (デッドリフト・スクワット深部) は重量を控え、フォーム最優先
+- **メニュー構築原則**:
+  - Push 日: ベンチ系 → ショルダー系 → 三頭筋系 (3-4 種目)
+  - Pull 日: ロー系 → ヒップヒンジ → 二頭筋・コア (3-4 種目)
+  - Legs 日: スクワット系 → ヒンジ系 → カーフ・コア (3-4 種目)
+  - 全身 (今日のような session): 多関節を中心に push/pull/legs 各 1 種目 + コア (4-5 種目、合計 30-50 分)
 
 # スコアの意味 (0–100)
 - sleep: 睡眠の質と量
@@ -68,6 +110,7 @@ def _format_persona() -> str:
     from app.config import get_settings
 
     s = get_settings()
+    starting = "\n".join(f"- {k}: {v}" for k, v in s.user_starting_weights.items())
     return SYSTEM_PERSONA_TEMPLATE.format(
         user_age=s.user_age,
         user_sex={"male": "男性", "female": "女性"}.get(s.user_sex, s.user_sex),
@@ -80,6 +123,8 @@ def _format_persona() -> str:
         equipment="、".join(s.user_equipment),
         training_options="、".join(s.user_training_options),
         weekly_split_hint=s.user_weekly_split_hint,
+        starting_weights=starting,
+        progression_rule=s.user_progression_rule,
     )
 
 
@@ -192,11 +237,75 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
                         },
                         "intensity": {
                             "type": "string",
-                            "description": "RPE / 重量 / 距離 / ペースなどの強度指定。training/cardio で必須。",
+                            "description": (
+                                "training/cardio で必須の強度サマリ。略語を使うときは **必ず日本語の補足を併記** する。"
+                                "良い例: "
+                                "'RPE 6-7 (10 段階の主観強度、ややきつい)' "
+                                "'RIR 2 (限界まで 2 回余力を残す)' "
+                                "'Z2 (会話可能な低強度有酸素、心拍 110-130)' "
+                                "'時速 8km/h'。"
+                                "悪い例: 'RPE 6-7 / RIR 2' (説明なし)"
+                            ),
+                        },
+                        "exercises": {
+                            "type": "array",
+                            "description": (
+                                "category=training または cardio の **筋力/有酸素エクササイズだけ** に使う。"
+                                "nutrition / rest / mobility では使用しない (食品や休息は exercises に入れない)。"
+                                "**category=training の場合は exercises を必ず 3-5 種目入れる**。空配列禁止。"
+                                "ユーザーの機材 (ダンベル 2/4/8/12/16/20kg、フラットベンチ、プッシュアップバー、アブローラー) と "
+                                "候補種目の中から選ぶこと。"
+                            ),
+                            "items": {
+                                "type": "object",
+                                "required": ["name", "sets", "reps"],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "種目名。例: 'ダンベルベンチプレス'",
+                                    },
+                                    "weight": {
+                                        "type": "string",
+                                        "description": (
+                                            "重量を文字列で。'12kg×2' (両手ダンベル) / '16kg' (片手ゴブレット) / '自重' / 'バッグ 8kg' 等。"
+                                            "ヒンジ系 (RDL, デッドリフト) は腰を痛めた経験から **12kg 上限**。"
+                                        ),
+                                    },
+                                    "sets": {
+                                        "type": "integer",
+                                        "description": "セット数 (通常 3-4)",
+                                    },
+                                    "reps": {
+                                        "type": "string",
+                                        "description": "回数。'10' or '8-12' or '60秒' (時間制)",
+                                    },
+                                    "rest_sec": {
+                                        "type": "integer",
+                                        "description": (
+                                            "セット間休憩秒。Hypertrophy 60-90s / Strength 120-180s / Endurance 30-60s"
+                                        ),
+                                    },
+                                    "rir": {
+                                        "type": "integer",
+                                        "description": (
+                                            "Reps in Reserve (限界まで何 reps 余力残すか)。"
+                                            "Hypertrophy 1-3、Strength 1-2、技術習得は 3-5"
+                                        ),
+                                    },
+                                    "tempo": {
+                                        "type": "string",
+                                        "description": "テンポ表記。'2-1-2-0' (eccentric-pause-concentric-pause) 等、必要時のみ",
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "description": "フォーム注意・代替案など 1 文",
+                                    },
+                                },
+                            },
                         },
                         "why": {
                             "type": "string",
-                            "description": "選定理由を 1 文で簡潔に。",
+                            "description": "選定理由を 1 文で簡潔に。科学的根拠 (volume, ACWR, 回復状態) を 1 つ引用",
                         },
                     },
                 },

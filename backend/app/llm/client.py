@@ -53,6 +53,69 @@ def _gather_recent_workouts(target: date_type, days: int = 7) -> list[dict[str, 
         return out
 
 
+_STRENGTH_TYPES = {"strength_training", "weight_training", "indoor_climbing"}
+
+
+def _days_since_last_strength_training(target: date_type) -> int | None:
+    """最後の strength_training から target までの経過日数。記録なしなら None。"""
+    from app.models import Workout
+
+    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    with session_scope() as session:
+        rows = session.execute(
+            select(Workout.start, Workout.type)
+            .where(Workout.start < end)
+            .order_by(Workout.start.desc())
+            .limit(50)
+        ).all()
+    for start, wtype in rows:
+        if wtype in _STRENGTH_TYPES or (wtype and "strength" in wtype.lower()):
+            delta = (target - start.date()).days
+            return delta
+    return None
+
+
+def _gather_recent_training_prescriptions(
+    target: date_type, days: int = 21
+) -> list[dict[str, Any]]:
+    """過去 N 日の LLM 提示処方 (training/cardio) の exercises を抜き出す。
+
+    LLM が前回までの処方を踏まえて漸進性で次を組めるようにする。
+    """
+    from app.models import LlmComment
+
+    since = target - timedelta(days=days)
+    out: list[dict[str, Any]] = []
+    with session_scope() as session:
+        rows = session.execute(
+            select(LlmComment.date, LlmComment.payload)
+            .where(LlmComment.date >= since, LlmComment.date < target)
+            .order_by(LlmComment.date.desc())
+        ).all()
+    seen_dates: set[date_type] = set()
+    for d, payload in rows:
+        if d in seen_dates or not payload:
+            continue
+        seen_dates.add(d)
+        actions = (payload or {}).get("actions") or []
+        for a in actions:
+            if a.get("category") not in ("training", "cardio"):
+                continue
+            exercises = a.get("exercises") or []
+            if not exercises:
+                continue
+            out.append(
+                {
+                    "date": d.isoformat(),
+                    "title": a.get("title"),
+                    "category": a.get("category"),
+                    "exercises": exercises,
+                }
+            )
+    # 直近順に最大 5 件まで
+    return out[:5]
+
+
 def _gather_today_payload(target: date_type) -> dict[str, Any]:
     from app.models import BodyBattery
 
@@ -162,7 +225,7 @@ async def _call_anthropic(
     messages: list[dict[str, Any]],
     model: str,
     api_key: str,
-    max_tokens: int = 1024,
+    max_tokens: int = 2048,
 ) -> dict[str, Any] | None:
     """Anthropic を tool_use で呼び出して構造化 input を返す。
 
@@ -230,6 +293,8 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
 
     today_payload = _gather_today_payload(target)
     today_payload["recent_workouts_7d"] = _gather_recent_workouts(target, days=7)
+    today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
+    today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     # 栄養: 当日の摂取・PFC・水分・TDEE 推定 + 推奨値
     from app.scoring.nutrition import aggregate_nutrition
 

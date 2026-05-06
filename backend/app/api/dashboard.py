@@ -145,8 +145,20 @@ async def today() -> dict[str, Any]:
 
         nutrition = aggregate_nutrition(session, d)
 
+        # 最終更新時刻 (sync の最新 + score.computed_at + comment.generated_at の最新)
+        candidates: list[datetime] = []
+        for row in sync_rows:
+            if row.last_synced_at:
+                candidates.append(row.last_synced_at)
+        if score and score.computed_at:
+            candidates.append(score.computed_at)
+        if comment and comment.generated_at:
+            candidates.append(comment.generated_at)
+        last_update = max(candidates) if candidates else None
+
         return {
             "date": d.isoformat(),
+            "last_data_update_at": _utc_iso(last_update),
             "score": _score_to_dict(score),
             "sub_reasons": sub_reasons,
             "data_sources": data_sources,

@@ -30,6 +30,34 @@ async def garmin_sync() -> dict[str, Any]:
     return {"result": result}
 
 
+@router.post("/admin/full-refresh")
+async def full_refresh(regenerate_advice: bool = True) -> dict[str, Any]:
+    """Garmin 同期 → スコア再計算 → (任意) アドバイス再生成 を一括実行。"""
+    from app.ingest.garmin_sync import sync_garmin_job
+    from app.llm.client import generate_advice_for_date
+    from app.scoring.recompute import recompute_for_date
+
+    out: dict[str, Any] = {}
+    try:
+        out["garmin"] = await sync_garmin_job()
+    except Exception as exc:
+        out["garmin"] = {"status": "error", "error": str(exc)}
+
+    target = date_type.today()
+    try:
+        out["recompute"] = recompute_for_date(target)
+    except Exception as exc:
+        out["recompute"] = {"status": "error", "error": str(exc)}
+
+    if regenerate_advice:
+        try:
+            out["advice"] = await generate_advice_for_date(target, force=True)
+        except Exception as exc:
+            out["advice"] = {"status": "error", "error": str(exc)}
+
+    return out
+
+
 @router.post("/admin/llm/regenerate")
 async def llm_regenerate(target: date_type | None = None) -> dict[str, Any]:
     from app.llm.client import generate_advice_for_date
