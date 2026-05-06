@@ -50,10 +50,33 @@ export type WeightMetric = {
   ts: string | null;
 };
 
+export type AdviceAction = {
+  time_jst: string; // HH:MM
+  title: string;
+  duration_min: number;
+  category:
+    | "training"
+    | "cardio"
+    | "recovery"
+    | "mobility"
+    | "nutrition"
+    | "rest"
+    | "other";
+  intensity?: string;
+  why?: string;
+};
+
+export type AdvicePayload = {
+  focus: string;
+  actions: AdviceAction[];
+  rationale: string;
+};
+
 export type Advice = {
   comment: string;
   model: string;
   generated_at: string | null;
+  payload: AdvicePayload | null;
 };
 
 export type SyncStatus = {

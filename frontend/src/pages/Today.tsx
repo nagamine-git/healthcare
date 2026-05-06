@@ -65,13 +65,14 @@ export function TodayPage() {
   const data = today.data;
   const score = data.score;
   const reasons = data.sub_reasons ?? {};
+  // ideal = そのサブスコアが最大に到達したときの値 (採点ロジックの上限)
   const subs = [
-    { label: "睡眠", value: score?.sleep ?? null, reason: reasons.sleep ?? undefined },
-    { label: "自律神経", value: score?.hrv ?? null, reason: reasons.hrv ?? undefined },
-    { label: "エネルギー", value: score?.body_battery ?? null, reason: reasons.body_battery ?? undefined },
-    { label: "運動負荷", value: score?.load ?? null, reason: reasons.load ?? undefined },
-    { label: "体重", value: score?.weight ?? null, reason: reasons.weight ?? undefined },
-    { label: "体脂肪率", value: score?.body_fat ?? null, reason: reasons.body_fat ?? undefined },
+    { label: "睡眠", value: score?.sleep ?? null, ideal: 100, reason: reasons.sleep ?? undefined },
+    { label: "自律神経", value: score?.hrv ?? null, ideal: 100, reason: reasons.hrv ?? undefined },
+    { label: "エネルギー", value: score?.body_battery ?? null, ideal: 100, reason: reasons.body_battery ?? undefined },
+    { label: "運動負荷", value: score?.load ?? null, ideal: 85, reason: reasons.load ?? undefined },
+    { label: "体重", value: score?.weight ?? null, ideal: 80, reason: reasons.weight ?? undefined },
+    { label: "体脂肪率", value: score?.body_fat ?? null, ideal: 90, reason: reasons.body_fat ?? undefined },
   ];
 
   const sleep = data.metrics.sleep;
