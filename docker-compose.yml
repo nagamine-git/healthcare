@@ -1,0 +1,59 @@
+name: healthcare
+
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: healthcare-tailscale
+    hostname: ${TS_HOSTNAME:-healthcare}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?TS_AUTHKEY is required}
+      TS_HOSTNAME: ${TS_HOSTNAME:-healthcare}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: ${TS_EXTRA_ARGS:---ssh}
+      TS_SERVE_CONFIG: /config/serve-config.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale:/config:ro
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: healthcare-backend
+    depends_on:
+      - tailscale
+    network_mode: "service:tailscale"
+    environment:
+      APP_TZ: ${APP_TZ:-Asia/Tokyo}
+      APP_DATA_DIR: /data
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-4-5}
+      GARMIN_EMAIL: ${GARMIN_EMAIL:?GARMIN_EMAIL is required}
+      GARMIN_PASSWORD: ${GARMIN_PASSWORD:?GARMIN_PASSWORD is required}
+      HAE_INGEST_TOKEN: ${HAE_INGEST_TOKEN:?HAE_INGEST_TOKEN is required}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: healthcare-frontend
+    depends_on:
+      - backend
+    network_mode: "service:tailscale"
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
