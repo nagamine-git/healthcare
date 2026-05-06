@@ -21,6 +21,7 @@ class GarminAPIProtocol(Protocol):
     def get_activities_by_date(self, startdate: str, enddate: str) -> Any: ...
     def get_user_summary(self, cdate: str) -> Any: ...
     def get_stress_data(self, cdate: str) -> Any: ...
+    def get_hydration_data(self, cdate: str) -> Any: ...
     def garth(self) -> Any: ...
 
 
@@ -106,6 +107,19 @@ class GarminClient:
         except Exception:
             return []
         return _normalise_stress(raw)
+
+    def get_hydration(self, target: date_type) -> dict[str, Any] | None:
+        """Garmin Connect で記録された水分量 (日次集計、mL)。
+
+        Garmin Connect アプリで「Hydration」ウィジェットを使って水分を記録している場合のみ
+        値が返る。返り値: ``{"value_ml": N, "goal_ml": N, "ts": datetime}`` または None。
+        """
+        self.login()
+        try:
+            raw = self._api.get_hydration_data(target.isoformat())
+        except Exception:
+            return None
+        return _normalise_hydration(raw, target)
 
 
 # ---- normalisers ---------------------------------------------------------
@@ -243,6 +257,32 @@ def _normalise_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "resting_hr": raw.get("restingHeartRate"),
         "vo2max": raw.get("vo2Max"),
         "training_status": raw.get("trainingStatus"),
+    }
+
+
+def _normalise_hydration(raw: Any, target: date_type) -> dict[str, Any] | None:
+    """Garmin Hydration API のレスポンスを正規化。
+
+    レスポンス構造の例:
+      ``{"calendarDate": "2026-05-06", "valueInML": 1500, "goalInML": 2500, ...}``
+    """
+    if not raw or not isinstance(raw, dict):
+        return None
+    value = raw.get("valueInML") or raw.get("hydrationInML") or raw.get("value")
+    if value is None:
+        return None
+    try:
+        value_ml = float(value)
+    except (TypeError, ValueError):
+        return None
+    if value_ml <= 0:
+        return None
+    goal = raw.get("goalInML") or raw.get("goal")
+    return {
+        "value_ml": value_ml,
+        "goal_ml": float(goal) if goal else None,
+        "ts": datetime.combine(target, datetime.min.time()),
+        "raw_json": raw,
     }
 
 

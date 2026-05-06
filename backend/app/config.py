@@ -85,6 +85,11 @@ class Settings(BaseSettings):
         "木: 上半身 pull + コア / 金: 下半身 / 土: ラッキング ロング / 日: 完全休"
     )
 
+    # --- 栄養目標 ---
+    target_protein_g_per_kg: float = 2.0  # recomposition 想定
+    target_water_ml_per_kg: float = 35.0
+    # 摂取カロリー目標は TDEE (= 当日の active + basal energy 合計、Apple Health から推定) を基準にする
+
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"
     scheduler_recompute_cron: str = "15 * * * *"

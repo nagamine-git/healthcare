@@ -75,6 +75,11 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
             with session_scope() as session:
                 counts["stress"] = _upsert_stress(session, stress)
 
+        hydration = client.get_hydration(target)
+        if hydration:
+            with session_scope() as session:
+                counts["hydration"] = _upsert_hydration(session, hydration)
+
     except Exception as exc:
         error = str(exc)
         logger.warning("garmin_sync_error", error=error)
@@ -240,6 +245,35 @@ def _upsert_summary(session: Session, target: date_type, summary: dict[str, Any]
             setattr(existing, k, v)
     else:
         session.add(DailySummary(date=target, **fields))
+
+
+def _upsert_hydration(session: Session, hydration: dict[str, Any]) -> int:
+    """Garmin Hydration を MetricSample に書く (key=garmin_hydration_ml)。"""
+    ts = hydration.get("ts")
+    value = hydration.get("value_ml")
+    if not isinstance(ts, datetime) or value is None:
+        return 0
+    ts_naive = ts.replace(tzinfo=None) if ts.tzinfo else ts
+    raw = hydration.get("raw_json") or {}
+    # raw_json の datetime は JSON serialize できないので除外
+    safe_raw = {k: v for k, v in raw.items() if not isinstance(v, datetime)}
+    payload = [
+        {
+            "source": "garmin",
+            "metric_key": "garmin_hydration_ml",
+            "ts": ts_naive,
+            "value": float(value),
+            "unit": "mL",
+            "raw_json": safe_raw,
+        }
+    ]
+    stmt = sqlite_insert(MetricSample).values(payload)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
+        set_={"value": stmt.excluded.value, "raw_json": stmt.excluded.raw_json},
+    )
+    session.execute(stmt)
+    return 1
 
 
 def _upsert_stress(session: Session, stress: list[dict[str, Any]]) -> int:
