@@ -154,6 +154,9 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
                     {a.why && (
                       <span className="basis-full text-xs text-slate-500">{a.why}</span>
                     )}
+                    {a.exercises && a.exercises.length > 0 && (
+                      <ExerciseList exercises={a.exercises} />
+                    )}
                   </li>
                 ))}
             </ul>
@@ -201,6 +204,70 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exercises"]> }) {
+  return (
+    <div className="basis-full mt-2 space-y-2">
+      <ul className="space-y-1.5">
+        {exercises.map((e, i) => (
+          <li
+            key={i}
+            className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2"
+          >
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+              <span className="text-sm text-slate-100">{e.name}</span>
+              {e.weight && (
+                <span className="font-mono text-sm tabular-nums text-emerald-300">
+                  {e.weight}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-slate-400">
+              <span>
+                <span className="text-slate-500">セット </span>
+                {e.sets}
+              </span>
+              <span>
+                <span className="text-slate-500">回数 </span>
+                {e.reps}
+              </span>
+              {e.rest_sec != null && (
+                <span>
+                  <span className="text-slate-500">休憩 </span>
+                  {e.rest_sec}秒
+                </span>
+              )}
+              {e.rir != null && (
+                <span>
+                  <span className="text-slate-500">RIR </span>
+                  {e.rir}
+                </span>
+              )}
+              {e.tempo && (
+                <span>
+                  <span className="text-slate-500">テンポ </span>
+                  {e.tempo}
+                </span>
+              )}
+            </div>
+            {e.notes && (
+              <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                {e.notes}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-[10px] leading-relaxed text-slate-500">
+        <span className="text-slate-400">RIR</span> = 限界まで何回余力を残すか (低いほど追い込む)。
+        筋肥大は 1-3、筋力は 1-2、技術習得は 3-5 が目安。
+        <br />
+        <span className="text-slate-400">RPE</span> = 10 段階の主観強度 (Rate of Perceived Exertion)。
+        6-7 = ややきつい、8-9 = かなりきつい、10 = 限界。
+      </p>
     </div>
   );
 }

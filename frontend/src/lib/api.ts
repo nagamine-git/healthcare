@@ -52,6 +52,17 @@ export type WeightMetric = {
 
 export type AdvicePriority = "critical" | "high" | "mid" | "low";
 
+export type ExercisePrescription = {
+  name: string;
+  weight?: string;
+  sets: number;
+  reps: string;
+  rest_sec?: number;
+  rir?: number;
+  tempo?: string;
+  notes?: string;
+};
+
 export type AdviceAction = {
   time_jst: string; // HH:MM
   title: string;
@@ -67,6 +78,7 @@ export type AdviceAction = {
   priority: AdvicePriority;
   intensity?: string;
   why?: string;
+  exercises?: ExercisePrescription[];
 };
 
 export type AdvicePayload = {
@@ -163,6 +175,7 @@ export type SubContext = {
 
 export type TodayResponse = {
   date: string;
+  last_data_update_at?: string | null;
   score: SubScores | null;
   sub_reasons?: SubReasons;
   data_sources?: DataSources;
@@ -233,6 +246,11 @@ export const api = {
   recompute: () => request<unknown>("/admin/recompute", { method: "POST" }),
   syncGarmin: () => request<unknown>("/admin/garmin/sync", { method: "POST" }),
   regenerateAdvice: () => request<unknown>("/admin/llm/regenerate", { method: "POST" }),
+  fullRefresh: (regenerateAdvice = true) =>
+    request<unknown>(
+      `/admin/full-refresh?regenerate_advice=${regenerateAdvice}`,
+      { method: "POST" },
+    ),
   gcalStatus: () => request<GcalStatus>("/admin/gcal/status"),
   gcalSchedule: () => request<GcalScheduleResult>("/admin/gcal/schedule", { method: "POST" }),
   debugSources: (days = 14) => request<DebugSources>(`/api/debug/sources?days=${days}`),

@@ -6,6 +6,8 @@ import { AdviceCard } from "../components/AdviceCard";
 import { Sparkline } from "../components/Sparkline";
 import { NutritionPanel } from "../components/NutritionPanel";
 import { SyncMenu } from "../components/SyncMenu";
+import { useEffect, useRef } from "react";
+import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 
 function formatMinutes(min: number | null): string {
   if (min == null) return "--";
@@ -55,6 +57,10 @@ export function TodayPage({ onOpenDebug }: Props) {
     mutationFn: api.regenerateAdvice,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
+  const fullRefresh = useMutation({
+    mutationFn: () => api.fullRefresh(true),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
+  });
   const schedule = useMutation({
     mutationFn: api.gcalSchedule,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
@@ -64,6 +70,24 @@ export function TodayPage({ onOpenDebug }: Props) {
     queryFn: api.gcalStatus,
     retry: false,
   });
+
+  // ページ open 時、データが古ければ自動でフル更新
+  // (last_data_update が 30 分以上前 / 未取得)
+  const autoRefreshTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoRefreshTriggeredRef.current) return;
+    if (!today.data) return;
+    const last = today.data.last_data_update_at;
+    const stale =
+      !last || Date.now() - new Date(last).getTime() > 30 * 60_000;
+    if (stale && !fullRefresh.isPending) {
+      autoRefreshTriggeredRef.current = true;
+      fullRefresh.mutate();
+    }
+  }, [today.data, fullRefresh]);
+
+  // 1 分ごとに「最終更新 N 分前」を再描画するため tick を取る
+  const now = useTickingNow();
 
   if (today.isLoading) {
     return (
@@ -121,18 +145,30 @@ export function TodayPage({ onOpenDebug }: Props) {
   return (
     <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-6 px-4 pb-8 sm:px-8">
       <header className="safe-area-top flex items-center justify-between pb-2 pt-3">
-        <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
+        <div className="flex items-baseline gap-3">
+          <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
+          <span className="text-[10px] tabular-nums text-slate-500">
+            最終更新 {relativeMinutes(data.last_data_update_at, now)}
+            {fullRefresh.isPending && <span className="ml-1 text-emerald-400">(更新中…)</span>}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
           <SyncMenu
             lastSyncedLabel={
               data.sync.garmin?.last_synced_at
-                ? `Garmin: ${formatRelative(data.sync.garmin.last_synced_at)}`
+                ? `Garmin: ${relativeMinutes(data.sync.garmin.last_synced_at, now)}`
                 : undefined
             }
             items={[
               {
-                label: "Garmin を再取得",
+                label: "全部更新",
+                description: "Garmin 同期 + スコア再計算 + アドバイス再生成",
+                onClick: () => fullRefresh.mutate(),
+                pending: fullRefresh.isPending,
+              },
+              {
+                label: "Garmin だけ再取得",
                 description: "Garmin Connect から最新データを取得",
                 onClick: () => sync.mutate(),
                 pending: sync.isPending,
@@ -250,13 +286,4 @@ export function TodayPage({ onOpenDebug }: Props) {
 
     </main>
   );
-}
-
-function formatRelative(iso: string): string {
-  const t = new Date(iso).getTime();
-  const diff = Date.now() - t;
-  if (diff < 60_000) return "たった今";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 時間前`;
-  return new Date(iso).toLocaleDateString();
 }
