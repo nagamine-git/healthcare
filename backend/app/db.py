@@ -98,6 +98,7 @@ def _apply_lightweight_migrations() -> None:
     inspector = inspect(engine)
     expected = {
         "daily_score": [("body_fat_sub", "REAL")],
+        "llm_comment": [("payload", "JSON")],
     }
     with engine.begin() as conn:
         for table, cols in expected.items():

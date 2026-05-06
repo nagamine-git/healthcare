@@ -139,6 +139,8 @@ class LlmComment(Base):
     model: Mapped[str] = mapped_column(String(64))
     prompt_hash: Mapped[str] = mapped_column(String(64))
     comment: Mapped[str] = mapped_column(String(2000))
+    # 構造化版 (tool_use の input そのまま): {focus, actions: [...], rationale}
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class SourceSync(Base):

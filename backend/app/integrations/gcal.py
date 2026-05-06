@@ -215,6 +215,18 @@ _ACTION_LINE = re.compile(
 _DURATION_PAT = re.compile(r"(?P<num>\d{1,3})\s*分")
 
 
+def schedule_actions_from_comment(
+    comment: str,
+    *,
+    target_date: datetime,
+    calendar_id: str = "primary",
+    color_id: str | None = "9",
+) -> list[dict[str, Any]]:
+    """テキストパース版 (フォールバック)。新しい構造化版がある場合はそちらを優先。"""
+    actions = parse_advice_actions(comment, target_date)
+    return _create_calendar_events(actions, target_date, calendar_id, color_id)
+
+
 def parse_advice_actions(comment: str, today: datetime) -> list[dict[str, Any]]:
     """LLM のアドバイスから「[HH:MM] 行動 (所要 N 分, …)」を抜き出す。
 
@@ -264,16 +276,53 @@ def parse_advice_actions(comment: str, today: datetime) -> list[dict[str, Any]]:
     return actions
 
 
-def schedule_actions_from_comment(
-    comment: str,
+def schedule_actions_from_payload(
+    payload: dict[str, Any],
     *,
     target_date: datetime,
     calendar_id: str = "primary",
     color_id: str | None = "9",  # Blueberry
 ) -> list[dict[str, Any]]:
-    """Comment を parse して未来のアクションだけ Calendar 化する。"""
-    now = target_date  # JST aware
-    actions = parse_advice_actions(comment, now)
+    """構造化 advice payload (tool_use input) から Calendar イベントを作る。
+
+    parse_advice_actions のテキスト解析を経由しないので、絵文字や見出しの
+    変動に左右されない。``actions[]`` の各要素が時刻・所要時間を持つ前提。
+    """
+    actions_raw = payload.get("actions") or []
+    actions: list[dict[str, Any]] = []
+    for a in actions_raw:
+        time_jst = a.get("time_jst") or ""
+        try:
+            h, _, mn = time_jst.partition(":")
+            start = target_date.replace(
+                hour=int(h), minute=int(mn), second=0, microsecond=0
+            )
+        except (ValueError, TypeError):
+            continue
+        duration = int(a.get("duration_min") or 30)
+        bits = [a.get("title", "")]
+        if intensity := a.get("intensity"):
+            bits.append(f"強度: {intensity}")
+        if why := a.get("why"):
+            bits.append(f"理由: {why}")
+        actions.append(
+            {
+                "title": a.get("title", "(no title)"),
+                "start": start,
+                "end": start + timedelta(minutes=duration),
+                "duration_min": duration,
+                "description": " / ".join(b for b in bits if b),
+            }
+        )
+    return _create_calendar_events(actions, target_date, calendar_id, color_id)
+
+
+def _create_calendar_events(
+    actions: list[dict[str, Any]],
+    now: datetime,
+    calendar_id: str,
+    color_id: str | None,
+) -> list[dict[str, Any]]:
     created: list[dict[str, Any]] = []
     for a in actions:
         if a["end"] < now:

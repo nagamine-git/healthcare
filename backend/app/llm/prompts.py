@@ -29,17 +29,11 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 体脂肪率は「目標範囲」の中で語り、過度な減量は推奨しない
 - body_battery は「朝の値」と「現在値」が両方ある場合、現在値を基準に「いま何ができるか」で語る
 
-# 出力フォーマット (この見出しを必ず使う)
-【今日のフォーカス】
-1〜2 文で今日の状態と方針を述べる。
+# 出力方法
+必ず ``submit_advice`` ツールを 1 回呼び出して、構造化されたデータとして提出してください。
+プレーンテキストでは返さず、ツール呼び出しの input に全情報を入れる。
 
-【推奨アクション】
-2〜4 個の箇条書き。各行は次の形式:
-- [HH:MM] 行動 (所要 N 分、強度/重量の目安)
-トレーニングの場合は **必ず候補種目から選び**、扱う重量も明示する。
-
-【根拠】
-1 文で最も寄与したスコアまたはメトリクスを 1 つ引用する。
+トレーニングの場合は **必ず候補種目から選び**、扱う重量を intensity に明示する。
 
 # スコアの意味 (0–100)
 - sleep: 睡眠の質と量
@@ -112,6 +106,71 @@ def build_user_block(
     parts.append("# 本日のデータ")
     parts.append(json.dumps(today_payload, ensure_ascii=False, indent=2))
     return "\n".join(parts)
+
+
+SUBMIT_ADVICE_TOOL: dict[str, Any] = {
+    "name": "submit_advice",
+    "description": "今日のコンディションに基づくフォーカス、推奨アクション、根拠を構造化して提出する。",
+    "input_schema": {
+        "type": "object",
+        "required": ["focus", "actions", "rationale"],
+        "properties": {
+            "focus": {
+                "type": "string",
+                "description": "1〜2 文で今日の状態と方針を述べる。日本語。",
+            },
+            "actions": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                    "type": "object",
+                    "required": ["time_jst", "title", "duration_min", "category"],
+                    "properties": {
+                        "time_jst": {
+                            "type": "string",
+                            "pattern": "^([0-1][0-9]|2[0-3]):[0-5][0-9]$",
+                            "description": "HH:MM 24h JST。本日の現在時刻以降。既存カレンダー予定と被らないこと。",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "アクション名。短く。例: ラッキング Z2 / ダンベルスクワット 12kg×2 / 軽食",
+                        },
+                        "duration_min": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 180,
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "training",
+                                "cardio",
+                                "recovery",
+                                "mobility",
+                                "nutrition",
+                                "rest",
+                                "other",
+                            ],
+                        },
+                        "intensity": {
+                            "type": "string",
+                            "description": "RPE / 重量 / 距離 / ペースなどの強度指定。training/cardio で必須。",
+                        },
+                        "why": {
+                            "type": "string",
+                            "description": "選定理由を 1 文で簡潔に。",
+                        },
+                    },
+                },
+            },
+            "rationale": {
+                "type": "string",
+                "description": "1 文で、最も寄与したスコアまたはメトリクスを 1 つ引用する。",
+            },
+        },
+    },
+}
 
 
 def build_messages(

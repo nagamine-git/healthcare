@@ -62,7 +62,10 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
     from sqlalchemy import select
 
     from app.db import session_scope
-    from app.integrations.gcal import schedule_actions_from_comment
+    from app.integrations.gcal import (
+        schedule_actions_from_comment,
+        schedule_actions_from_payload,
+    )
     from app.models import LlmComment
 
     d = target or date_type.today()
@@ -74,17 +77,20 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
             .limit(1)
         ).scalar_one_or_none()
         comment_text = latest.comment if latest else None
+        payload = latest.payload if latest else None
 
-    if not comment_text:
+    if not comment_text and not payload:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="アドバイスがまだ生成されていません。先に LLM 再生成を実行してください。",
         )
 
+    now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
     try:
-        created = schedule_actions_from_comment(
-            comment_text, target_date=datetime.now(ZoneInfo("Asia/Tokyo"))
-        )
+        if payload and isinstance(payload, dict) and payload.get("actions"):
+            created = schedule_actions_from_payload(payload, target_date=now_jst)
+        else:
+            created = schedule_actions_from_comment(comment_text or "", target_date=now_jst)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

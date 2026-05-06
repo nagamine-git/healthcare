@@ -331,4 +331,5 @@ def _comment_to_dict(c: LlmComment | None) -> dict[str, Any] | None:
         "comment": c.comment,
         "model": c.model,
         "generated_at": _utc_iso(c.generated_at),
+        "payload": c.payload,
     }

@@ -111,7 +111,13 @@ def _hash_messages(system: list[dict[str, Any]], messages: list[dict[str, Any]])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
-def _store_comment(target: date_type, model: str, prompt_hash: str, comment: str) -> None:
+def _store_comment(
+    target: date_type,
+    model: str,
+    prompt_hash: str,
+    comment: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
     now = datetime.now(UTC).replace(tzinfo=None)
     with session_scope() as session:
         session.add(
@@ -121,6 +127,7 @@ def _store_comment(target: date_type, model: str, prompt_hash: str, comment: str
                 model=model,
                 prompt_hash=prompt_hash,
                 comment=comment,
+                payload=payload,
             )
         )
 
@@ -131,10 +138,16 @@ async def _call_anthropic(
     messages: list[dict[str, Any]],
     model: str,
     api_key: str,
-    max_tokens: int = 800,
-) -> str:
-    """Call Anthropic and return the text. Isolated for easy mocking in tests."""
+    max_tokens: int = 1024,
+) -> dict[str, Any] | None:
+    """Anthropic を tool_use で呼び出して構造化 input を返す。
+
+    submit_advice ツールの呼び出し input (``{focus, actions, rationale}``) を返す。
+    呼び出しが失敗したり tool_use が無い場合は None。
+    """
     from anthropic import AsyncAnthropic
+
+    from app.llm.prompts import SUBMIT_ADVICE_TOOL
 
     client = AsyncAnthropic(api_key=api_key)
     resp = await client.messages.create(
@@ -142,12 +155,40 @@ async def _call_anthropic(
         max_tokens=max_tokens,
         system=system,
         messages=messages,
+        tools=[SUBMIT_ADVICE_TOOL],
+        tool_choice={"type": "tool", "name": "submit_advice"},
     )
-    parts = []
     for block in resp.content:
-        if getattr(block, "type", None) == "text":
-            parts.append(block.text)
-    return "".join(parts).strip()
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_advice":
+            payload = block.input
+            return payload if isinstance(payload, dict) else None
+    return None
+
+
+def _payload_to_prose(payload: dict[str, Any]) -> str:
+    """構造化 advice を従来の人間可読プロンプト風テキストに整形 (バックアップ表示用)。"""
+    lines: list[str] = []
+    if focus := payload.get("focus"):
+        lines.append(f"【今日のフォーカス】\n{focus}\n")
+    actions = payload.get("actions") or []
+    if actions:
+        lines.append("【推奨アクション】")
+        for a in actions:
+            t = a.get("time_jst", "")
+            title = a.get("title", "")
+            dur = a.get("duration_min")
+            intensity = a.get("intensity")
+            extras = []
+            if dur:
+                extras.append(f"{dur}分")
+            if intensity:
+                extras.append(intensity)
+            tail = f" ({', '.join(extras)})" if extras else ""
+            lines.append(f"- [{t}] {title}{tail}")
+        lines.append("")
+    if rationale := payload.get("rationale"):
+        lines.append(f"【根拠】\n{rationale}")
+    return "\n".join(lines).strip()
 
 
 async def generate_advice_for_date(target: date_type, *, force: bool = False) -> dict[str, Any]:
@@ -186,22 +227,32 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     if not api_key:
         comment = _FALLBACK_MESSAGE
         _store_comment(target, "fallback", prompt_hash, comment)
-        return {"status": "fallback", "comment": comment}
+        return {"status": "fallback", "comment": comment, "payload": None}
 
     try:
-        comment = await _call_anthropic(
+        payload = await _call_anthropic(
             system=system, messages=messages, model=settings.llm_model, api_key=api_key
         )
-        if not comment:
-            comment = _FALLBACK_MESSAGE
-            _store_comment(target, "fallback", prompt_hash, comment)
-            return {"status": "fallback", "comment": comment}
-        _store_comment(target, settings.llm_model, prompt_hash, comment)
-        return {"status": "ok", "comment": comment, "model": settings.llm_model}
+        if not payload:
+            _store_comment(target, "fallback", prompt_hash, _FALLBACK_MESSAGE)
+            return {"status": "fallback", "comment": _FALLBACK_MESSAGE, "payload": None}
+        prose = _payload_to_prose(payload)
+        _store_comment(target, settings.llm_model, prompt_hash, prose, payload=payload)
+        return {
+            "status": "ok",
+            "comment": prose,
+            "payload": payload,
+            "model": settings.llm_model,
+        }
     except Exception as exc:
         logger.warning("llm_call_failed", error=str(exc))
         _store_comment(target, "fallback", prompt_hash, _FALLBACK_MESSAGE)
-        return {"status": "fallback", "comment": _FALLBACK_MESSAGE, "error": str(exc)}
+        return {
+            "status": "fallback",
+            "comment": _FALLBACK_MESSAGE,
+            "payload": None,
+            "error": str(exc),
+        }
 
 
 async def morning_advice_job() -> dict[str, Any]:

@@ -45,14 +45,23 @@ async def test_generate_advice_success(monkeypatch):
     target = date(2026, 5, 1)
     _seed_score(target)
 
-    mock_call = AsyncMock(return_value="本日は積極的にトレーニング。根拠: 総合 75 でベースライン並み。")
+    mock_call = AsyncMock(return_value={
+        "focus": "本日は積極的にトレーニング。",
+        "actions": [
+            {"time_jst": "10:00", "title": "ラッキング Z2", "duration_min": 30, "category": "cardio", "intensity": "RPE 3"},
+            {"time_jst": "20:00", "title": "ストレッチ", "duration_min": 10, "category": "mobility"},
+        ],
+        "rationale": "総合 75 でベースライン並み。",
+    })
     monkeypatch.setattr("app.llm.client._call_anthropic", mock_call)
 
     from app.llm.client import generate_advice_for_date
 
     result = await generate_advice_for_date(target)
     assert result["status"] == "ok"
-    assert result["comment"].startswith("本日")
+    assert "本日" in result["comment"]
+    assert result["payload"]["focus"].startswith("本日")
+    assert len(result["payload"]["actions"]) == 2
     assert mock_call.await_count == 1
 
     from app.db import session_scope
@@ -60,7 +69,8 @@ async def test_generate_advice_success(monkeypatch):
     with session_scope() as session:
         stored = session.execute(select(LlmComment)).scalars().all()
         assert len(stored) == 1
-        assert stored[0].comment == result["comment"]
+        assert stored[0].payload is not None
+        assert stored[0].payload["actions"][0]["time_jst"] == "10:00"
 
 
 @pytest.mark.asyncio
@@ -108,7 +118,11 @@ async def test_generate_advice_rate_limited_after_three(monkeypatch):
     target = date(2026, 5, 1)
     _seed_score(target)
 
-    mock_call = AsyncMock(return_value="comment")
+    mock_call = AsyncMock(return_value={
+        "focus": "テスト",
+        "actions": [{"time_jst": "10:00", "title": "x", "duration_min": 10, "category": "rest"}],
+        "rationale": "テスト",
+    })
     monkeypatch.setattr("app.llm.client._call_anthropic", mock_call)
 
     from app.llm.client import generate_advice_for_date
@@ -124,7 +138,11 @@ async def test_generate_advice_force_overrides_rate_limit(monkeypatch):
     target = date(2026, 5, 1)
     _seed_score(target)
 
-    mock_call = AsyncMock(return_value="comment")
+    mock_call = AsyncMock(return_value={
+        "focus": "テスト",
+        "actions": [{"time_jst": "10:00", "title": "x", "duration_min": 10, "category": "rest"}],
+        "rationale": "テスト",
+    })
     monkeypatch.setattr("app.llm.client._call_anthropic", mock_call)
 
     from app.llm.client import generate_advice_for_date
