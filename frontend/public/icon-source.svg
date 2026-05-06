@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <g transform="translate(256 256)">
+    <circle r="180" fill="none" stroke="#1e293b" stroke-width="24"/>
+    <circle r="180" fill="none" stroke="#34d399" stroke-width="24"
+            stroke-dasharray="850 1131" stroke-linecap="round"
+            transform="rotate(-90)"/>
+    <text text-anchor="middle" dominant-baseline="central"
+          font-family="ui-sans-serif,-apple-system,sans-serif"
+          font-size="180" font-weight="200" fill="#f1f5f9">H</text>
+  </g>
+</svg>
