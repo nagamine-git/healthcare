@@ -122,6 +122,18 @@ LLM が再提案で時刻/内容を **上書きできる** イベントは、以
 
 調整不可 (会議、固定予定) のイベントは LLM が触らず、そこを避けて提案する。
 
+## openclaw 連携 (Telegram critical 通知)
+
+健康指標が critical な日だけ Telegram に飛ばす。健康な日は完全サイレント。
+
+job 定義の真実源は `systemd/openclaw-healthcare-watch.json` (cron 式 / agent / message 等)。openclaw-gateway が動いている状態で `~/.openclaw/cron/jobs.json` を直接編集しても in-memory state から書き戻されて消えるため、必ず CLI 経由で登録する。
+
+```bash
+./bin/install-openclaw-job.sh   # 再実行可能。同名ジョブがあれば削除してから再登録
+```
+
+判定ロジック (どれか 1 つで通知): `priority=critical` の advice、Body Battery 朝 < 30、睡眠 < 5h、HRV BAD、ACWR ≥ 1.5、score < 40、`sync.last_error` あり。詳細は JSON 内 `payload.message`。即時実行は `openclaw cron run <id>` (id は `openclaw cron list` で確認)。
+
 ## ライセンス・スコープ
 
 個人専用。Garmin Connect の利用規約を遵守し、自分のデータのみを取り扱う。

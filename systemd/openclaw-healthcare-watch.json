@@ -1,0 +1,33 @@
+{
+  "id": "9d7e9642-b8c4-4f24-a602-bbdb52f090f1",
+  "agentId": "main",
+  "sessionKey": "agent:main:main",
+  "name": "Healthcare Critical Watch",
+  "enabled": true,
+  "createdAtMs": 1778162684908,
+  "updatedAtMs": 1778162684908,
+  "schedule": {
+    "kind": "cron",
+    "expr": "50 6 * * *",
+    "tz": "Asia/Tokyo"
+  },
+  "sessionTarget": "isolated",
+  "wakeMode": "now",
+  "payload": {
+    "kind": "agentTurn",
+    "message": "Healthcare ダッシュボードの当日サマリを取得し、**critical な状態だけ** Telegram で報告せよ。健康なら何も出さない (サイレント)。\n\n## 取得\n```\ncurl -s --max-time 10 http://healthcare/api/today\n```\nJSON で `score`, `sub_context`, `metrics`, `nutrition`, `advice.payload.actions[]` 等が返る。\n\n## critical 判定 (どれか 1 つでも該当すれば通知)\n1. `advice.payload.actions[]` に `priority === \"critical\"` が含まれる\n2. `metrics.body_battery.morning` が 30 未満 (体力枯渇)\n3. `metrics.sleep.total_min` が 300 未満 (5h 未満、極端な睡眠不足)\n4. `metrics.hrv.status === \"BAD\"` または `last_night_avg` が `weekly_avg` から -20% 以上低下\n5. `sub_context.load.acwr` が 1.5 以上 (オーバートレーニングリスク)\n6. `score.total` が 40 未満\n7. `sync` のいずれかに `last_error` が入っている (データ取得失敗)\n\n## 出力\n\n**何も該当しなければ完全サイレント (1 文字も出さない)**。\n\n該当した場合のみ、Telegram 用に 50 行以内、結論先出しで:\n\n```\n🚨 Healthcare 警告\n\n<該当した critical 項目を 1 行ずつ、絵文字 + 数値 + 短い理由>\n\n👉 詳細: https://healthcare/\n```\n\n### 例 (該当時)\n```\n🚨 Healthcare 警告\n\n💤 睡眠 4h12m (極端な不足)\n🔋 Body Battery 朝 22 (枯渇)\n⚠️ critical action: 終日完全休養を推奨\n\n👉 詳細: https://healthcare/\n```\n\n## 注意\n- 数値は短く (h/m, %, 整数)。\n- 朝の advice 生成 (06:30) の後に走るので、`advice.generated_at` が当日でなければ取得をリトライ (1 回のみ、30 秒待ってから)。\n- モデル: GLM-5 Turbo\n- タイムアウト: 60 秒\n- Telegram 報告フォーマットガイドライン: /home/tsuyoshi/.openclaw/workspace/telegram-formatting-guide.md\n- **健康な日は完全サイレント** (毎日通知が来ると noise になる)"
+  },
+  "delivery": {
+    "mode": "announce",
+    "channel": "last",
+    "bestEffort": false
+  },
+  "state": {
+    "nextRunAtMs": 0,
+    "lastRunAtMs": 0,
+    "lastRunStatus": "ok",
+    "lastStatus": "ok",
+    "lastDurationMs": 0,
+    "consecutiveErrors": 0
+  }
+}
