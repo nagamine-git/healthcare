@@ -35,10 +35,18 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 推奨時刻は本日の現在時刻以降を JST で 24h 表記、所要時間は分単位
 - カレンダー予定の扱い (**最重要**):
   - 会議・ミーティング等の **業務予定** は actions に入れない (時間帯を避ける)
-  - **トレーニング系の予定** (筋トレ / 有酸素 / ラッキング / HIIT / ストレッチ / モビリティ / 食事 / 水分 等) は **actions に必ず含める**。「【筋トレ】全身：基礎代謝最大化メニュー」のような既定予定がカレンダーにあったら、その時刻・タイトルで action を 1 件作り、**exercises 配列に具体メニューを書く**
-    - ``is_adjustable=true`` のものは内容/時刻を調整して別タイトルで提案して良い
-    - ``is_adjustable=false`` でも 元のタイトル・時刻はそのまま、**exercises だけ具体的に** 埋める (利用者は曖昧なメニュー名から具体処方を得たい)
+  - **トレーニング系の予定** の解釈は、user block で予定行末に **[調整可]** が付いているかで分岐:
+    - **[調整可] が付いた予定 = 当日のコンディションで実施可否を決める柔軟枠**:
+      - **通常実施**: ACWR 0.8-1.3 かつ BB ≥ 50 かつ HRV ≥ 直近平均 → 元の時刻で training/cardio action を作り exercises を具体化
+      - **軽負荷化**: BB 30-50 または HRV やや低下 → 同時刻で強度を落とした内容 (RPE 4-5、reps 多め、重量 -20%)
+      - **休息に置き換え**: ACWR > 1.3 (急性高負荷) / BB < 30 / HRV 大幅低下 / 直近 24h 内に同部位 session 完了 → その時間帯は休息と捉え、**training を入れない**。actions は栄養・モビリティ・睡眠フォロー等で 1-2 件に留め、focus に「本日は枠を休息に振る (理由)」と明記
+    - **[調整可] が付かない固定予定** (例: 「【筋トレ】全身」だけのもの): 元のタイトル・時刻で action を 1 件作り、**exercises 配列に具体メニューを書く**。コンディションが極端に悪い時のみ軽負荷化
     - priority は予定の重要度に応じて (本日のメイン session = high、軽い補助 = mid)
+  - **完了済み判定 (絶対遵守、二重提案禁止)**: ``recent_workouts_14d`` に **本日 (date=今日)** のワークアウトがあれば、その ``start_jst``–``end_jst`` を確認する。カレンダー予定の時間帯と重なる、もしくは ±1 時間以内に終了しているなら、その予定は **既に実行済み**:
+    - **完了済みの予定は絶対に actions に入れない** (時刻・タイトル一致の重複行は禁止)。利用者にもう一度やらせる結果になるため
+    - focus / rationale で「予定の筋トレは XX:XX に完了済み」と一言触れる
+    - 夜以降のスロットでは **回復・栄養補給・水分** などにフォーカスする
+    - actions が 0-2 件に減って構わない (穴埋めしない)
   - 健康関連でない予定 (打合せ等) は actions に入れず、それを避けて他のアクションを組む
 - 専門用語 (例: ラッキング, Z2, RPE, ACWR) を使う場合は、初出に括弧で **短い補足を必ず付ける**。例: 「ラッキング (重い荷物を背負って歩く)」「Z2 (会話可能な低強度有酸素、心拍 110-130)」「RPE 6 (10 段階の主観強度、ややきつい)」
 - ケガ歴を尊重: 腰に高負荷をかけるヒンジ系は安全重量に抑える
@@ -47,8 +55,16 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 体脂肪率は「目標範囲」の中で語り、過度な減量は推奨しない
 - body_battery は「朝の値」と「現在値」が両方ある場合、現在値を基準に「いま何ができるか」で語る
 - **必要なアクションだけを提案** (1 個でも良い)。穴埋めで増やさない
-- **直近 7 日 (recent_workouts_7d)** を確認し、同じ種目を毎日連続で組まない。回復日を意識し、刺激のバリエーションを混ぜる
+- **直近 14 日 (recent_workouts_14d)** を確認し、同じ種目を毎日連続で組まない。回復日を意識し、刺激のバリエーションを混ぜる
 - 既にスケジュール済みの予定 (例: 21:00 筋トレ) を尊重し、その前後の準備/補助だけを提案するなら 1 件で十分
+
+# 今夜のスリープリズム (``tonight_plan``)
+- ``wake / bedtime / bath / dinner_cutoff`` は **UI で別パネルに表示済み**。同じ内容 (入浴・夕食終了・就寝準備・起床) を actions に **重複して入れない** こと
+- 例外: 通常以上のフォローが必要な特別状況のみ actions に追加:
+  - 睡眠が極端に短かった日 (5h 未満) → 「19:30 短時間ナップ 20 分」等の **追加** ケア
+  - ``compressed=true`` (トレ都合で時間が圧縮) → シャワーのみ・軽ストレッチ等の代替を 1 件
+  - 直前の入浴・就寝行動を tonight_plan と **異なる時刻** にずらす必要があるケースのみ
+- 通常の標準的な日 (sleep ≥ 6h、compressed=false) は **入浴・夕食・就寝・起床を actions に入れない**
 
 # 栄養 (nutrition フィールド)
 - ``estimated=true`` は当日のログが無く過去 N 日平均からの **推定値**。これを「足りないから記録しろ」と指摘しない。推定で十分とみなし、推定値を前提に語る (必要なら "過去の傾向では" と添える)
@@ -84,16 +100,30 @@ training/cardio の action では **必ず ``exercises`` 配列を埋める**。
   - 16kg はヒンジ系 (RDL/デッドリフト/グッドモーニング) では **絶対に使わない** (上限 12kg、腰の既往)
   - 20kg は安定したベンチ系・片手 row・ゴブレットスクワット 等で慎重に
   - **前回 RIR が 0-1 (限界寸前) なら重量据え置きで rep を伸ばす方を優先**
-- **HIIT**: 週 1-2 回まで。Tabata 20s ON / 10s OFF × 8 ラウンド = 4 分が標準
-- **有酸素**:
-  - Z2 (心拍 110-130): 30-60 分、ベース有酸素キャパ向上
-  - HIIT 後の clean-up や Active recovery: Z1 (110 未満) 15-30 分
+- **HIIT**: 週 1-2 回まで。Tabata 形式が標準だが、所要時間・ラウンド数は履歴と本日コンディションから動的決定
+- **有酸素 (ランニング / ジョグ / ラッキング / VR boxing / ウォーキング)**:
+  - 心拍ゾーンの定義 (個人差あり、本人プロファイル参照):
+    - Zone 1 = 会話余裕、低強度 (回復・Active recovery 用)
+    - Zone 2 = 会話可能だが息が弾む、中-低強度 (ベース有酸素構築のメイン)
+    - Zone 3 = テンポ走、会話途切れる、中-高強度 (週 1 回まで)
+  - **具体的な心拍ターゲット (bpm) / ペース (秒/km) / 時間 / 距離 / リュック重量は ``recent_workouts_14d`` の同種目実績から動的に算出する**:
+    - 同種目の直近 ``avg_hr_bpm`` を見て、本日が Z2 狙いなら同等〜やや低めに設定
+    - ペースは ``pace_sec_per_km`` を参考に、Z2 なら直近より少し遅め (会話可能側)、Z3 なら少し速め
+    - 時間/距離は直近実績の ±10-20% で漸進 or 維持
+  - 履歴ゼロの場合のみ ``starting_weights`` の保守値を初期値として使う
+  - **ラッキング**: リュック重量は前回処方 (``recent_training_prescriptions_21d``) の達成 RIR を見て漸進。腰の既往から上限を控えめに
+- **木刀素振り (蹲踞姿勢)**: 体幹・下半身・剣道技術の同時刺激
+  - 種目: 大素振り / 正面打ち / 面切り返し / 小手面胴切り返し / 股割り素振り から 3-5 種目
+  - **reps・セット数は ``recent_training_prescriptions_21d`` の前回処方を参照して漸進**。履歴ゼロなら ``starting_weights`` の保守値スタート
+  - 蹲踞姿勢で膝・腰に違和感あれば即中断
 - **腰のケガ歴**: 腰が丸まる動作 (デッドリフト・スクワット深部) は重量を控え、フォーム最優先
 - **メニュー構築原則**:
   - Push 日: ベンチ系 → ショルダー系 → 三頭筋系 (3-4 種目)
   - Pull 日: ロー系 → ヒップヒンジ → 二頭筋・コア (3-4 種目)
   - Legs 日: スクワット系 → ヒンジ系 → カーフ・コア (3-4 種目)
-  - 全身 (今日のような session): 多関節を中心に push/pull/legs 各 1 種目 + コア (4-5 種目、合計 30-50 分)
+  - 全身 session: 多関節中心に push/pull/legs 各 1 + コア (4-5 種目)
+  - 剣道系単独: 木刀素振り 3-5 種目 (大素振り → 正面打ち → 切り返し → 股割り)。コンディショニング + 技術練習
+  - VR boxing 単独: Zone 2 域の有酸素として処方 (時間は履歴から決定)
 
 # スコアの意味 (0–100)
 - sleep: 睡眠の質と量
@@ -151,19 +181,22 @@ def build_user_block(
     ]
 
     if calendar_events:
-        parts.append("# 既存のカレンダー予定 (この時間帯は推奨アクションを入れない)")
+        parts.append(
+            "# 既存のカレンダー予定 "
+            "([調整可] = 当日のコンディションで実施可否/内容を判断、それ以外は固定)"
+        )
         for ev in calendar_events:
             start = ev.get("start", "")
             end = ev.get("end", "")
             summary = ev.get("summary", "")
             busy = "" if ev.get("is_busy", True) else " (空き扱い)"
-            # ISO 文字列から HH:MM を抽出
+            adj = " [調整可]" if ev.get("is_adjustable") else ""
             try:
                 s_hm = datetime.fromisoformat(start).astimezone(ZoneInfo("Asia/Tokyo")).strftime("%H:%M")
                 e_hm = datetime.fromisoformat(end).astimezone(ZoneInfo("Asia/Tokyo")).strftime("%H:%M")
-                parts.append(f"- {s_hm}–{e_hm} {summary}{busy}")
+                parts.append(f"- {s_hm}–{e_hm} {summary}{busy}{adj}")
             except Exception:
-                parts.append(f"- {start}–{end} {summary}{busy}")
+                parts.append(f"- {start}–{end} {summary}{busy}{adj}")
         parts.append("")
 
     parts.append("# 本日のデータ")
@@ -205,7 +238,10 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
                         },
                         "title": {
                             "type": "string",
-                            "description": "アクション名。短く。例: ラッキング Z2 / ダンベルスクワット 12kg×2 / 軽食",
+                            "description": (
+                                "アクション名。短く。例: ラッキング Z2 / ダンベルスクワット 12kg×2 / 軽食。"
+                                "**'[調整可]' などのメタフラグや '[Healthcare]' のようなタグは含めない**"
+                            ),
                         },
                         "duration_min": {
                             "type": "integer",
@@ -250,11 +286,16 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
                         "exercises": {
                             "type": "array",
                             "description": (
-                                "category=training または cardio の **筋力/有酸素エクササイズだけ** に使う。"
-                                "nutrition / rest / mobility では使用しない (食品や休息は exercises に入れない)。"
-                                "**category=training の場合は exercises を必ず 3-5 種目入れる**。空配列禁止。"
-                                "ユーザーの機材 (ダンベル 2/4/8/12/16/20kg、フラットベンチ、プッシュアップバー、アブローラー) と "
-                                "候補種目の中から選ぶこと。"
+                                "**category=training または cardio では必須 (空配列禁止)**。"
+                                "nutrition / rest / mobility / recovery では使用しない (食品や休息・整理運動は exercises に入れない)。"
+                                "training: **3-5 種目** を機材 (ダンベル 2/4/8/12/16/20kg、フラットベンチ、プッシュアップバー、アブローラー、木刀、VR ヘッドセット) と候補種目から選ぶ。"
+                                "cardio: **1-2 種目**、各種目に sets / reps / weight (任意) / notes を埋める。"
+                                "reps は時間 ('NN 分') または距離 ('N.N km')。"
+                                "**具体数値 (時間・距離・ペース・心拍ターゲット・リュック重量) は ``recent_workouts_14d`` の同種目の "
+                                "avg_hr_bpm / pace_sec_per_km / duration_min / distance_km から動的に算出する**。"
+                                "履歴ゼロのみ ``starting_weights`` の保守値を使う。"
+                                "name は素直に: 'ジョグ', 'ランニング', 'ラッキング', 'VR boxing', '木刀素振り: 大素振り' 等。"
+                                "Zone やペースの詳細は notes に書く"
                             ),
                             "items": {
                                 "type": "object",

@@ -173,9 +173,21 @@ export type SubContext = {
   body_fat?: SubContextEntry;
 };
 
+export type TonightPlan = {
+  wake: string; // HH:MM
+  bedtime: string;
+  bath: string;
+  dinner_cutoff: string;
+  target_sleep_min: number;
+  estimated_sleep_min: number;
+  compressed: boolean;
+  notes: string[];
+};
+
 export type TodayResponse = {
   date: string;
   last_data_update_at?: string | null;
+  tonight_plan?: TonightPlan;
   score: SubScores | null;
   sub_reasons?: SubReasons;
   data_sources?: DataSources;

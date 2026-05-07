@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import session_scope
 from app.models import (
@@ -17,6 +17,7 @@ from app.models import (
     SleepSession,
     SourceSync,
     WeightSample,
+    Workout,
 )
 
 
@@ -142,8 +143,33 @@ async def today() -> dict[str, Any]:
         }
 
         from app.scoring.nutrition import aggregate_nutrition
+        from app.scoring.sleep_plan import compute_tonight_plan
 
         nutrition = aggregate_nutrition(session, d)
+
+        # 今日 (の現在時刻以降) にトレ予定があるなら、その end を拾う。
+        # Healthcare 管理イベント or [hc-adjustable] のような未来予定。
+        # ここでは Workout テーブルではなく、Calendar から取りに行きたいが
+        # gcal は LLM 側で読んでいるので、まず Workout で完了済みのものから判定する
+        # (簡易実装: 当日のワークアウトの end の最大値)
+        from app.scoring.timewindow import jst_day_bounds
+
+        _today_start, _today_end = jst_day_bounds(d)
+        last_training_end = session.execute(
+            select(func.max(Workout.end)).where(
+                Workout.start >= _today_start,
+                Workout.start < _today_end,
+            )
+        ).scalar()
+        # naive UTC → JST aware
+        from zoneinfo import ZoneInfo
+
+        last_training_end_jst = (
+            last_training_end.replace(tzinfo=UTC).astimezone(ZoneInfo("Asia/Tokyo"))
+            if last_training_end
+            else None
+        )
+        tonight_plan = compute_tonight_plan(d, last_training_end_jst=last_training_end_jst)
 
         # 最終更新時刻 (sync の最新 + score.computed_at + comment.generated_at の最新)
         candidates: list[datetime] = []
@@ -164,6 +190,7 @@ async def today() -> dict[str, Any]:
             "data_sources": data_sources,
             "sub_context": sub_context,
             "nutrition": nutrition,
+            "tonight_plan": tonight_plan,
             "metrics": {
                 "sleep": _sleep_to_dict(sleep),
                 "hrv": _hrv_to_dict(hrv),

@@ -228,12 +228,19 @@ def parse_payload(payload: dict[str, Any]) -> ParseResult:
 
 def _ingest_sleep(row: dict[str, Any], result: ParseResult) -> None:
     end_local = _parse_dt_local(row.get("endDate") or row.get("end") or row["date"])
-    asleep_h = row.get("asleep")
     deep_h = row.get("deep")
     rem_h = row.get("rem")
     core_h = row.get("core") or row.get("light")
     awake_h = row.get("awake")
-    total_min = int(asleep_h * 60) if asleep_h is not None else None
+    # HAE は ``asleep`` を 0 で送ってくることがあり、実総睡眠時間は ``totalSleep`` 側にある。
+    # ``totalSleep`` を最優先、フォールバック ``asleep``、それも無ければ deep+rem+core 合算 (awake は除く)。
+    total_h = row.get("totalSleep")
+    if total_h in (None, 0):
+        total_h = row.get("asleep")
+    if total_h in (None, 0):
+        parts = [v for v in (deep_h, rem_h, core_h) if v is not None]
+        total_h = sum(parts) if parts else None
+    total_min = int(total_h * 60) if total_h else None
     sleep = NormalizedSleep(
         date=end_local.date(),
         source="hae",

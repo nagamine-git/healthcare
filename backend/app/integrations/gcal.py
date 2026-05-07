@@ -119,6 +119,7 @@ def _calendar_service():
 
 
 _ADJUSTABLE_MARKER = "[hc-adjustable]"
+_CANDIDATE_KEYWORDS = ("枠候補", "枠(候補)", "枠 (候補)")
 
 
 def list_events_for_date(
@@ -169,7 +170,11 @@ def list_events_for_date(
             description = ev.get("description", "") or ""
             ext = (ev.get("extendedProperties") or {}).get("private") or {}
             is_managed = ext.get("hc_managed") == "1"
-            is_adjustable = is_managed or (_ADJUSTABLE_MARKER in description)
+            is_adjustable = (
+                is_managed
+                or (_ADJUSTABLE_MARKER in description)
+                or any(kw in summary for kw in _CANDIDATE_KEYWORDS)
+            )
             transparency = ev.get("transparency", "opaque")
             events.append(
                 {

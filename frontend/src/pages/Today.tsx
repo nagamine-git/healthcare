@@ -5,6 +5,7 @@ import { MetricTile } from "../components/MetricTile";
 import { AdviceCard } from "../components/AdviceCard";
 import { Sparkline } from "../components/Sparkline";
 import { NutritionPanel } from "../components/NutritionPanel";
+import { TonightPlanPanel } from "../components/TonightPlanPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -214,6 +215,8 @@ export function TodayPage({ onOpenDebug }: Props) {
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
 
       <NutritionPanel nutrition={data.nutrition} />
+
+      <TonightPlanPanel plan={data.tonight_plan} />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <MetricTile

@@ -28,6 +28,7 @@ from app.scoring.subscores import (
     training_load_subscore,
     weight_subscore,
 )
+from app.scoring.timewindow import jst_day_bounds, jst_window_start
 
 logger = get_logger(__name__)
 
@@ -59,7 +60,7 @@ def _weight_baseline_and_recent(
     session: Session, target: date_type
 ) -> tuple[Baseline | None, float | None]:
     settings = get_settings()
-    start = datetime.combine(target - timedelta(days=settings.baseline_window_days), datetime.min.time())
+    start = jst_window_start(settings.baseline_window_days, target)
     rows = session.execute(
         select(WeightSample.weight_kg, WeightSample.ts)
         .where(WeightSample.ts >= start)
@@ -68,7 +69,7 @@ def _weight_baseline_and_recent(
     all_values = [r[0] for r in rows]
     baseline = build_baseline(all_values)
 
-    seven_days_start = datetime.combine(target - timedelta(days=7), datetime.min.time())
+    seven_days_start = jst_window_start(7, target)
     recent_values = [r[0] for r in rows if r[1] >= seven_days_start]
     recent_median: float | None = None
     if recent_values:
@@ -81,9 +82,9 @@ def _weight_baseline_and_recent(
 
 
 def _recent_body_fat(session: Session, target: date_type) -> float | None:
-    """直近 7 日の体脂肪率の中央値を返す。"""
-    seven_days_start = datetime.combine(target - timedelta(days=7), datetime.min.time())
-    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    """直近 7 日 (JST 暦) の体脂肪率の中央値を返す。"""
+    seven_days_start = jst_window_start(7, target)
+    _, end = jst_day_bounds(target)
     rows = session.execute(
         select(WeightSample.body_fat_pct)
         .where(
@@ -102,9 +103,9 @@ def _recent_body_fat(session: Session, target: date_type) -> float | None:
 
 
 def _training_load(session: Session, target: date_type) -> tuple[float | None, float | None]:
-    """Return (acute, chronic) EWMA training loads up to and including target."""
-    start_chronic = datetime.combine(target - timedelta(days=42), datetime.min.time())
-    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    """Return (acute, chronic) EWMA training loads up to and including target (JST)."""
+    start_chronic = jst_window_start(42, target)
+    _, end = jst_day_bounds(target)
 
     rows = session.execute(
         select(Workout.start, Workout.training_load)
@@ -112,11 +113,14 @@ def _training_load(session: Session, target: date_type) -> tuple[float | None, f
         .order_by(Workout.start)
     ).all()
 
+    from app.scoring.timewindow import JST
+
     by_day: dict[date_type, float] = {}
     for start_dt, load in rows:
-        if load is None:
+        if load is None or start_dt is None:
             continue
-        day = start_dt.date()
+        # naive UTC → JST 暦の日付
+        day = start_dt.replace(tzinfo=UTC).astimezone(JST).date()
         by_day[day] = by_day.get(day, 0.0) + float(load)
 
     def _series(days: int) -> list[float]:

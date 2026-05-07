@@ -29,10 +29,18 @@ _FALLBACK_MESSAGE = (
 )
 
 
-def _gather_recent_workouts(target: date_type, days: int = 7) -> list[dict[str, Any]]:
-    """直近 N 日のワークアウトを LLM に渡すために取得する。"""
+def _gather_recent_workouts(target: date_type, days: int = 14) -> list[dict[str, Any]]:
+    """直近 N 日のワークアウトを LLM に渡すために取得する。
+
+    JST 時刻、平均/最大心拍、ペース (秒/km)、速度 (km/h) も付与する。
+    LLM はこれらの履歴から「同種目の過去実績」を見て本日のペース・心拍ターゲット・
+    時間・距離を **動的に** 算出する。
+    """
+    from zoneinfo import ZoneInfo
+
     from app.models import Workout
 
+    jst = ZoneInfo("Asia/Tokyo")
     since = datetime.combine(target - timedelta(days=days), datetime.min.time())
     end = datetime.combine(target + timedelta(days=1), datetime.min.time())
     with session_scope() as session:
@@ -41,13 +49,31 @@ def _gather_recent_workouts(target: date_type, days: int = 7) -> list[dict[str, 
         ).scalars().all()
         out = []
         for r in rows:
+            start_jst = (
+                r.start.replace(tzinfo=UTC).astimezone(jst) if r.start else None
+            )
+            end_jst = r.end.replace(tzinfo=UTC).astimezone(jst) if r.end else None
+            duration_min = int(r.duration_s / 60) if r.duration_s else None
+            distance_km = round(r.distance_m / 1000, 2) if r.distance_m else None
+            pace_sec_per_km: int | None = None
+            speed_kmh: float | None = None
+            if r.distance_m and r.duration_s and r.distance_m > 0:
+                pace_sec_per_km = int(r.duration_s / (r.distance_m / 1000))
+                speed_kmh = round((r.distance_m / 1000) / (r.duration_s / 3600), 2)
             out.append(
                 {
-                    "date": r.start.date().isoformat(),
+                    "date": start_jst.date().isoformat() if start_jst else None,
+                    "start_jst": start_jst.strftime("%H:%M") if start_jst else None,
+                    "end_jst": end_jst.strftime("%H:%M") if end_jst else None,
                     "type": r.type,
-                    "duration_min": int(r.duration_s / 60) if r.duration_s else None,
-                    "distance_km": round(r.distance_m / 1000, 2) if r.distance_m else None,
+                    "duration_min": duration_min,
+                    "distance_km": distance_km,
+                    "pace_sec_per_km": pace_sec_per_km,
+                    "speed_kmh": speed_kmh,
+                    "avg_hr_bpm": int(r.avg_hr) if r.avg_hr else None,
+                    "max_hr_bpm": int(r.max_hr) if r.max_hr else None,
                     "training_load": r.training_load,
+                    "kcal": r.kcal,
                 }
             )
         return out
@@ -292,9 +318,13 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
                 return {"status": "rate_limited"}
 
     today_payload = _gather_today_payload(target)
-    today_payload["recent_workouts_7d"] = _gather_recent_workouts(target, days=7)
+    today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
+    # 今夜のスリープリズム
+    from app.scoring.sleep_plan import compute_tonight_plan
+
+    today_payload["tonight_plan"] = compute_tonight_plan(target)
     # 栄養: 当日の摂取・PFC・水分・TDEE 推定 + 推奨値
     from app.scoring.nutrition import aggregate_nutrition
 

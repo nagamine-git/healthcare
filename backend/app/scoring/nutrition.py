@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import and_, func, select
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import MetricSample
+from app.scoring.timewindow import jst_day_bounds, jst_window_start
 
 # Apple Health の食事系メトリクスキー (Health Auto Export が送る実際の名前)
 _NUTRITION_KEYS = {
@@ -33,8 +34,8 @@ _ENERGY_KEYS = ("active_energy", "basal_energy_burned")
 
 
 def _sum_for_day(session: Session, metric_key: str, target: date_type) -> float | None:
-    start = datetime.combine(target, datetime.min.time())
-    end = start + timedelta(days=1)
+    """JST 暦の target 日の合計 (DB は UTC naive なので JST→UTC 境界で範囲指定)。"""
+    start, end = jst_day_bounds(target)
     val = session.execute(
         select(func.sum(MetricSample.value)).where(
             and_(
@@ -55,17 +56,15 @@ def _avg_daily(
     *,
     min_value: float = 1.0,
 ) -> tuple[float | None, int]:
-    """直近 N 日の **日次合計の平均** + 集計対象日数を返す。
-
-    値が ``min_value`` 未満の日は「ログ無し」扱いで除外。
-    食事は毎日きっちり記録されない (たまに記録) ので、記録のある日だけ平均する方が
-    実態に近い基準になる。
-    """
-    start = datetime.combine(target - timedelta(days=window_days), datetime.min.time())
-    end = datetime.combine(target, datetime.min.time())  # 当日は含めない
+    """直近 N 日 (JST 暦、当日は除く) の日次合計の平均 + 集計対象日数を返す。"""
+    start = jst_window_start(window_days, target)
+    end, _ = jst_day_bounds(target)  # 当日 JST 00:00 (UTC) を上限
+    # DB は UTC naive。JST 暦の「日」でグルーピングするには ts に +9h オフセットを掛けて
+    # 日付を取り出す。SQLite の datetime() で表現。
+    jst_date_expr = func.date(MetricSample.ts, "+9 hours").label("d")
     rows = session.execute(
         select(
-            func.date(MetricSample.ts).label("d"),
+            jst_date_expr,
             func.sum(MetricSample.value).label("s"),
         )
         .where(
@@ -75,7 +74,7 @@ def _avg_daily(
                 MetricSample.ts < end,
             )
         )
-        .group_by("d")
+        .group_by(jst_date_expr)
     ).all()
     daily = [r[1] for r in rows if r[1] is not None and r[1] >= min_value]
     if not daily:
