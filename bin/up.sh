@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # 1Password で env を解決し、ヘルスケアスタック全体を起動する。
 # 1Password CLI の認証 (Touch ID 等) が走ります。
+#
+# 解決した値は .env.runtime (chmod 600) に書き出し、systemd 経由の
+# 自動起動でも同じ env が使えるようにする。
 
 set -euo pipefail
 
@@ -16,16 +19,28 @@ if ! op account list >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> docker compose up -d --build (op run で env を解決)"
-op run --env-file=.env.tmpl -- docker compose up -d --build
+echo "==> .env.tmpl を 1Password で解決して .env.runtime に書き出し"
+# .env.tmpl から変数名を抽出 (コメント・空行を除く)
+keys=$(grep -E '^[A-Z_][A-Z0-9_]*=' .env.tmpl | cut -d= -f1 | tr '\n' ' ')
+
+umask 077
+op run --no-masking --env-file=.env.tmpl -- bash -c '
+  for k in '"$keys"'; do
+    printf "%s=%s\n" "$k" "${!k}"
+  done
+' > .env.runtime
+chmod 600 .env.runtime
+
+echo "==> docker compose up -d --build"
+docker compose --env-file .env.runtime up -d --build
 
 echo
 echo "==> サービス状態"
-docker compose ps
+docker compose --env-file .env.runtime ps
 
 echo
 echo "==> Tailscale 上のホスト名 / 証明書ドメインを確認"
-docker compose logs --tail=50 tailscale 2>&1 | grep -E "(Tailscale started|cert|MagicDNS|Logging in)" || true
+docker compose --env-file .env.runtime logs --tail=50 tailscale 2>&1 | grep -E "(Tailscale started|cert|MagicDNS|Logging in)" || true
 
 cat <<'NEXT'
 
