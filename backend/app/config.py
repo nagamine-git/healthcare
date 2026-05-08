@@ -17,7 +17,9 @@ class Settings(BaseSettings):
     db_path: Path | None = None
 
     anthropic_api_key: str | None = None
-    llm_model: str = "claude-haiku-4-5"
+    # tool_use の安定性と料金のバランスで Sonnet 既定。Haiku だと focus/rationale が
+    # 混線したり XML 疑似タグの混入が起きやすかったため格上げ。.env で上書き可。
+    llm_model: str = "claude-sonnet-4-6"
     llm_max_regenerations_per_day: int = 3
 
     garmin_email: str | None = None

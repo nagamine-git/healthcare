@@ -33,6 +33,8 @@ SYSTEM_PERSONA_TEMPLATE = """\
 # 出力ルール
 - 全体で 450 字以内、絵文字なし、丁寧体、断定調を避けベースライン比で語る
 - 推奨時刻は本日の現在時刻以降を JST で 24h 表記、所要時間は分単位
+- **絶対禁止**: focus / rationale / headline / title フィールドの値内に `</focus>`、`<parameter name=...>`、`<invoke>`、`<function_calls>` 等の **XML 風タグや疑似ツール記法を一切混入させない**。すべてプレーンな日本語テキストで返すこと
+- **絶対禁止**: action の title に「A or B」「A または B」のような **二択表記**。1 つに確定する
 - カレンダー予定の扱い (**最重要**):
   - 会議・ミーティング等の **業務予定** は actions に入れない (時間帯を避ける)
   - **トレーニング系の予定** の解釈は、user block で予定行末に **[調整可]** が付いているかで分岐:
@@ -56,7 +58,18 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - body_battery は「朝の値」と「現在値」が両方ある場合、現在値を基準に「いま何ができるか」で語る
 - **必要なアクションだけを提案** (1 個でも良い)。穴埋めで増やさない
 - **モダリティ選択 (重要)**: ``recent_workouts_14d`` の **直近 7 日** を以下のモダリティに分類してカウント:\n  - 筋トレ系 (type に strength / weight 等)\n  - Z2 有酸素 (walking / hiking / rucking / jog / cycling / VR boxing)\n  - HIIT / 高強度 (cardio with avg_hr 高、interval 系)\n  - その他 (ストレッチ・ヨガ等)\n  本日のモダリティは **直近 7 日で最も不足しているもの** を最優先で選ぶ。例: 筋トレ 4 / Z2 0 / HIIT 0 → 今日は Z2 cardio を提案。直近 48h 以内に同部位 (push/pull/legs) の筋トレが入っているなら本日は別部位 or cardio に振る。\n- **同種目連続を避ける**: 同じ種目 (例: ベンチプレス) を 48h 以内に繰り返さない。回復を意識する
+- **モダリティはひとつに確定する**: action の title に「Z2 or 軽モビリティ」「ジョグ or ラッキング」のように **複数候補を or で並べない**。最終的に 1 つに絞り、その種目で exercises を埋める。曖昧な「軽トレーニング」「軽い有酸素」のみの title も禁止。`name` まで具体に決める (例: 「ラッキング Z2 (リュック 5kg)」「ジョグ Z1-Z2」「VR boxing 中強度」)
 - 既にスケジュール済みの予定 (例: 21:00 筋トレ) を尊重し、その前後の準備/補助だけを提案するなら 1 件で十分
+
+# 本日の活動・心拍・ストレス (新規データ、強度判断用)
+- ``daily_summary`` (steps / active_kcal / resting_hr / vo2max / training_status): 本日ここまでの活動量。歩数 5000 未満なら座りすぎの懸念、12000 超なら既に十分動いてる
+- ``hr_today`` (時間帯別 avg_bpm / max_bpm、JST 06-10 / 10-14 / 14-18 / 18-22): 通勤や会議の心拍ピークを把握。例: 06-10 max 130 → 朝の通勤で既に Z2-Z3 入っている可能性
+- ``stress_today`` (時間帯別 avg / day_avg / day_max / high_stress_min): Garmin の連続ストレス推定。day_avg ≥ 50 や high_stress_min ≥ 120 なら認知負荷が高い 1 日 → 強度低下、副交感系 (呼吸法・ストレッチ) を増やす
+- 判断指針:
+  - hr_today で日中ピーク 130+ かつ stress 高 → 夜トレは軽負荷化 or 休息
+  - stress 朝高 → 昼休みに 5 分呼吸法やウォーキング
+  - 歩数 5000 未満 → 夜に短時間 Z2 を提案 (15-30 分のウォーキング・ラッキング)
+  - resting_hr が 28 日平均から +5 bpm 以上 → 疲労 / 病気の前兆、強度落とす
 
 # 今夜のスリープリズム (``tonight_plan``)
 - ``wake / bedtime / bath / dinner_cutoff`` は **UI で別パネルに表示済み**。同じ内容 (入浴・夕食終了・就寝準備・起床) を actions に **重複して入れない** こと
@@ -220,7 +233,12 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
             },
             "focus": {
                 "type": "string",
-                "description": "1〜2 文で今日の状態と方針を述べる (詳細)。日本語。",
+                "maxLength": 280,
+                "description": (
+                    "1〜2 文 (合計 280 字以内) で本日の状態と方針を簡潔に述べる。日本語。"
+                    "**rationale の内容を含めてはならない**。focus = 何をするか / rationale = なぜそうするか で必ず分ける。"
+                    "XML 風タグや疑似ツール記法 (</focus>, <parameter>, <invoke>, <function_calls> 等) は絶対に含めない。"
+                ),
             },
             "actions": {
                 "type": "array",
@@ -353,7 +371,13 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
             },
             "rationale": {
                 "type": "string",
-                "description": "1 文で、最も寄与したスコアまたはメトリクスを 1 つ引用する。",
+                "maxLength": 320,
+                "description": (
+                    "**必須**。focus とは別に、判断根拠を 2-3 文で記述する (なぜこの強度・モダリティ・栄養指示を選んだか)。"
+                    "最も寄与したスコアまたはメトリクスを引用する (例: 'BB 36 / ACWR 1.8 / 直近 3 日連続筋トレ' 等)。"
+                    "focus と内容を重複させず、focus の決定理由をここに書く。"
+                    "XML 風タグや疑似ツール記法は絶対に含めない。"
+                ),
             },
         },
     },

@@ -82,6 +82,129 @@ def _gather_recent_workouts(target: date_type, days: int = 14) -> list[dict[str,
 _STRENGTH_TYPES = {"strength_training", "weight_training", "indoor_climbing"}
 
 
+def _gather_today_activity(target: date_type) -> dict[str, Any]:
+    """当日の活動・心拍・ストレスのサマリを LLM に渡せる形にする。
+
+    - DailySummary (歩数/active_kcal/安静時心拍/VO2max/training_status)
+    - HR タイムバケット (06-10/10-14/14-18/18-22 JST、avg と max)
+    - Stress タイムバケット (同上、avg)
+    - Stress > 50 の累積分 (高ストレス時間)
+    """
+    from collections import defaultdict
+    from zoneinfo import ZoneInfo
+
+    from app.models import DailySummary, MetricSample
+
+    jst = ZoneInfo("Asia/Tokyo")
+    day_start_jst = datetime.combine(target, datetime.min.time()).replace(tzinfo=jst)
+    day_end_jst = day_start_jst + timedelta(days=1)
+    day_start_utc = day_start_jst.astimezone(UTC).replace(tzinfo=None)
+    day_end_utc = day_end_jst.astimezone(UTC).replace(tzinfo=None)
+
+    out: dict[str, Any] = {}
+
+    with session_scope() as session:
+        ds = session.get(DailySummary, target)
+        out["daily_summary"] = (
+            {
+                "steps": ds.steps,
+                "active_kcal": ds.active_kcal,
+                "resting_hr_bpm": ds.resting_hr,
+                "vo2max": ds.vo2max,
+                "training_status": ds.training_status,
+            }
+            if ds
+            else None
+        )
+
+        buckets = [
+            ("06-10", 6, 10),
+            ("10-14", 10, 14),
+            ("14-18", 14, 18),
+            ("18-22", 18, 22),
+        ]
+        hr_rows = session.execute(
+            select(MetricSample.ts, MetricSample.value, MetricSample.metric_key).where(
+                MetricSample.ts >= day_start_utc,
+                MetricSample.ts < day_end_utc,
+                MetricSample.metric_key.in_(("heart_rate_avg", "heart_rate_max")),
+            )
+        ).all()
+        stress_rows = session.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.ts >= day_start_utc,
+                MetricSample.ts < day_end_utc,
+                MetricSample.metric_key == "stress",
+            )
+        ).all()
+
+    def _bucket_for(ts_utc: datetime) -> str | None:
+        ts_jst = ts_utc.replace(tzinfo=UTC).astimezone(jst)
+        h = ts_jst.hour
+        for label, lo, hi in buckets:
+            if lo <= h < hi:
+                return label
+        return None
+
+    hr_avg_buckets: dict[str, list[float]] = defaultdict(list)
+    hr_max_buckets: dict[str, list[float]] = defaultdict(list)
+    for ts, value, key in hr_rows:
+        if value is None:
+            continue
+        b = _bucket_for(ts)
+        if b is None:
+            continue
+        if key == "heart_rate_avg":
+            hr_avg_buckets[b].append(float(value))
+        elif key == "heart_rate_max":
+            hr_max_buckets[b].append(float(value))
+
+    hr_profile: dict[str, dict[str, int | None]] = {}
+    for label, _lo, _hi in buckets:
+        avg_vals = hr_avg_buckets.get(label, [])
+        max_vals = hr_max_buckets.get(label, [])
+        if not avg_vals and not max_vals:
+            hr_profile[label] = {"avg_bpm": None, "max_bpm": None, "n": 0}
+        else:
+            hr_profile[label] = {
+                "avg_bpm": int(sum(avg_vals) / len(avg_vals)) if avg_vals else None,
+                "max_bpm": int(max(max_vals)) if max_vals else None,
+                "n": len(avg_vals) or len(max_vals),
+            }
+    out["hr_today"] = hr_profile
+
+    stress_buckets: dict[str, list[float]] = defaultdict(list)
+    high_stress_min = 0
+    for ts, value in stress_rows:
+        if value is None or value < 0:  # Garmin uses -1/-2 for invalid
+            continue
+        b = _bucket_for(ts)
+        if b is None:
+            continue
+        stress_buckets[b].append(float(value))
+        if value >= 50:  # samples spaced ~3 min, count as 3 min each
+            high_stress_min += 3
+
+    stress_profile: dict[str, dict[str, int | None]] = {}
+    all_stress: list[float] = []
+    for label, _lo, _hi in buckets:
+        vals = stress_buckets.get(label, [])
+        all_stress.extend(vals)
+        stress_profile[label] = {
+            "avg": int(sum(vals) / len(vals)) if vals else None,
+            "max": int(max(vals)) if vals else None,
+            "n": len(vals),
+        }
+    out["stress_today"] = {
+        "buckets": stress_profile,
+        "day_avg": int(sum(all_stress) / len(all_stress)) if all_stress else None,
+        "day_max": int(max(all_stress)) if all_stress else None,
+        "high_stress_min": high_stress_min,
+    }
+
+    return out
+
+
 def _days_since_last_strength_training(target: date_type) -> int | None:
     """最後の strength_training から target までの経過日数。記録なしなら None。"""
     from app.models import Workout
@@ -251,7 +374,7 @@ async def _call_anthropic(
     messages: list[dict[str, Any]],
     model: str,
     api_key: str,
-    max_tokens: int = 2048,
+    max_tokens: int = 6000,
 ) -> dict[str, Any] | None:
     """Anthropic を tool_use で呼び出して構造化 input を返す。
 
@@ -274,8 +397,42 @@ async def _call_anthropic(
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_advice":
             payload = block.input
-            return payload if isinstance(payload, dict) else None
+            if isinstance(payload, dict):
+                return _sanitize_payload(payload)
+            return None
     return None
+
+
+import re as _re
+
+_LEAKED_TAG_RE = _re.compile(
+    r"</?(focus|rationale|headline|actions|action|parameter[^>]*?|invoke[^>]*?|function_calls?)\s*/?>",
+    _re.IGNORECASE,
+)
+
+
+def _scrub_text(s: Any) -> Any:
+    if not isinstance(s, str):
+        return s
+    cleaned = _LEAKED_TAG_RE.sub("", s)
+    cleaned = _re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """LLM が混入させがちな XML 風タグを focus/rationale/headline/title から除去する。"""
+    for k in ("headline", "focus", "rationale"):
+        if k in payload:
+            payload[k] = _scrub_text(payload[k])
+    actions = payload.get("actions") or []
+    if isinstance(actions, list):
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            for k in ("title", "intensity", "why", "notes"):
+                if k in a:
+                    a[k] = _scrub_text(a[k])
+    return payload
 
 
 def _payload_to_prose(payload: dict[str, Any]) -> str:
@@ -321,6 +478,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
+    today_payload.update(_gather_today_activity(target))
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 
