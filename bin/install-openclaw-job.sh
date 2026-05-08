@@ -38,7 +38,7 @@ openclaw cron add \
   --announce \
   --channel last \
   --wake now \
-  --timeout-seconds 60 \
+  --timeout-seconds 90 \
   --message "$MSG"
 
 echo

@@ -17,7 +17,7 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 既往: {injury_notes}
 - 利用可能機材: {equipment}
 - 候補種目: {training_options}
-- 週スプリットの参考: {weekly_split_hint}
+{weekly_target_hint}
 
 # 利用可能なダンベル重量 (絶対遵守)
 **2 / 4 / 8 / 12 / 16 / 20 kg のみ存在する**。これ以外の刻み (5, 6, 10, 14 kg 等) は **絶対に出さない**。
@@ -55,7 +55,7 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - 体脂肪率は「目標範囲」の中で語り、過度な減量は推奨しない
 - body_battery は「朝の値」と「現在値」が両方ある場合、現在値を基準に「いま何ができるか」で語る
 - **必要なアクションだけを提案** (1 個でも良い)。穴埋めで増やさない
-- **直近 14 日 (recent_workouts_14d)** を確認し、同じ種目を毎日連続で組まない。回復日を意識し、刺激のバリエーションを混ぜる
+- **モダリティ選択 (重要)**: ``recent_workouts_14d`` の **直近 7 日** を以下のモダリティに分類してカウント:\n  - 筋トレ系 (type に strength / weight 等)\n  - Z2 有酸素 (walking / hiking / rucking / jog / cycling / VR boxing)\n  - HIIT / 高強度 (cardio with avg_hr 高、interval 系)\n  - その他 (ストレッチ・ヨガ等)\n  本日のモダリティは **直近 7 日で最も不足しているもの** を最優先で選ぶ。例: 筋トレ 4 / Z2 0 / HIIT 0 → 今日は Z2 cardio を提案。直近 48h 以内に同部位 (push/pull/legs) の筋トレが入っているなら本日は別部位 or cardio に振る。\n- **同種目連続を避ける**: 同じ種目 (例: ベンチプレス) を 48h 以内に繰り返さない。回復を意識する
 - 既にスケジュール済みの予定 (例: 21:00 筋トレ) を尊重し、その前後の準備/補助だけを提案するなら 1 件で十分
 
 # 今夜のスリープリズム (``tonight_plan``)
@@ -152,7 +152,7 @@ def _format_persona() -> str:
         injury_notes=" / ".join(s.user_injury_notes),
         equipment="、".join(s.user_equipment),
         training_options="、".join(s.user_training_options),
-        weekly_split_hint=s.user_weekly_split_hint,
+        weekly_target_hint=s.user_weekly_target_hint,
         starting_weights=starting,
         progression_rule=s.user_progression_rule,
     )
