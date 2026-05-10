@@ -230,22 +230,51 @@ def _gather_recent_training_prescriptions(
     """過去 N 日の LLM 提示処方 (training/cardio) の exercises を抜き出す。
 
     LLM が前回までの処方を踏まえて漸進性で次を組めるようにする。
+
+    同じ日に複数 LlmComment が生成されている (再生成や補正) ため、
+    特定日の最新 1 件だけ採るとラッキング履歴などを取りこぼす。
+    そのため日付内の全 payload を走査し、(title, weight 集合) シグネチャで
+    重複排除しつつアクションを蓄積する。
     """
     from app.models import LlmComment
 
     since = target - timedelta(days=days)
-    out: list[dict[str, Any]] = []
     with session_scope() as session:
         rows = session.execute(
-            select(LlmComment.date, LlmComment.payload)
+            select(LlmComment.date, LlmComment.generated_at, LlmComment.payload)
             .where(LlmComment.date >= since, LlmComment.date < target)
-            .order_by(LlmComment.date.desc())
+            .order_by(LlmComment.date.desc(), LlmComment.generated_at.desc())
         ).all()
-    seen_dates: set[date_type] = set()
-    for d, payload in rows:
-        if d in seen_dates or not payload:
+
+    def _modality_bucket(action: dict[str, Any]) -> str:
+        """アクションをモダリティに分類。category 信頼せず内容ベースで判定する。
+
+        例: title が筋トレ系でも exercise にラッキングが入ってると category=training になりがち。
+        この場合 rucking バケットとして扱い pack weight 履歴を保持したい。
+        """
+        title = (action.get("title") or "").lower()
+        category = action.get("category") or ""
+        ex_names = " ".join((e.get("name") or "") for e in (action.get("exercises") or [])).lower()
+        haystack = title + " " + ex_names
+        if "ラッキ" in haystack or "ruck" in haystack or "リュック" in haystack:
+            return "rucking"
+        if category == "cardio":
+            return "cardio_other"
+        if any(kw in haystack for kw in ("ジョグ", "ラン", "ウォーキ", "vr boxing", "ハイキ")):
+            return "cardio_other"
+        if category == "training":
+            return "strength"
+        return "other"
+
+    out: list[dict[str, Any]] = []
+    seen_sig: set[tuple] = set()
+    # 筋トレ系 (strength) は同じレジメンが何度も出るので (date, modality) で 1 件に絞る。
+    # ラッキング・有酸素系は pack weight や時間のバリエーションを保持したいので、
+    # 内容ベースの dedupe (同日に同じ exercise 構成のものを除外) のみ。
+    seen_date_strength: set[date_type] = set()
+    for d, _ts, payload in rows:
+        if not payload:
             continue
-        seen_dates.add(d)
         actions = (payload or {}).get("actions") or []
         for a in actions:
             if a.get("category") not in ("training", "cardio"):
@@ -253,16 +282,33 @@ def _gather_recent_training_prescriptions(
             exercises = a.get("exercises") or []
             if not exercises:
                 continue
+            modality = _modality_bucket(a)
+            if modality == "strength" and d in seen_date_strength:
+                continue
+            sig = (
+                d.isoformat(),
+                tuple(
+                    (e.get("name") or "", e.get("weight") or "", str(e.get("reps") or ""))
+                    for e in exercises
+                ),
+            )
+            if sig in seen_sig:
+                continue
+            seen_sig.add(sig)
+            if modality == "strength":
+                seen_date_strength.add(d)
             out.append(
                 {
                     "date": d.isoformat(),
                     "title": a.get("title"),
                     "category": a.get("category"),
+                    "modality": modality,
+                    "intensity": a.get("intensity"),
                     "exercises": exercises,
                 }
             )
-    # 直近順に最大 5 件まで
-    return out[:5]
+    # 21 日 × strength 1 + cardio 多めで最大 30-40 件想定。token 抑制で 30 件。
+    return out[:30]
 
 
 def _gather_today_payload(target: date_type) -> dict[str, Any]:
