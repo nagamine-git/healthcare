@@ -347,6 +347,40 @@ async def timeseries(
         return {"metric": metric, "from": start.isoformat(), "to": end.isoformat(), "data": data}
 
 
+@router.get("/api/trends")
+async def trends(
+    granularity: str = Query(default="daily"),
+    days: int = Query(default=28, ge=7, le=365),
+) -> dict[str, Any]:
+    from app.scoring import trends as trend_calc
+
+    end = _today()
+    start = end - timedelta(days=days)
+    with session_scope() as session:
+        rows = session.execute(
+            select(
+                DailyScore.date,
+                DailyScore.total,
+                DailyScore.sleep_sub,
+                DailyScore.hrv_sub,
+                DailyScore.bb_sub,
+                DailyScore.load_sub,
+                DailyScore.weight_sub,
+                DailyScore.body_fat_sub,
+            )
+            .where(DailyScore.date >= start)
+            .order_by(DailyScore.date)
+        ).all()
+
+    by_col = trend_calc.series_by_column(rows)
+    metrics = trend_calc.build_metrics(by_col, granularity=granularity)
+    return {
+        "granularity": granularity,
+        "generated_at": _utc_iso(datetime.now(UTC).replace(tzinfo=None)),
+        "metrics": metrics,
+    }
+
+
 def _score_to_dict(score: DailyScore | None) -> dict[str, Any] | None:
     if score is None:
         return None

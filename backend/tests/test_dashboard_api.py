@@ -172,3 +172,68 @@ def test_timeseries_unknown_metric_returns_empty(app_client):
     resp = app_client.get("/api/timeseries", params={"metric": "totally-unknown"})
     assert resp.status_code == 200
     assert resp.json()["data"] == []
+
+
+def test_trends_endpoint_daily(app_client):
+    from app.db import session_scope
+
+    today = date.today()
+    with session_scope() as session:
+        # 8 日分、total を単調増加で seed
+        for i in range(8):
+            d = today - timedelta(days=7 - i)
+            session.add(
+                DailyScore(
+                    date=d,
+                    total=60 + i * 2,
+                    sleep_sub=70,
+                    hrv_sub=65,
+                    bb_sub=80,
+                    load_sub=85,
+                    weight_sub=75,
+                    body_fat_sub=90,
+                    version="v1",
+                    computed_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+
+    resp = app_client.get("/api/trends", params={"granularity": "daily", "days": 28})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["granularity"] == "daily"
+    total = body["metrics"]["total"]
+    assert total["label"] == "総合スコア"
+    assert total["current"] == 74
+    assert total["prev_day_change"] == 2
+    assert total["direction"] == "improving"
+    assert total["higher_is_better"] is True
+    assert len(total["series"]) == 8
+    # 全指標キーが揃う
+    assert set(body["metrics"].keys()) == {
+        "total", "sleep", "hrv", "body_battery", "load", "weight", "body_fat",
+    }
+
+
+def test_trends_endpoint_weekly(app_client):
+    from app.db import session_scope
+
+    today = date.today()
+    with session_scope() as session:
+        for i in range(14):
+            d = today - timedelta(days=13 - i)
+            session.add(
+                DailyScore(
+                    date=d,
+                    total=70.0,
+                    version="v1",
+                    computed_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+
+    resp = app_client.get("/api/trends", params={"granularity": "weekly", "days": 28})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["granularity"] == "weekly"
+    # 週平均なので series 点数は日数より少ない (高々 3 週)
+    assert len(body["metrics"]["total"]["series"]) <= 3
+    assert all(p["value"] == 70.0 for p in body["metrics"]["total"]["series"])
