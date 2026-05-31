@@ -10,10 +10,18 @@
 
 ## スコープ
 
-対象メトリクス: `score`(総合)、`sleep_total_min`、`hrv`、`body_battery`、`weight`、`training_load`。
-総合スコアを主役に、各サブ指標も並べて表示する。
+対象メトリクス: `daily_score` テーブルの **総合スコア (`total`) と 6 サブスコア**
+(`sleep_sub`, `hrv_sub`, `bb_sub`, `load_sub`, `weight_sub`, `body_fat_sub`)。
+いずれも 0–100 で、**高いほど良い**。総合スコアを主役に、各サブ指標も並べて表示する。
 
-非目標(YAGNI): 予測モデル(ARIMA/Prophet)、異常検出アラート、年単位ダッシュボード。
+スコアに統一する理由:
+- 「数値が良くなっているか」を最も直接的に表すのは 0–100 のスコア(高いほど良い)である。
+- 全メトリクスが `daily_score` の単一テーブルから同一クエリで取れ、計算・色付けロジックが統一される。
+- 生の実数値(体重 kg、HRV ms、睡眠時間など)は既存の Today ページの Sparkline で継続表示する。
+  トレンドビューはスコアベースで「改善しているか」を見せる役割に特化する。
+
+非目標(YAGNI): 予測モデル(ARIMA/Prophet)、異常検出アラート、年単位ダッシュボード、
+生実数値のトレンド専用ページ化。
 
 ## 用語: 週の定義
 
@@ -25,48 +33,51 @@
 
 ### バックエンド
 
-**新規 `backend/app/scoring/trends.py`** — 純粋関数群。`daily_score` / 各テーブルから値の日次系列を取り出し、
-メトリクスごとに以下を算出する。
+**新規 `backend/app/scoring/trends.py`** — DB に依存しない純粋関数群。
+`(date, value)` の日次系列を入力に、以下を算出する。
 
-- `prev_day_change`: 前日比(絶対値 + 方向)
+- `prev_day_change`: 末尾の値と、その1つ前の値の差分(`current - prev`)
 - `week_over_week`: 直近7日平均 vs その前7日平均(差分 + %)
-- `direction`: 直近7日の線形回帰の傾きから `improving` / `stable` / `declining` を判定。
-  各メトリクスの「良い方向」を考慮する(体重・training_load の解釈は後述)。
+- `direction`: 直近7日(7点)の線形回帰の傾きから `improving` / `stable` / `declining` を判定
 - `weekly_series`: カレンダー週(月曜始め, JST)ごとの平均値の系列
 
-「良い方向(higher_is_better)」のマップ:
-- 上昇が改善: `score`, `sleep_total_min`, `hrv`, `body_battery`
-- 体重 (`weight`): 中立扱い。方向は出すが改善/低下の色付けはしない(目標体重への接近で評価するのは将来課題)。
-- training_load: 中立扱い(ACWR の最適域があり単純な高低で良し悪しを判断できないため)。
+対象は全てスコア(高いほど良い)なので、`direction` は「傾き > 0 → improving」で統一。
+将来 higher_is_better=false の指標を足せるよう、関数は `higher_is_better: bool = True` 引数を取り、
+false のとき方向を反転させる(本実装では常に True で呼ぶ)。
 
-`stable` の閾値: 傾きを系列の標準偏差で正規化し、|正規化傾き| が小さい場合は `stable`。
+`stable` の閾値: 傾きを系列の値レンジ(max-min、ゼロ割回避に下限を設ける)で正規化し、
+|正規化傾き| が `STABLE_THRESHOLD`(= 0.02)未満なら `stable`。
 
 **新規エンドポイント `GET /api/trends`** (`backend/app/api/dashboard.py`):
 - クエリ: `?granularity=daily|weekly`(デフォルト daily)、`?days=N`(日次系列の長さ、デフォルト28)
-- 返却(メトリクスごと):
+- `daily_score` から `date, total, sleep_sub, hrv_sub, bb_sub, load_sub, weight_sub, body_fat_sub`
+  を1クエリで取得し、列ごとに `trends.compute_trend()` を適用する。
+- 返却(メトリクスごと、キーは `total`/`sleep`/`hrv`/`body_battery`/`load`/`weight`/`body_fat`):
   ```json
   {
+    "granularity": "daily",
+    "generated_at": "...",
     "metrics": {
-      "score": {
+      "total": {
         "label": "総合スコア",
         "current": 78.0,
-        "unit": null,
         "higher_is_better": true,
         "prev_day_change": 5.0,
         "week_over_week": { "delta": 3.2, "pct": 4.3 },
         "direction": "improving",
         "series": [{ "date": "2026-05-04", "value": 70.0 }, ...]
       },
-      ...
-    },
-    "granularity": "daily",
-    "generated_at": "..."
+      "sleep": { "label": "睡眠", ... },
+      "hrv": { "label": "自律神経", ... }
+    }
   }
   ```
 - `granularity=weekly` のとき `series` はカレンダー週平均(各点の `date` は週開始日)。
+  `current` / `prev_day_change` / `week_over_week` / `direction` は日次系列ベースで一定
+  (週次は系列の見せ方のみ変える)。
 
-既存 `timeseries()` (dashboard.py) のメトリクス→値抽出クエリを `trends.py` の
-共通ヘルパに切り出し、両者で再利用する(重複排除)。
+メトリクスのキー・ラベル・daily_score 列名の対応表は `trends.py` に `TREND_METRICS` 定数として置き、
+エンドポイントとテストで共有する(DRY)。
 
 ### フロントエンド
 
