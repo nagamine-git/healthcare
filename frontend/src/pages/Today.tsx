@@ -45,6 +45,10 @@ export function TodayPage({ onOpenDebug }: Props) {
     queryKey: ["timeseries", "hrv"],
     queryFn: () => api.timeseries("hrv", 28),
   });
+  const trends = useQuery({
+    queryKey: ["trends", "daily"],
+    queryFn: () => api.trends("daily", 28),
+  });
 
   const sync = useMutation({
     mutationFn: api.syncGarmin,
@@ -155,6 +159,12 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
+          <a
+            href="#trends"
+            className="rounded-lg bg-slate-800/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+          >
+            トレンド
+          </a>
           <SyncMenu
             lastSyncedLabel={
               data.sync.garmin?.last_synced_at
@@ -266,24 +276,28 @@ export function TodayPage({ onOpenDebug }: Props) {
           label="総合スコア 14日"
           data={scoreSeries.data?.data ?? []}
           color="#34d399"
+          trend={trends.data?.metrics.total}
         />
         <Sparkline
           label="睡眠時間 14日"
           data={sleepSeries.data?.data ?? []}
           color="#60a5fa"
           formatter={(v) => formatMinutes(v)}
+          trend={trends.data?.metrics.sleep}
         />
         <Sparkline
           label="HRV 28日"
           data={hrvSeries.data?.data ?? []}
           color="#a78bfa"
           formatter={(v) => `${v.toFixed(0)} ms`}
+          trend={trends.data?.metrics.hrv}
         />
         <Sparkline
           label="体重 28日"
           data={weightSeries.data?.data ?? []}
           color="#f472b6"
           formatter={(v) => `${v.toFixed(1)} kg`}
+          trend={trends.data?.metrics.weight}
         />
       </section>
 

@@ -1,24 +1,30 @@
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import type { TimeseriesPoint } from "../lib/api";
+import type { TimeseriesPoint, TrendMetric } from "../lib/api";
+import { TrendBadge } from "./TrendBadge";
 
 type Props = {
   label: string;
   data: TimeseriesPoint[];
   formatter?: (v: number) => string;
   color?: string;
+  trend?: TrendMetric;
 };
 
-export function Sparkline({ label, data, formatter, color = "#34d399" }: Props) {
+export function Sparkline({ label, data, formatter, color = "#34d399", trend }: Props) {
   const filtered = data.filter((p) => p.value != null);
   return (
     <div className="rounded-2xl bg-slate-900/70 p-4">
-      <div className="mb-2 flex items-baseline justify-between">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
         <span className="text-xs uppercase tracking-wider text-slate-400">
           {label}
         </span>
-        <span className="text-xs text-slate-500">
-          {filtered.length > 0 ? `${filtered.length} 日` : ""}
-        </span>
+        {trend ? (
+          <TrendBadge direction={trend.direction} prevDayChange={trend.prev_day_change} />
+        ) : (
+          <span className="text-xs text-slate-500">
+            {filtered.length > 0 ? `${filtered.length} 日` : ""}
+          </span>
+        )}
       </div>
       <div className="h-24">
         <ResponsiveContainer width="100%" height="100%">

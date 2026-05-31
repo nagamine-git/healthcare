@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { TodayPage } from "./pages/Today";
 import { DebugPage } from "./pages/Debug";
+import { TrendsPage } from "./pages/Trends";
 
-type View = "today" | "debug";
+type View = "today" | "debug" | "trends";
 
 function viewFromHash(): View {
-  return window.location.hash === "#debug" ? "debug" : "today";
+  if (window.location.hash === "#debug") return "debug";
+  if (window.location.hash === "#trends") return "trends";
+  return "today";
 }
 
 export default function App() {
@@ -20,6 +23,16 @@ export default function App() {
   if (view === "debug") {
     return (
       <DebugPage
+        onBack={() => {
+          window.location.hash = "";
+        }}
+      />
+    );
+  }
+
+  if (view === "trends") {
+    return (
+      <TrendsPage
         onBack={() => {
           window.location.hash = "";
         }}

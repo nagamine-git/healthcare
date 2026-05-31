@@ -212,6 +212,33 @@ export type TimeseriesResponse = {
   data: TimeseriesPoint[];
 };
 
+export type TrendDirection = "improving" | "stable" | "declining";
+
+export type TrendMetric = {
+  label: string;
+  current: number | null;
+  higher_is_better: boolean;
+  prev_day_change: number | null;
+  week_over_week: { delta: number; pct: number | null } | null;
+  direction: TrendDirection | null;
+  series: TimeseriesPoint[];
+};
+
+export type TrendMetricKey =
+  | "total"
+  | "sleep"
+  | "hrv"
+  | "body_battery"
+  | "load"
+  | "weight"
+  | "body_fat";
+
+export type TrendsResponse = {
+  granularity: "daily" | "weekly";
+  generated_at: string | null;
+  metrics: Record<TrendMetricKey, TrendMetric>;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -255,6 +282,8 @@ export const api = {
   today: () => request<TodayResponse>("/api/today"),
   timeseries: (metric: string, days = 28) =>
     request<TimeseriesResponse>(`/api/timeseries?metric=${encodeURIComponent(metric)}&days=${days}`),
+  trends: (granularity: "daily" | "weekly" = "daily", days = 28) =>
+    request<TrendsResponse>(`/api/trends?granularity=${granularity}&days=${days}`),
   recompute: () => request<unknown>("/admin/recompute", { method: "POST" }),
   syncGarmin: () => request<unknown>("/admin/garmin/sync", { method: "POST" }),
   regenerateAdvice: () => request<unknown>("/admin/llm/regenerate", { method: "POST" }),
