@@ -163,3 +163,31 @@ def test_build_messages_includes_cache_control():
     )
     assert any(b.get("cache_control") for b in system)
     assert messages[0]["role"] == "user"
+
+
+def test_gather_recent_trends_builds_directions(db_engine):
+    from datetime import UTC, date, datetime, timedelta
+
+    from app.db import session_scope
+    from app.llm.client import _gather_recent_trends
+    from app.models import DailyScore
+
+    today = date.today()
+    with session_scope() as session:
+        for i in range(8):
+            d = today - timedelta(days=7 - i)
+            session.add(
+                DailyScore(
+                    date=d,
+                    total=60 + i * 2,
+                    sleep_sub=70,
+                    version="v1",
+                    computed_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+
+    trends = _gather_recent_trends(today)
+    assert trends["total"]["direction"] == "improving"
+    assert "week_over_week" in trends["total"]
+    # コンパクト化のため series は含めない
+    assert "series" not in trends["total"]

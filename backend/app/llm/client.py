@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re as _re
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Any
@@ -342,6 +343,43 @@ def _gather_baselines(target: date_type, window_days: int = 28) -> dict[str, Any
     }
 
 
+def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
+    """直近のスコアトレンド (方向 + 前日比 + 前週比) を LLM 用にコンパクトに返す。
+
+    series は重いので落とし、direction / prev_day_change / week_over_week のみ渡す。
+    dashboard の /api/trends と同じ計算 (app.scoring.trends) を共有する。
+    """
+    from app.scoring import trends as trend_calc
+
+    start = target - timedelta(days=days)
+    with session_scope() as session:
+        rows = session.execute(
+            select(
+                DailyScore.date,
+                DailyScore.total,
+                DailyScore.sleep_sub,
+                DailyScore.hrv_sub,
+                DailyScore.bb_sub,
+                DailyScore.load_sub,
+                DailyScore.weight_sub,
+                DailyScore.body_fat_sub,
+            )
+            .where(DailyScore.date >= start, DailyScore.date <= target)
+            .order_by(DailyScore.date)
+        ).all()
+
+    by_col = trend_calc.series_by_column(rows)
+    metrics = trend_calc.build_metrics(by_col, granularity="daily")
+    return {
+        key: {
+            "direction": m["direction"],
+            "prev_day_change": m["prev_day_change"],
+            "week_over_week": m["week_over_week"],
+        }
+        for key, m in metrics.items()
+    }
+
+
 def _hash_messages(system: list[dict[str, Any]], messages: list[dict[str, Any]]) -> str:
     blob = json.dumps({"system": system, "messages": messages}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
@@ -402,8 +440,6 @@ async def _call_anthropic(
             return None
     return None
 
-
-import re as _re
 
 _LEAKED_TAG_RE = _re.compile(
     r"</?(focus|rationale|headline|actions|action|parameter[^>]*?|invoke[^>]*?|function_calls?)\s*/?>",
@@ -479,6 +515,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     today_payload.update(_gather_today_activity(target))
+    today_payload["recent_trends"] = _gather_recent_trends(target)
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 
