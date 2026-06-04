@@ -377,17 +377,19 @@ async def trends(
 
     def _metric(label, unit, ideal, raw_pairs, ach_series):
         trend = tr.compute_trend(ach_series, higher_is_better=True)
+        out_series = _series_out(raw_pairs)
+        reg_input = [(date.fromisoformat(p["date"]), p["value"]) for p in out_series]
         return {
             "label": label,
             "unit": unit,
             "ideal": ideal,
-            "raw_series": _series_out(raw_pairs),
+            "raw_series": out_series,
             "current_raw": round(raw_pairs[-1][1], 2) if raw_pairs else None,
             "achievement": trend["current"],
             "achievement_prev_day_change": trend["prev_day_change"],
             "achievement_week_over_week": trend["week_over_week"],
             "direction": trend["direction"],
-            "regression": None if weekly else tr.linear_regression_endpoints(raw_pairs),
+            "regression": tr.linear_regression_endpoints(reg_input),
         }
 
     sleep_raw = [r for r in bundle["sleep"] if r[1] is not None]

@@ -213,5 +213,5 @@ def test_trends_endpoint_weekly(app_client):
     body = resp.json()
     assert body["granularity"] == "weekly"
     sleep = body["metrics"]["sleep"]
-    assert sleep["regression"] is None
+    assert sleep["regression"] is not None  # 週平均系列にも回帰線
     assert len(sleep["raw_series"]) <= 3
