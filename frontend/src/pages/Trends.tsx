@@ -1,96 +1,110 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar,
-  BarChart,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  Bar, BarChart, Line, LineChart, ReferenceArea, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../lib/api";
 import type { TrendDirection, TrendMetric, TrendMetricKey } from "../lib/api";
 
-type Props = {
-  onBack?: () => void;
+type Props = { onBack?: () => void };
+
+const ORDER: TrendMetricKey[] = ["sleep", "hrv", "energy", "load", "weight", "body_fat"];
+
+const DIR_LABEL: Record<TrendDirection, string> = {
+  improving: "改善傾向", stable: "横ばい", declining: "低下傾向",
 };
-
-const ORDER: TrendMetricKey[] = [
-  "total",
-  "sleep",
-  "hrv",
-  "body_battery",
-  "load",
-  "weight",
-  "body_fat",
-];
-
-const DIRECTION_LABEL: Record<TrendDirection, string> = {
-  improving: "改善傾向",
-  stable: "横ばい",
-  declining: "低下傾向",
+const DIR_COLOR: Record<TrendDirection, string> = {
+  improving: "text-emerald-400", stable: "text-slate-400", declining: "text-rose-400",
 };
+const LINE = "#34d399";
+const BAND = "#34d39922";
 
-const DIRECTION_COLOR: Record<TrendDirection, string> = {
-  improving: "text-emerald-400",
-  stable: "text-slate-400",
-  declining: "text-rose-400",
-};
-
-const LINE_COLOR = "#34d399";
-
-function TrendCard({
-  metric,
-  granularity,
-}: {
-  metric: TrendMetric;
-  granularity: "daily" | "weekly";
-}) {
-  const data = metric.series;
+function TrendCard({ metric, granularity }: { metric: TrendMetric; granularity: "daily" | "weekly" }) {
+  const data = metric.raw_series;
   const dir = metric.direction;
-  const wow = metric.week_over_week;
+  const wow = metric.achievement_week_over_week;
+  const ideal = metric.ideal;
+
+  const reg =
+    metric.regression && metric.regression.start.value != null && metric.regression.end.value != null
+      ? [
+          { date: metric.regression.start.date, value: metric.regression.start.value },
+          { date: metric.regression.end.date, value: metric.regression.end.value },
+        ]
+      : null;
+  const merged = data.map((p) => {
+    if (!reg) return { ...p } as { date: string; value: number | null; reg?: number };
+    if (p.date === reg[0].date) return { ...p, reg: reg[0].value };
+    if (p.date === reg[1].date) return { ...p, reg: reg[1].value };
+    return { ...p };
+  });
+
+  // 理想帯/ラインが範囲外でも見えるよう、Y軸ドメインを理想値込みに広げる。
+  const lowFn = (dMin: number) =>
+    ideal.type === "band"
+      ? Math.min(dMin, ideal.lo)
+      : ideal.good_line != null
+      ? Math.min(dMin, ideal.good_line)
+      : dMin;
+  const highFn = (dMax: number) =>
+    ideal.type === "band"
+      ? Math.max(dMax, ideal.hi)
+      : ideal.good_line != null
+      ? Math.max(dMax, ideal.good_line)
+      : dMax;
+
+  const idealOverlay =
+    ideal.type === "band" ? (
+      <ReferenceArea y1={ideal.lo} y2={ideal.hi} fill={BAND} stroke="none" />
+    ) : ideal.good_line != null ? (
+      <ReferenceLine y={ideal.good_line} stroke="#64748b" strokeDasharray="3 3" />
+    ) : null;
+
+  const tooltipStyle = {
+    backgroundColor: "#1e293b",
+    border: "1px solid #334155",
+    fontSize: 12,
+  };
+
   return (
     <div className="rounded-2xl bg-slate-900/70 p-4">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-sm text-slate-200">{metric.label}</span>
         <span className="text-2xl font-light tabular-nums text-slate-100">
-          {metric.current != null ? Math.round(metric.current) : "--"}
+          {metric.current_raw != null ? `${metric.current_raw}${metric.unit}` : "--"}
         </span>
       </div>
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className={dir ? DIRECTION_COLOR[dir] : "text-slate-600"}>
-          {dir ? DIRECTION_LABEL[dir] : "データ不足"}
+        <span className={dir ? DIR_COLOR[dir] : "text-slate-600"}>
+          {dir ? DIR_LABEL[dir] : "データ不足"}
+          {metric.achievement != null ? ` · 達成度 ${Math.round(metric.achievement)}` : ""}
         </span>
         <span className="text-slate-500">
-          {metric.prev_day_change != null
-            ? `前日比 ${metric.prev_day_change > 0 ? "+" : ""}${metric.prev_day_change.toFixed(1)}`
-            : ""}
-          {wow ? ` / 前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(1)}` : ""}
+          {wow ? `前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(0)}` : ""}
         </span>
       </div>
-      <div className="h-28">
+      <div className="h-32">
         <ResponsiveContainer width="100%" height="100%">
           {granularity === "weekly" ? (
-            <BarChart data={data}>
+            <BarChart data={merged}>
               <XAxis dataKey="date" hide />
-              <YAxis hide domain={["dataMin", "dataMax"]} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", fontSize: 12 }}
-                formatter={(v: number) => v.toFixed(1)}
-              />
-              <Bar dataKey="value" fill={LINE_COLOR} radius={[3, 3, 0, 0]} />
+              <YAxis hide domain={[lowFn, highFn]} />
+              <Tooltip contentStyle={tooltipStyle} />
+              {idealOverlay}
+              <Bar dataKey="value" fill={LINE} radius={[3, 3, 0, 0]} />
             </BarChart>
           ) : (
-            <LineChart data={data}>
+            <LineChart data={merged}>
               <XAxis dataKey="date" hide />
-              <YAxis hide domain={["dataMin", "dataMax"]} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", fontSize: 12 }}
-                formatter={(v: number) => v.toFixed(1)}
-              />
-              <Line type="monotone" dataKey="value" stroke={LINE_COLOR} strokeWidth={2} dot={false} />
+              <YAxis hide domain={[lowFn, highFn]} />
+              <Tooltip contentStyle={tooltipStyle} />
+              {idealOverlay}
+              <Line type="monotone" dataKey="value" stroke={LINE} strokeWidth={2} dot={false} />
+              {reg ? (
+                <Line type="linear" dataKey="reg" stroke="#f59e0b" strokeWidth={1.5}
+                      strokeDasharray="5 4" dot={false} connectNulls />
+              ) : null}
             </LineChart>
           )}
         </ResponsiveContainer>
@@ -110,34 +124,17 @@ export function TrendsPage({ onBack }: Props) {
     <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-6 px-4 pb-8 sm:px-8">
       <header className="safe-area-top flex items-center justify-between pb-2 pt-3">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="rounded-lg bg-slate-800/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
-          >
-            ← 戻る
-          </button>
-          <span className="text-sm text-slate-200">トレンド</span>
+          <button onClick={onBack}
+            className="rounded-lg bg-slate-800/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700">← 戻る</button>
+          <span className="text-sm text-slate-200">トレンド(理想への接近度)</span>
         </div>
         <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-xs">
-          <button
-            onClick={() => setGranularity("daily")}
-            className={`rounded-md px-3 py-1 ${
-              granularity === "daily" ? "bg-slate-600 text-slate-100" : "text-slate-400"
-            }`}
-          >
-            日次
-          </button>
-          <button
-            onClick={() => setGranularity("weekly")}
-            className={`rounded-md px-3 py-1 ${
-              granularity === "weekly" ? "bg-slate-600 text-slate-100" : "text-slate-400"
-            }`}
-          >
-            週次
-          </button>
+          <button onClick={() => setGranularity("daily")}
+            className={`rounded-md px-3 py-1 ${granularity === "daily" ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>日次</button>
+          <button onClick={() => setGranularity("weekly")}
+            className={`rounded-md px-3 py-1 ${granularity === "weekly" ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>週次</button>
         </div>
       </header>
-
       {query.isLoading ? (
         <div className="text-slate-400">読み込み中...</div>
       ) : query.isError || !query.data ? (

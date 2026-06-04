@@ -273,12 +273,6 @@ export function TodayPage({ onOpenDebug }: Props) {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Sparkline
-          label="総合スコア 14日"
-          data={scoreSeries.data?.data ?? []}
-          color="#34d399"
-          trend={trends.data?.metrics.total}
-        />
-        <Sparkline
           label="睡眠時間 14日"
           data={sleepSeries.data?.data ?? []}
           color="#60a5fa"
@@ -298,6 +292,11 @@ export function TodayPage({ onOpenDebug }: Props) {
           color="#f472b6"
           formatter={(v) => `${v.toFixed(1)} kg`}
           trend={trends.data?.metrics.weight}
+        />
+        <Sparkline
+          label="総合スコア 14日"
+          data={scoreSeries.data?.data ?? []}
+          color="#34d399"
         />
       </section>
 

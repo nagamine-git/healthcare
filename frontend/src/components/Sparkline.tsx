@@ -19,7 +19,7 @@ export function Sparkline({ label, data, formatter, color = "#34d399", trend }: 
           {label}
         </span>
         {trend ? (
-          <TrendBadge direction={trend.direction} prevDayChange={trend.prev_day_change} />
+          <TrendBadge direction={trend.direction} achievementChange={trend.achievement_prev_day_change} />
         ) : (
           <span className="text-xs text-slate-500">
             {filtered.length > 0 ? `${filtered.length} 日` : ""}

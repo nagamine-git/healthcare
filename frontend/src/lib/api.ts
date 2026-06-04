@@ -214,24 +214,24 @@ export type TimeseriesResponse = {
 
 export type TrendDirection = "improving" | "stable" | "declining";
 
+export type IdealBand =
+  | { type: "band"; lo: number; hi: number }
+  | { type: "upper"; good_line: number | null };
+
 export type TrendMetric = {
   label: string;
-  current: number | null;
-  higher_is_better: boolean;
-  prev_day_change: number | null;
-  week_over_week: { delta: number; pct: number | null } | null;
+  unit: string;
+  ideal: IdealBand;
+  raw_series: TimeseriesPoint[];
+  current_raw: number | null;
+  achievement: number | null;
+  achievement_prev_day_change: number | null;
+  achievement_week_over_week: { delta: number; pct: number | null } | null;
   direction: TrendDirection | null;
-  series: TimeseriesPoint[];
+  regression: { start: TimeseriesPoint; end: TimeseriesPoint } | null;
 };
 
-export type TrendMetricKey =
-  | "total"
-  | "sleep"
-  | "hrv"
-  | "body_battery"
-  | "load"
-  | "weight"
-  | "body_fat";
+export type TrendMetricKey = "sleep" | "hrv" | "energy" | "load" | "weight" | "body_fat";
 
 export type TrendsResponse = {
   granularity: "daily" | "weekly";
