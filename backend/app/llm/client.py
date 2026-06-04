@@ -344,40 +344,45 @@ def _gather_baselines(target: date_type, window_days: int = 28) -> dict[str, Any
 
 
 def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
-    """直近のスコアトレンド (方向 + 前日比 + 前週比) を LLM 用にコンパクトに返す。
+    """直近の理想達成度トレンド (方向 + 達成度 + 前日比 + 前週比) を LLM 用にコンパクトに返す。
 
-    series は重いので落とし、direction / prev_day_change / week_over_week のみ渡す。
-    dashboard の /api/trends と同じ計算 (app.scoring.trends) を共有する。
+    series は重いので落とす。dashboard の /api/trends と同じ計算 (achievement + trends) を共有する。
     """
-    from app.scoring import trends as trend_calc
+    from app.config import get_settings
+    from app.scoring import achievement as ach
+    from app.scoring import trend_sources
+    from app.scoring import trends as tr
 
-    start = target - timedelta(days=days)
-    with session_scope() as session:
-        rows = session.execute(
-            select(
-                DailyScore.date,
-                DailyScore.total,
-                DailyScore.sleep_sub,
-                DailyScore.hrv_sub,
-                DailyScore.bb_sub,
-                DailyScore.load_sub,
-                DailyScore.weight_sub,
-                DailyScore.body_fat_sub,
-            )
-            .where(DailyScore.date >= start, DailyScore.date <= target)
-            .order_by(DailyScore.date)
-        ).all()
+    s = get_settings()
+    bundle = trend_sources.collect_raw_series(target, days=days)
+    hrv_bl = bundle["hrv_baseline"]
 
-    by_col = trend_calc.series_by_column(rows)
-    metrics = trend_calc.build_metrics(by_col, granularity="daily")
-    return {
-        key: {
-            "direction": m["direction"],
-            "prev_day_change": m["prev_day_change"],
-            "week_over_week": m["week_over_week"],
-        }
-        for key, m in metrics.items()
+    def _ach(raw, fn):
+        return [(row[0], fn(row)) for row in raw if fn(row) is not None]
+
+    series_map = {
+        "sleep": _ach(
+            [r for r in bundle["sleep"] if r[1] is not None],
+            lambda r: ach.sleep_achievement(total_min=r[1], garmin_sleep_score=r[2],
+                                            deep_min=r[3], rem_min=r[4], light_min=r[5], awake_min=r[6]),
+        ),
+        "hrv": _ach(bundle["hrv"], lambda r: ach.hrv_achievement(r[1], hrv_bl)),
+        "energy": _ach(bundle["energy"], lambda r: ach.energy_achievement(r[1])),
+        "load": _ach(bundle["acwr"], lambda r: ach.load_achievement(r[1])),
+        "weight": _ach(bundle["weight"], lambda r: ach.weight_achievement(r[1], s.target_weight_kg)),
+        "body_fat": _ach(bundle["body_fat"],
+                         lambda r: ach.body_fat_achievement(r[1], s.target_body_fat_pct, s.body_fat_tolerance_pct)),
     }
+    out: dict[str, Any] = {}
+    for key, series in series_map.items():
+        t = tr.compute_trend(series, higher_is_better=True)
+        out[key] = {
+            "direction": t["direction"],
+            "achievement": t["current"],
+            "prev_day_change": t["prev_day_change"],
+            "week_over_week": t["week_over_week"],
+        }
+    return out
 
 
 def _hash_messages(system: list[dict[str, Any]], messages: list[dict[str, Any]]) -> str:

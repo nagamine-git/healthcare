@@ -352,28 +352,91 @@ async def trends(
     granularity: str = Query(default="daily"),
     days: int = Query(default=28, ge=7, le=365),
 ) -> dict[str, Any]:
-    from app.scoring import trends as trend_calc
+    from app.config import get_settings
+    from app.scoring import achievement as ach
+    from app.scoring import trend_sources
+    from app.scoring import trends as tr
 
-    end = _today()
-    start = end - timedelta(days=days)
-    with session_scope() as session:
-        rows = session.execute(
-            select(
-                DailyScore.date,
-                DailyScore.total,
-                DailyScore.sleep_sub,
-                DailyScore.hrv_sub,
-                DailyScore.bb_sub,
-                DailyScore.load_sub,
-                DailyScore.weight_sub,
-                DailyScore.body_fat_sub,
-            )
-            .where(DailyScore.date >= start)
-            .order_by(DailyScore.date)
-        ).all()
+    s = get_settings()
+    bundle = trend_sources.collect_raw_series(_today(), days=days)
+    weekly = granularity == "weekly"
 
-    by_col = trend_calc.series_by_column(rows)
-    metrics = trend_calc.build_metrics(by_col, granularity=granularity)
+    def _ach_series(raw, fn):
+        out = []
+        for row in raw:
+            a = fn(row)
+            if a is not None:
+                out.append((row[0], a))
+        return out
+
+    def _raw_pairs(raw):
+        return [(row[0], row[1]) for row in raw]
+
+    def _series_out(pairs):
+        return tr.weekly_average(pairs) if weekly else tr.daily_series(pairs)
+
+    def _metric(label, unit, ideal, raw_pairs, ach_series):
+        trend = tr.compute_trend(ach_series, higher_is_better=True)
+        return {
+            "label": label,
+            "unit": unit,
+            "ideal": ideal,
+            "raw_series": _series_out(raw_pairs),
+            "current_raw": round(raw_pairs[-1][1], 2) if raw_pairs else None,
+            "achievement": trend["current"],
+            "achievement_prev_day_change": trend["prev_day_change"],
+            "achievement_week_over_week": trend["week_over_week"],
+            "direction": trend["direction"],
+            "regression": None if weekly else tr.linear_regression_endpoints(raw_pairs),
+        }
+
+    sleep_raw = [r for r in bundle["sleep"] if r[1] is not None]
+    sleep_pairs = [(r[0], r[1]) for r in sleep_raw]
+    sleep_ach = _ach_series(
+        sleep_raw,
+        lambda r: ach.sleep_achievement(
+            total_min=r[1], garmin_sleep_score=r[2],
+            deep_min=r[3], rem_min=r[4], light_min=r[5], awake_min=r[6],
+        ),
+    )
+    hrv_bl = bundle["hrv_baseline"]
+    metrics = {
+        "sleep": _metric("睡眠", "分", {"type": "band", "lo": ach.SLEEP_BAND_LO, "hi": ach.SLEEP_BAND_HI},
+                         sleep_pairs, sleep_ach),
+        "hrv": _metric(
+            "自律神経 (HRV)", "ms",
+            {"type": "upper", "good_line": round(hrv_bl.mean, 1) if hrv_bl else None},
+            _raw_pairs(bundle["hrv"]),
+            _ach_series(bundle["hrv"], lambda r: ach.hrv_achievement(r[1], hrv_bl)),
+        ),
+        "energy": _metric(
+            "エネルギー", "",
+            {"type": "upper", "good_line": ach.ENERGY_GOOD},
+            _raw_pairs(bundle["energy"]),
+            _ach_series(bundle["energy"], lambda r: ach.energy_achievement(r[1])),
+        ),
+        "load": _metric(
+            "運動負荷 (ACWR)", "",
+            {"type": "band", "lo": ach.LOAD_BAND_LO, "hi": ach.LOAD_BAND_HI},
+            _raw_pairs(bundle["acwr"]),
+            _ach_series(bundle["acwr"], lambda r: ach.load_achievement(r[1])),
+        ),
+        "weight": _metric(
+            "体重", "kg",
+            {"type": "band", "lo": round(s.target_weight_kg - 1.0, 1), "hi": round(s.target_weight_kg + 1.0, 1)},
+            _raw_pairs(bundle["weight"]),
+            _ach_series(bundle["weight"], lambda r: ach.weight_achievement(r[1], s.target_weight_kg)),
+        ),
+        "body_fat": _metric(
+            "体脂肪率", "%",
+            {"type": "band",
+             "lo": round(s.target_body_fat_pct - s.body_fat_tolerance_pct, 1),
+             "hi": round(s.target_body_fat_pct + s.body_fat_tolerance_pct, 1)},
+            _raw_pairs(bundle["body_fat"]),
+            _ach_series(bundle["body_fat"],
+                        lambda r: ach.body_fat_achievement(r[1], s.target_body_fat_pct, s.body_fat_tolerance_pct)),
+        ),
+    }
     return {
         "granularity": granularity,
         "generated_at": _utc_iso(datetime.now(UTC).replace(tzinfo=None)),

@@ -166,28 +166,21 @@ def test_build_messages_includes_cache_control():
 
 
 def test_gather_recent_trends_builds_directions(db_engine):
-    from datetime import UTC, date, datetime, timedelta
+    from datetime import date, timedelta
 
     from app.db import session_scope
     from app.llm.client import _gather_recent_trends
-    from app.models import DailyScore
+    from app.models import SleepSession
 
     today = date.today()
     with session_scope() as session:
         for i in range(8):
             d = today - timedelta(days=7 - i)
-            session.add(
-                DailyScore(
-                    date=d,
-                    total=60 + i * 2,
-                    sleep_sub=70,
-                    version="v1",
-                    computed_at=datetime.now(UTC).replace(tzinfo=None),
-                )
-            )
+            session.add(SleepSession(date=d, source="garmin", total_min=400 + i * 15, sleep_score=70 + i,
+                                     deep_min=60, rem_min=90, light_min=240, awake_min=20))
 
     trends = _gather_recent_trends(today)
-    assert trends["total"]["direction"] == "improving"
-    assert "week_over_week" in trends["total"]
+    assert "sleep" in trends
+    assert trends["sleep"]["direction"] in ("improving", "stable", "declining", None)
     # コンパクト化のため series は含めない
-    assert "series" not in trends["total"]
+    assert "series" not in trends["sleep"]

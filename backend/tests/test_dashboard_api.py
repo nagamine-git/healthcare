@@ -179,39 +179,24 @@ def test_trends_endpoint_daily(app_client):
 
     today = date.today()
     with session_scope() as session:
-        # 8 日分、total を単調増加で seed
         for i in range(8):
             d = today - timedelta(days=7 - i)
-            session.add(
-                DailyScore(
-                    date=d,
-                    total=60 + i * 2,
-                    sleep_sub=70,
-                    hrv_sub=65,
-                    bb_sub=80,
-                    load_sub=85,
-                    weight_sub=75,
-                    body_fat_sub=90,
-                    version="v1",
-                    computed_at=datetime.now(UTC).replace(tzinfo=None),
-                )
-            )
+            session.add(SleepSession(date=d, source="garmin", total_min=400 + i * 15, sleep_score=70 + i,
+                                     deep_min=60, rem_min=90, light_min=240, awake_min=20))
+            session.add(WeightSample(ts=datetime.combine(d, datetime.min.time()),
+                                     weight_kg=72.0 - i * 0.1, body_fat_pct=18.0, source="hae"))
 
     resp = app_client.get("/api/trends", params={"granularity": "daily", "days": 28})
     assert resp.status_code == 200
     body = resp.json()
     assert body["granularity"] == "daily"
-    total = body["metrics"]["total"]
-    assert total["label"] == "総合スコア"
-    assert total["current"] == 74
-    assert total["prev_day_change"] == 2
-    assert total["direction"] == "improving"
-    assert total["higher_is_better"] is True
-    assert len(total["series"]) == 8
-    # 全指標キーが揃う
-    assert set(body["metrics"].keys()) == {
-        "total", "sleep", "hrv", "body_battery", "load", "weight", "body_fat",
-    }
+    assert set(body["metrics"].keys()) == {"sleep", "hrv", "energy", "load", "weight", "body_fat"}
+    sleep = body["metrics"]["sleep"]
+    assert sleep["ideal"]["type"] == "band"
+    assert len(sleep["raw_series"]) == 8
+    assert sleep["achievement"] is not None
+    assert sleep["regression"] is not None
+    assert sleep["direction"] in ("improving", "stable", "declining")
 
 
 def test_trends_endpoint_weekly(app_client):
@@ -221,19 +206,12 @@ def test_trends_endpoint_weekly(app_client):
     with session_scope() as session:
         for i in range(14):
             d = today - timedelta(days=13 - i)
-            session.add(
-                DailyScore(
-                    date=d,
-                    total=70.0,
-                    version="v1",
-                    computed_at=datetime.now(UTC).replace(tzinfo=None),
-                )
-            )
+            session.add(SleepSession(date=d, source="garmin", total_min=480, sleep_score=80))
 
     resp = app_client.get("/api/trends", params={"granularity": "weekly", "days": 28})
     assert resp.status_code == 200
     body = resp.json()
     assert body["granularity"] == "weekly"
-    # 週平均なので series 点数は日数より少ない (高々 3 週)
-    assert len(body["metrics"]["total"]["series"]) <= 3
-    assert all(p["value"] == 70.0 for p in body["metrics"]["total"]["series"])
+    sleep = body["metrics"]["sleep"]
+    assert sleep["regression"] is None
+    assert len(sleep["raw_series"]) <= 3

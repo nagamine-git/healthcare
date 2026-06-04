@@ -59,21 +59,14 @@ def test_weekly_average_groups_by_monday():
     assert out[1] == {"date": "2026-05-11", "value": 100.0}
 
 
-def test_series_by_column_and_build_metrics():
-    # rows: (date, total, sleep_sub, hrv_sub, bb_sub, load_sub, weight_sub, body_fat_sub)
-    rows = []
-    for i in range(8):
-        d = date(2026, 5, 1) + timedelta(days=i)
-        rows.append((d, 60 + i * 2, 50 + i, None, 70, 80, 75, 90))
-    by_col = trends.series_by_column(rows)
-    assert len(by_col["total"]) == 8
-    assert len(by_col["hrv_sub"]) == 0  # 4 番目 (hrv_sub) は全て None
+def test_linear_regression_endpoints():
+    s = [(date(2026, 5, 1) + timedelta(days=i), float(10 + 2 * i)) for i in range(5)]
+    reg = trends.linear_regression_endpoints(s)
+    assert reg["start"]["value"] == 10.0
+    assert reg["end"]["value"] == 18.0
+    assert reg["start"]["date"] == "2026-05-01"
+    assert reg["end"]["date"] == "2026-05-05"
 
-    metrics = trends.build_metrics(by_col, granularity="daily")
-    assert metrics["total"]["label"] == "総合スコア"
-    assert metrics["total"]["direction"] == "improving"
-    assert metrics["total"]["higher_is_better"] is True
-    assert len(metrics["total"]["series"]) == 8
-    # 全 None の指標 (hrv) は series 空 / direction None
-    assert metrics["hrv"]["series"] == []
-    assert metrics["hrv"]["direction"] is None
+
+def test_linear_regression_too_few_points():
+    assert trends.linear_regression_endpoints([(date(2026, 5, 1), 5.0)]) is None

@@ -15,28 +15,6 @@ Direction = Literal["improving", "stable", "declining"]
 # 傾きを系列レンジで正規化した値がこの閾値未満なら "stable" とみなす。
 STABLE_THRESHOLD = 0.02
 
-# daily_score テーブルの取得列順 (エンドポイント / LLM が同順で SELECT する)。
-SCORE_COLUMNS: list[str] = [
-    "total",
-    "sleep_sub",
-    "hrv_sub",
-    "bb_sub",
-    "load_sub",
-    "weight_sub",
-    "body_fat_sub",
-]
-
-# API レスポンスキー / 表示ラベル / daily_score の列名。
-TREND_METRICS: list[tuple[str, str, str]] = [
-    ("total", "総合スコア", "total"),
-    ("sleep", "睡眠", "sleep_sub"),
-    ("hrv", "自律神経", "hrv_sub"),
-    ("body_battery", "エネルギー", "bb_sub"),
-    ("load", "運動負荷", "load_sub"),
-    ("weight", "体重", "weight_sub"),
-    ("body_fat", "体脂肪率", "body_fat_sub"),
-]
-
 
 def _mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
@@ -136,32 +114,21 @@ def weekly_average(series: list[tuple[date, float | None]]) -> list[dict[str, An
     return out
 
 
-def series_by_column(
-    rows: list[tuple[Any, ...]],
-) -> dict[str, list[tuple[date, float]]]:
-    """``(date, *SCORE_COLUMNS)`` の行列を列ごとの (date, value) 系列に展開する。"""
-    by_col: dict[str, list[tuple[date, float]]] = {c: [] for c in SCORE_COLUMNS}
-    for row in rows:
-        d = row[0]
-        for offset, col in enumerate(SCORE_COLUMNS, start=1):
-            v = row[offset]
-            if v is not None:
-                by_col[col].append((d, v))
-    return by_col
-
-
-def build_metrics(
-    by_col: dict[str, list[tuple[date, float]]],
-    *,
-    granularity: str = "daily",
-) -> dict[str, Any]:
-    """列系列から API レスポンス用の metrics dict を組む。全指標 higher_is_better=True。"""
-    metrics: dict[str, Any] = {}
-    for key, label, col in TREND_METRICS:
-        series = by_col.get(col, [])
-        trend = compute_trend(series, higher_is_better=True)
-        trend["series"] = (
-            weekly_average(series) if granularity == "weekly" else daily_series(series)
-        )
-        metrics[key] = {"label": label, "higher_is_better": True, **trend}
-    return metrics
+def linear_regression_endpoints(
+    series: list[tuple[date, float | None]],
+) -> dict[str, Any] | None:
+    """生値系列の線形回帰の両端2点を返す (グラフの点線用)。点が2未満なら None。"""
+    pts = _clean(series)
+    if len(pts) < 2:
+        return None
+    values = [v for _, v in pts]
+    slope = _linear_slope(values)
+    if slope is None:
+        return None
+    n = len(values)
+    mean_y = sum(values) / n
+    intercept = mean_y - slope * (n - 1) / 2  # x=0..n-1
+    return {
+        "start": {"date": pts[0][0].isoformat(), "value": round(intercept, 2)},
+        "end": {"date": pts[-1][0].isoformat(), "value": round(intercept + slope * (n - 1), 2)},
+    }
