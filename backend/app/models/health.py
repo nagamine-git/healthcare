@@ -217,5 +217,20 @@ class DomainWeight(Base):
     weight: Mapped[float] = mapped_column(Float, default=1.0)
 
 
+class SpeechSession(Base):
+    """speech-coach から取り込む日次の発話練習サマリ (JST 日付ごと)。"""
+
+    __tablename__ = "speech_session"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    session_count: Mapped[int] = mapped_column(Integer, default=0)
+    duration_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_overall: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_pace: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_pitch: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_clarity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_filler: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

@@ -20,9 +20,10 @@ from app.models import MetricSample
 
 # プリセット (ドメイン -> 重み)。将来ドメイン追加時にここへ追記する。
 DOMAIN_WEIGHT_PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"label": "バランス", "weights": {"health": 1.0, "meditation": 1.0}},
-    "recovery": {"label": "回復優先", "weights": {"health": 2.0, "meditation": 1.0}},
-    "mindful": {"label": "内省優先", "weights": {"health": 1.0, "meditation": 2.0}},
+    "balanced": {"label": "バランス", "weights": {"health": 1.0, "meditation": 1.0, "speech": 1.0}},
+    "recovery": {"label": "回復優先", "weights": {"health": 2.0, "meditation": 1.0, "speech": 0.5}},
+    "mindful": {"label": "内省優先", "weights": {"health": 1.0, "meditation": 2.0, "speech": 0.5}},
+    "speech_focus": {"label": "発話強化", "weights": {"health": 1.0, "meditation": 0.5, "speech": 2.0}},
 }
 
 
@@ -101,10 +102,23 @@ def meditation_achievement(target: date_type) -> float | None:
     )
 
 
+def speech_achievement(target: date_type) -> float | None:
+    """当日の発話練習サマリ score_overall (0-100 をそのまま達成度として使う)。"""
+    from app.models import SpeechSession
+
+    with session_scope() as session:
+        row = session.get(SpeechSession, target)
+        score = row.score_overall if row else None
+    if score is None:
+        return None
+    return round(float(score), 2)
+
+
 # ドメイン定義: (key, label, 達成度関数)
 LIFE_DOMAINS: list[tuple[str, str, Callable[[date_type], float | None]]] = [
     ("health", "健康", health_achievement),
     ("meditation", "瞑想", meditation_achievement),
+    ("speech", "発話力", speech_achievement),
 ]
 
 

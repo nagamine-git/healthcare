@@ -12,6 +12,7 @@ from app.models.health import (
     MigraineEpisode,
     SleepSession,
     SourceSync,
+    SpeechSession,
     WeightSample,
     Workout,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "MigraineEpisode",
     "SleepSession",
     "SourceSync",
+    "SpeechSession",
     "WeightSample",
     "Workout",
 ]

@@ -44,6 +44,8 @@ def _detail(key: str, target: date) -> str | None:
         m = dom.meditation_minutes(target)
         tgt = get_settings().meditation_target_min
         return f"{m:.0f}/{tgt}分" if m is not None else None
+    if key == "speech":
+        return "発話練習スコア (speech-coach)"
     if key == "health":
         return "6指標の達成度平均"
     return None
