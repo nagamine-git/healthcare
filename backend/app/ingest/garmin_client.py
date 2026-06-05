@@ -257,6 +257,9 @@ def _normalise_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "resting_hr": raw.get("restingHeartRate"),
         "vo2max": raw.get("vo2Max"),
         "training_status": raw.get("trainingStatus"),
+        # Instinct 3 等で取れる "屋外で動いた強度時間"。朝光暴露の補助 proxy
+        "moderate_intensity_min": raw.get("moderateIntensityMinutes"),
+        "vigorous_intensity_min": raw.get("vigorousIntensityMinutes"),
     }
 
 

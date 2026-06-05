@@ -246,6 +246,41 @@ def _upsert_summary(session: Session, target: date_type, summary: dict[str, Any]
     else:
         session.add(DailySummary(date=target, **fields))
 
+    # 朝光暴露 proxy の補助として intensity minutes を metric_sample に保存
+    for key, val in (
+        ("intensity_minutes_moderate", summary.get("moderate_intensity_min")),
+        ("intensity_minutes_vigorous", summary.get("vigorous_intensity_min")),
+    ):
+        if val is None:
+            continue
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            continue
+        # date 単位なので JST 朝に統一 (7:00) して 1 サンプル
+        ts = datetime.combine(target, datetime.min.time()).replace(hour=7)
+        stmt = sqlite_insert(MetricSample).values(
+            [
+                {
+                    "source": "garmin",
+                    "metric_key": key,
+                    "ts": ts,
+                    "value": v,
+                    "unit": "min",
+                    "raw_json": None,
+                }
+            ]
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[
+                MetricSample.source,
+                MetricSample.metric_key,
+                MetricSample.ts,
+            ],
+            set_={"value": stmt.excluded.value},
+        )
+        session.execute(stmt)
+
 
 def _upsert_hydration(session: Session, hydration: dict[str, Any]) -> int:
     """Garmin Hydration を MetricSample に書く (key=garmin_hydration_ml)。"""

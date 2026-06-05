@@ -16,6 +16,7 @@ const CATEGORY_LABEL: Record<AdviceAction["category"], string> = {
   mobility: "モビリティ",
   nutrition: "食事/水分",
   rest: "休息",
+  focus: "集中力",
   other: "その他",
 };
 
@@ -48,6 +49,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
   const [scheduling, setScheduling] = useState(false);
   const [scheduleResult, setScheduleResult] = useState<GcalScheduleResult | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const handleSchedule = async () => {
     if (!onSchedule) return;
@@ -95,38 +97,30 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
         </p>
       ) : (
         <>
-          {/* Headline (1行パンチライン) */}
+          {/* Headline (1行パンチライン、大きく) */}
           {payload?.headline && (
-            <p className="mb-3 text-lg font-semibold leading-snug text-slate-50 sm:text-xl">
+            <p className="mb-2 text-xl font-semibold leading-snug text-slate-50 sm:text-2xl">
               {payload.headline}
             </p>
           )}
-          {/* Focus (1-2 文の説明) */}
-          {payload?.focus ? (
-            <p className="text-sm font-medium leading-relaxed text-slate-200">
-              {payload.focus}
-            </p>
-          ) : (
-            <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-200">
-              {advice.comment}
-            </p>
-          )}
 
-          {/* Actions list — priority 順、空なら "メンテナンス日" 表示 */}
+          {/* Actions list — priority 順、最初 1 件は常に展開、残りは折りたたみ */}
           {payload && payload.actions.length === 0 && (
-            <p className="mt-3 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
-              本日推奨アクションなし。コンディションを維持してください。
+            <p className="mt-2 text-xs text-slate-400">
+              本日推奨アクションなし。コンディション維持で OK。
             </p>
           )}
           {payload && payload.actions.length > 0 && (
-            <ul className="mt-4 space-y-2">
-              {[...payload.actions]
-                .sort(
+            <ul className="mt-3 space-y-2">
+              {(() => {
+                const sorted = [...payload.actions].sort(
                   (a, b) =>
                     (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) ||
                     a.time_jst.localeCompare(b.time_jst),
-                )
-                .map((a, i) => (
+                );
+                const visible = expanded ? sorted : sorted.slice(0, 1);
+                return visible;
+              })().map((a, i) => (
                   <li
                     key={`${a.time_jst}-${i}`}
                     className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2"
@@ -162,16 +156,35 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
             </ul>
           )}
 
-          {/* Rationale */}
-          {payload?.rationale && (
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          {/* 展開トグル */}
+          {payload && (payload.actions.length > 1 || payload.focus || payload.rationale) && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-3 text-xs text-slate-500 hover:text-slate-300"
+            >
+              {expanded
+                ? "▴ 折りたたむ"
+                : `▾ あと ${Math.max(0, payload.actions.length - 1)} 件 + 詳細を表示`}
+            </button>
+          )}
+
+          {/* Focus と Rationale は展開時のみ */}
+          {expanded && payload?.focus && (
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              {payload.focus}
+            </p>
+          )}
+          {expanded && payload?.rationale && (
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
               <span className="text-slate-400">根拠</span>: {payload.rationale}
             </p>
           )}
 
-          <p className="mt-3 text-[10px] text-slate-500">
-            {advice.model} · {formatTs(advice.generated_at)}
-          </p>
+          {expanded && (
+            <p className="mt-3 text-[10px] text-slate-500">
+              {advice.model} · {formatTs(advice.generated_at)}
+            </p>
+          )}
 
           {scheduleResult && (
             <div className="mt-3 rounded-lg bg-emerald-900/20 p-3 text-xs text-emerald-200">

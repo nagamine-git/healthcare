@@ -143,6 +143,62 @@ class LlmComment(Base):
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class MigraineEpisode(Base):
+    """偏頭痛エピソード。「痛くなった→治った」を 1 件として記録する。
+
+    ended_at が None のものは active (現在進行中)。
+    severity は 1-10 の主観強度 (省略可)。トリガー記録のため note を任意。
+    """
+
+    __tablename__ = "migraine_episode"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, index=True)  # UTC naive
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    severity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class AlcoholIntake(Base):
+    """アルコール摂取の手動記録。
+
+    grams は純アルコール量 (g)。これは飲料種類 × 量 × ABV × 0.8 で算出する。
+    Pietilä 2018: 純アルコール 10g (約 1 drink) で深い睡眠 -20%、HRV -10〜15%。
+
+    source 例: "beer" (中ジョッキ 350ml × 5% × 0.8 = 14g)、"wine"、"sake"、"shochu"、
+    "highball"、"manual" (g 直接入力)。
+    """
+
+    __tablename__ = "alcohol_intake"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    source: Mapped[str] = mapped_column(String(32), index=True)
+    amount_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+    abv_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    grams: Mapped[float] = mapped_column(Float)  # 純アルコール g
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class CaffeineIntake(Base):
+    """ユーザーが手動で記録したカフェイン摂取イベント。
+
+    source は摂取源の分類 (instant_coffee / canned_coffee / nespresso / ibuquick / manual)。
+    amount は元の量 (g, 本, 錠, mg) の数値、unit はその単位文字列。
+    mg は **実際のカフェイン量** (推奨計算で使う、source から自動算出 or 手動入力)。
+    """
+
+    __tablename__ = "caffeine_intake"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, index=True)  # UTC naive
+    source: Mapped[str] = mapped_column(String(32), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    unit: Mapped[str] = mapped_column(String(16))
+    mg: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
 class SourceSync(Base):
     __tablename__ = "source_sync"
 

@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { useCollapse } from "../lib/collapse";
 
 export type Sub = {
   label: string;
@@ -67,12 +68,21 @@ export function SubScoreRadar({ subs, total }: Props) {
   }));
 
   const canDrawRadar = data.length >= 3;
+  const [open, setOpen] = useCollapse("totalScore", false);
 
   return (
     <div className="rounded-2xl bg-slate-900/70 p-4 sm:p-6">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-baseline justify-between gap-3 text-left"
+      >
         <div className="flex items-baseline gap-3">
-          <h3 className="text-sm tracking-wider text-slate-300">総合スコア</h3>
+          <h3 className="text-sm tracking-wider text-slate-300">
+            総合スコア
+            <span className="ml-2 text-[10px] font-normal text-slate-500">
+              24h の振り返り
+            </span>
+          </h3>
           <span
             className="text-3xl font-light tabular-nums"
             style={{ color: totalColor(total) }}
@@ -81,14 +91,24 @@ export function SubScoreRadar({ subs, total }: Props) {
           </span>
           <span className="text-xs text-slate-400">{totalLabel(total)}</span>
         </div>
-        <span className="flex items-center gap-3 text-[10px] text-slate-500">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-0.5 w-3 bg-emerald-400" />現状
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-0 w-3 border-t border-dashed border-slate-400" />
-            目標
-          </span>
+        <span className="text-xs text-slate-500">{open ? "▴" : "▾"}</span>
+      </button>
+
+      {!open && (
+        <p className="mt-1 text-[10px] text-slate-600">
+          各軸の詳細とレーダーチャートを見るには展開
+        </p>
+      )}
+
+      {open && (
+      <>
+      <div className="mt-2 mb-2 flex items-center justify-end gap-3 text-[10px] text-slate-500">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-0.5 w-3 bg-emerald-400" />現状
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-0 w-3 border-t border-dashed border-slate-400" />
+          目標
         </span>
       </div>
 
@@ -168,6 +188,8 @@ export function SubScoreRadar({ subs, total }: Props) {
             </span>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );
