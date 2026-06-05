@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
-import { MetricTile } from "../components/MetricTile";
 import { AdviceCard } from "../components/AdviceCard";
 import { TrendsSection } from "../components/TrendsSection";
 import { NutritionPanel } from "../components/NutritionPanel";
@@ -247,8 +246,33 @@ export function TodayPage({ onOpenDebug }: Props) {
       <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
 
-      {/* ===== 📈 トレンド (理想への接近度) ===== */}
-      <TrendsSection />
+      {/* ===== 📈 トレンド (理想への接近度 + 今の各メトリクス) ===== */}
+      <TrendsSection
+        hints={{
+          sleep: sleep?.sleep_score != null ? `スコア ${Math.round(sleep.sleep_score)}` : undefined,
+          hrv: hrv?.status ?? undefined,
+          energy:
+            bb?.current != null && bb?.morning != null
+              ? `朝 ${Math.round(bb.morning)} → 現在 ${Math.round(bb.current)}`
+              : bb?.morning != null
+              ? `朝の値 ${Math.round(bb.morning)}`
+              : undefined,
+          weight: weight?.ts ? `${new Date(weight.ts).toLocaleDateString()} 計測` : undefined,
+          body_fat:
+            weight?.muscle_kg != null ? `除脂肪体重 ${weight.muscle_kg.toFixed(1)} kg` : undefined,
+        }}
+        extras={[
+          {
+            label: "歩数",
+            value: summary?.steps != null ? summary.steps.toLocaleString() : "--",
+            hint: summary?.active_kcal != null ? `${Math.round(summary.active_kcal)} kcal` : undefined,
+          },
+          {
+            label: "安静時心拍",
+            value: summary?.resting_hr != null ? `${Math.round(summary.resting_hr)} bpm` : "--",
+          },
+        ]}
+      />
 
       <NutritionPanel nutrition={data.nutrition} />
       <TonightPlanPanel plan={data.tonight_plan} />
@@ -258,51 +282,6 @@ export function TodayPage({ onOpenDebug }: Props) {
       <CaffeinePanel caffeine={data.caffeine} />
       <MigrainePanel />
       <AlcoholPanel />
-
-      {/* ===== 📉 振り返り (詳細データ) ===== */}
-      <SectionHeader label="振り返り" hint="今の各メトリクス" />
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <MetricTile
-          label="睡眠"
-          value={formatMinutes(sleep?.total_min ?? null)}
-          hint={sleep?.sleep_score != null ? `スコア ${Math.round(sleep.sleep_score)}` : undefined}
-        />
-        <MetricTile
-          label="HRV (心拍変動)"
-          value={hrv?.last_night_avg != null ? `${Math.round(hrv.last_night_avg)} ms` : "--"}
-          hint={hrv?.status ?? undefined}
-        />
-        <MetricTile
-          label="エネルギー残量"
-          value={bb?.current != null ? `${Math.round(bb.current)}` : bb?.morning != null ? `${Math.round(bb.morning)}` : "--"}
-          hint={
-            bb?.current != null && bb?.morning != null
-              ? `朝 ${Math.round(bb.morning)} → 現在 ${Math.round(bb.current)}`
-              : bb?.morning != null
-              ? `朝の値 ${Math.round(bb.morning)}`
-              : undefined
-          }
-        />
-        <MetricTile
-          label="安静時心拍"
-          value={summary?.resting_hr != null ? `${Math.round(summary.resting_hr)} bpm` : "--"}
-        />
-        <MetricTile
-          label="歩数"
-          value={summary?.steps != null ? summary.steps.toLocaleString() : "--"}
-          hint={summary?.active_kcal != null ? `${Math.round(summary.active_kcal)} kcal` : undefined}
-        />
-        <MetricTile
-          label="体重"
-          value={weight?.weight_kg != null ? `${weight.weight_kg.toFixed(1)} kg` : "--"}
-          hint={weight?.ts ? `${new Date(weight.ts).toLocaleDateString()} 計測` : undefined}
-        />
-        <MetricTile
-          label="体脂肪率"
-          value={weight?.body_fat_pct != null ? `${weight.body_fat_pct.toFixed(1)}%` : "--"}
-          hint={weight?.muscle_kg != null ? `除脂肪体重 ${weight.muscle_kg.toFixed(1)} kg` : undefined}
-        />
-      </section>
 
     </main>
   );

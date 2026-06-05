@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { api } from "../lib/api";
 import type { TrendDirection, TrendMetric, TrendMetricKey } from "../lib/api";
+import { MetricTile } from "./MetricTile";
 
 const ORDER: TrendMetricKey[] = ["sleep", "hrv", "energy", "load", "weight", "body_fat"];
 
@@ -19,7 +20,11 @@ const LINE = "#34d399";
 const BAND = "#34d39922";
 const REG = "#f59e0b";
 
-function TrendCard({ metric, granularity }: { metric: TrendMetric; granularity: "daily" | "weekly" }) {
+function TrendCard({ metric, granularity, hint }: {
+  metric: TrendMetric;
+  granularity: "daily" | "weekly";
+  hint?: string;
+}) {
   const data = metric.raw_series;
   const dir = metric.direction;
   const wow = metric.achievement_week_over_week;
@@ -78,6 +83,7 @@ function TrendCard({ metric, granularity }: { metric: TrendMetric; granularity: 
           {metric.current_raw != null ? `${metric.current_raw}${metric.unit}` : "--"}
         </span>
       </div>
+      {hint ? <div className="mb-1 text-xs text-slate-500">{hint}</div> : null}
       <div className="mb-2 flex items-center justify-between text-xs">
         <span className={dir ? DIR_COLOR[dir] : "text-slate-600"}>
           {dir ? DIR_LABEL[dir] : "データ不足"}
@@ -114,7 +120,12 @@ function TrendCard({ metric, granularity }: { metric: TrendMetric; granularity: 
   );
 }
 
-export function TrendsSection() {
+export type TrendExtra = { label: string; value: string; hint?: string };
+
+export function TrendsSection({ hints, extras }: {
+  hints?: Partial<Record<TrendMetricKey, string>>;
+  extras?: TrendExtra[];
+}) {
   const [granularity, setGranularity] = useState<"daily" | "weekly">("daily");
   const query = useQuery({
     queryKey: ["trends", granularity],
@@ -141,8 +152,16 @@ export function TrendsSection() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ORDER.map((key) => (
-            <TrendCard key={key} metric={query.data.metrics[key]} granularity={granularity} />
+            <TrendCard key={key} metric={query.data.metrics[key]} granularity={granularity}
+                       hint={hints?.[key]} />
           ))}
+          {extras && extras.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {extras.map((e) => (
+                <MetricTile key={e.label} label={e.label} value={e.value} hint={e.hint} />
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
     </section>
