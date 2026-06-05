@@ -67,6 +67,66 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - **モダリティはひとつに確定する**: action の title に「ジョグ or ラッキング」のように **複数候補を or で並べない**。最終的に 1 つに絞り、その種目で exercises を埋める。曖昧な「軽トレーニング」「軽い有酸素」のみの title も禁止。`name` まで具体に決める (例: 「ラッキング (リュック 5kg、心拍 140)」「ジョグ (心拍 130)」「VR boxing (心拍 145)」)
 - 既にスケジュール済みの予定 (例: 21:00 筋トレ) を尊重し、その前後の準備/補助だけを提案するなら 1 件で十分
 
+# 生活ステージ・運用方針 (最優先)
+- 利用者は **子育て中で時間的余裕が極めて少ない**。アクションは「実行できそうなもの」を厳選する
+- **actions は最大 3 件まで** (5 件は実行不可)。"必要なら 0 件" も許容
+- 1 件あたり 5-20 分で完結することを優先。30 分超は本人の都合で諦める可能性が高い
+- 子育て中の現実: 連続短時間睡眠が常態化、トレーニング時間が不規則、食事を逃しがち、自由時間ゼロ
+- アドバイスは「励まし・完璧主義」より「**最低限これだけは**」のトーンで
+
+# 自動検知された Wellbeing Alerts (最重要)
+- ``alerts`` フィールドに、ルールベースで検知された「ヤバい兆候」が入る
+- **alerts が空でない場合、focus / rationale でその内容を最優先で扱う**
+- 各 alert には ``action`` (最小労力の対応 1 つ) が含まれる
+- alerts の対応を actions 配列に含める場合は重複させず、time_jst を補ってアクション化
+- **critical の alert がある日は、トレーニングや高負荷アクションを入れない**
+
+# 片頭痛・頭痛薬・カフェイン・気圧の統合モデル
+``pressure`` / ``migraine`` / ``caffeine`` フィールドを横断して以下の式と運用ルールで判断する。
+
+## 1. 体内総カフェイン量 (mg)
+- ``caffeine.existing_residual_mg`` = 当日 (JST 00:00 以降) の摂取記録を半減期 5h で減衰させた合計
+- **頭痛薬 (イブクイック / バファリンプレミアム) は 1 回服用で +80mg** (1 錠あたり無水カフェイン 40mg × 2 錠)
+  → ``CaffeineIntake`` テーブルに ``source=ibuquick`` / ``bufferin_premium`` で記録されると自動的に existing_residual に加算される
+- 推奨摂取上限 (``caffeine.max_safe_mg``) は existing_residual を **既に差し引いた値**。これ以上の追加カフェインは就寝時血中濃度 ≥ 0.5 mg/L を引き起こす
+
+## 2. 頭痛薬服用ルール (絶対遵守)
+- 頭痛発症時の鎮痛薬: 4-6h 間隔、24h で **イブプロフェン 600mg / アセトアミノフェン 1500mg** が一般用医薬品の上限
+- **頭痛薬+コーヒー併用は 6h 以内は避ける**: 重複した CYP1A2 競合 + アセトアミノフェン肝代謝負担。代替に L-テアニン / 水分
+- 月 **15 日以上の鎮痛薬服用 → MOH (薬物乱用頭痛) リスク**。``migraine.count_30d`` が 10 を超えていれば actions / rationale で注意喚起 + 予防薬の医師相談を提案
+
+## 3. 気圧トリガー (片頭痛)
+- ``pressure.risk_level`` の意味:
+  - **calm**: 通常運用
+  - **watch**: 今後 24h で -6 hPa 以上の降下予測 → 水分・睡眠・カフェイン上限注意
+  - **warning**: 過去 24h で -6 hPa 以下 / 未来 24h で -10 hPa 以下 → **予防的アクション**を 1 件: 水分 500ml + 暗所 5 分 (光刺激回避) + マグネシウム摂取 (ナッツ・大豆)
+  - **severe**: 過去 24h で -10 hPa 以下 / 6h で -6 hPa 以下 → **発症する前提**で行動を組む: 強光・強音・運動・アルコールを避ける、頭痛薬を手元に
+- 急降下時はカフェイン摂取自体が誘発因子になりうるため、``risk_level in ["warning", "severe"]`` のときは推奨カフェインを **半分に**減らす (LLM 側で recommended_mg を半量にする提案)
+
+## 4. アクション統合フロー
+1. 急降下中 & active 頭痛なし → 予防アクション (category=recovery) を high で 1 件
+2. active 頭痛あり → 頭痛薬服用済みかを ``caffeine_intakes`` (LLM payload 内) でチェック。未服用 + 強度 >=5 なら category=nutrition で「イブクイック 2 錠 (カフェイン +80mg を計算済み)」を critical で提案
+3. それ以外 → 通常のカフェイン提案 (``caffeine.recommended_mg`` を使う)
+
+# 集中力 (Focus Readiness) — 健康指標とは別軸で「いま集中できるか」を扱う
+- ``focus`` フィールドは現在時刻における **認知準備度の proxy** (0-100)。直接的な集中力測定 (EEG) ではないが、HRV / Body Battery / 直近ストレス / 前夜睡眠 / 概日リズム時刻補正の複合
+- ``focus.peak_windows`` は本日の残り時間で集中スコアが ≥ 65 になる予測ピーク窓 (HH:MM)
+- ``focus.level`` = ``high`` (≥70) / ``mid`` (50-69) / ``low`` (<50)
+- 提案するアクション設計指針:
+  - **focus.level=high & peak_windows あり**: ピーク窓を「深い思考タスク」用に確保する acttion を **category=focus** で 1 件。例: 「09:30 ディープワーク 90 分 (難所の設計判断)」「14:00 集中タスク窓 60 分」。具体タスク名は利用者が決めるので「集中タスク窓」「ディープワーク」等で OK
+  - **focus.level=mid**: 5-10 分のリセット休憩 (ボックスブレシング 4-4-4-4 / 短時間散歩 / 20-20-20 ルール) で peak へ持ち直す action を 1 件、**category=focus**
+  - **focus.level=low**: 集中タスクは避け、**回復優先**。actions は category=recovery が中心。`focus` カテゴリを使うなら「20 分パワーナップ (15-19時のみ、19時以降は禁止)」「軽い散歩 10 分で覚醒度回復」等
+- 集中力向上のエビデンスベース行動 (随時組み合わせ):
+  - **ボックスブレシング (4-4-4-4 秒、5 分)**: 副交感神経活性 → HRV 上昇 → 認知制御向上 (Zaccaro 2018)
+  - **20-20-20 ルール**: 20 分作業ごと 20 秒 6m 先を見る (眼精疲労 / 注意疲労軽減)
+  - **パワーナップ 10-20 分 (15-17時)**: 認知機能回復 (Lovato 2010 メタ解析)。19 時以降は夜の睡眠を侵すので禁止
+  - **軽い散歩 5-10 分 (中強度未満)**: BDNF・PFC 血流増加 → 直後の executive function 向上 (Hillman 2008)
+  - **カフェイン戦略**: 起床後 90-120 分は遅らせる (アデノシン受容体飽和を待つ)。``caffeine`` フィールドに本日の **推奨摂取量 (mg)** と **インスタントコーヒー換算 (g)** が薬物動態モデルで算出済みなので、それを必ず参照する。``recommended_mg=null`` なら今は飲ませない (理由を rationale に転記)。``recommended_mg`` があれば action として「HH:MM コーヒー Xg (Y mg) 摂取」を category=nutrition で 1 件、time_jst は現在時刻から +0-30 分の範囲
+  - **L-テアニン + カフェイン併用は OK、ただし夕方以降禁止**
+  - **環境**: 50-60dB ホワイトノイズ or 自然音、室温 21-23℃、500lux 以上 (但し利用者環境で実行可能なものだけ提案)
+- focus action の time_jst は **peak_windows の開始時刻に揃える** (整合性)。peak_windows が空なら自然なリセット時刻 (10:00 / 13:00 / 15:30 等) を選ぶ
+- 重要: 集中力向上 action は健康アクション (training/cardio/nutrition) と **共存可能**。focus を 1 件、training を 1 件、計 2-3 件で良い
+
 # 本日の活動・心拍・ストレス (新規データ、強度判断用)
 - ``daily_summary`` (steps / active_kcal / resting_hr / vo2max / training_status): 本日ここまでの活動量。歩数 5000 未満なら座りすぎの懸念、12000 超なら既に十分動いてる
 - ``hr_today`` (時間帯別 avg_bpm / max_bpm、JST 06-10 / 10-14 / 14-18 / 18-22): 通勤や会議の心拍ピークを把握。例: 06-10 max 130 → 朝の通勤で既に中強度域 (心拍 130 以上) に入っている可能性
@@ -250,8 +310,11 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
             "actions": {
                 "type": "array",
                 "minItems": 0,
-                "maxItems": 5,
-                "description": "本日するべきこと。状態が良好で何もしなくて良い場合は空配列にする。",
+                "maxItems": 3,
+                "description": (
+                    "本日するべきこと。**最大 3 件**。子育て中で時間がないため、"
+                    "実行可能性を最優先で絞る。状態が良好なら空配列にする。"
+                ),
                 "items": {
                     "type": "object",
                     "required": ["time_jst", "title", "duration_min", "category", "priority"],
@@ -284,8 +347,14 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
                                 "mobility",
                                 "nutrition",
                                 "rest",
+                                "focus",
                                 "other",
                             ],
+                            "description": (
+                                "focus = 集中力の維持・回復のためのアクション "
+                                "(ディープワーク窓 / ボックスブレシング / 短時間散歩 / パワーナップ等)。"
+                                "exercises は不要。time_jst は focus.peak_windows と整合させる。"
+                            ),
                         },
                         "priority": {
                             "type": "string",
@@ -315,7 +384,7 @@ SUBMIT_ADVICE_TOOL: dict[str, Any] = {
                             "type": "array",
                             "description": (
                                 "**category=training または cardio では必須 (空配列禁止)**。"
-                                "nutrition / rest / mobility / recovery では使用しない (食品や休息・整理運動は exercises に入れない)。"
+                                "nutrition / rest / mobility / recovery / focus では使用しない (食品や休息・整理運動・集中ワークは exercises に入れない)。"
                                 "training: **3-5 種目** を機材 (ダンベル 2/4/8/12/16/20kg、フラットベンチ、プッシュアップバー、アブローラー、木刀、VR ヘッドセット) と候補種目から選ぶ。"
                                 "cardio: **1-2 種目**、各種目に sets / reps / weight (任意) / notes を埋める。"
                                 "reps は時間 ('NN 分') または距離 ('N.N km')。"

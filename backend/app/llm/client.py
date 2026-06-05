@@ -311,6 +311,263 @@ def _gather_recent_training_prescriptions(
     return out[:30]
 
 
+def _gather_focus(target: date_type) -> dict[str, Any]:
+    """LLM に渡す focus サマリ (現在値 + ピーク窓)。"""
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+    from app.models import BodyBattery, MetricSample
+    from app.scoring.focus import (
+        compute_focus_readiness,
+        extract_peak_windows,
+        predict_today_curve,
+    )
+    from app.scoring.recompute import _hrv_baseline
+
+    settings = get_settings()
+    tz = ZoneInfo(settings.app_tz)
+    now_jst = datetime.now(tz)
+
+    with session_scope() as session:
+        sleep = session.get(SleepSession, target)
+        hrv = session.get(HrvDaily, target)
+        bb_latest = session.execute(
+            select(BodyBattery).order_by(BodyBattery.ts.desc()).limit(1)
+        ).scalar_one_or_none()
+
+        stress_recent_avg: float | None = None
+        since = now_jst.astimezone(UTC).replace(tzinfo=None) - timedelta(minutes=60)
+        stress_rows = session.execute(
+            select(MetricSample.value).where(
+                MetricSample.metric_key == "stress",
+                MetricSample.ts >= since,
+                MetricSample.value.is_not(None),
+                MetricSample.value >= 0,
+            )
+        ).all()
+        if stress_rows:
+            vals = [float(r[0]) for r in stress_rows]
+            stress_recent_avg = sum(vals) / len(vals)
+
+        baseline = _hrv_baseline(session, target)
+        from datetime import time as _time
+
+        try:
+            h, _, m = settings.target_wake_time.partition(":")
+            wake_t: _time | None = _time(int(h), int(m))
+        except Exception:
+            wake_t = None
+
+        fr = compute_focus_readiness(
+            now=now_jst,
+            hrv_value=hrv.last_night_avg if hrv else None,
+            hrv_baseline=baseline,
+            body_battery_current=bb_latest.value if bb_latest else None,
+            stress_recent_avg=stress_recent_avg,
+            sleep_score=sleep.sleep_score if sleep else None,
+            sleep_total_min=sleep.total_min if sleep else None,
+            wake_time=wake_t,
+        )
+        curve = predict_today_curve(
+            now=now_jst,
+            hrv_value=hrv.last_night_avg if hrv else None,
+            hrv_baseline=baseline,
+            body_battery_current=bb_latest.value if bb_latest else None,
+            stress_recent_avg=stress_recent_avg,
+            sleep_score=sleep.sleep_score if sleep else None,
+            sleep_total_min=sleep.total_min if sleep else None,
+            wake_time=wake_t,
+        )
+        windows = extract_peak_windows(curve)
+
+    return {
+        "score": round(fr.score, 1) if fr.score is not None else None,
+        "level": fr.level,
+        "rationale": fr.rationale,
+        "stress_recent_avg": (
+            round(stress_recent_avg, 1) if stress_recent_avg is not None else None
+        ),
+        "peak_windows": [
+            {"start": w.start_hhmm, "end": w.end_hhmm, "avg_score": w.avg_score} for w in windows
+        ],
+    }
+
+
+def _gather_caffeine(target: date_type) -> dict[str, Any]:
+    """LLM に渡すカフェイン推奨サマリ (今夜の bedtime に合わせて逆算)。"""
+    from zoneinfo import ZoneInfo
+
+    from app.api.caffeine import current_residual_mg
+    from app.config import get_settings
+    from app.scoring.caffeine import max_dose_for_bedtime, recommend_caffeine
+    from app.scoring.sleep_plan import compute_tonight_plan
+
+    settings = get_settings()
+    tz = ZoneInfo(settings.app_tz)
+    now_jst = datetime.now(tz)
+
+    tonight = compute_tonight_plan(target)
+    if not tonight.get("bedtime"):
+        return {"available": False}
+
+    with session_scope() as session:
+        latest_weight = session.execute(
+            select(WeightSample).order_by(WeightSample.ts.desc()).limit(1)
+        ).scalar_one_or_none()
+        # session 内で属性を取り出す (外に出すと DetachedInstanceError)
+        weight_kg = (
+            latest_weight.weight_kg if latest_weight else settings.target_weight_kg
+        )
+    if not weight_kg or weight_kg <= 0:
+        return {"available": False}
+
+    existing_residual = current_residual_mg(now_jst, settings.caffeine_half_life_h)
+
+    rec = recommend_caffeine(
+        now=now_jst,
+        bedtime_jst_hhmm=tonight["bedtime"],
+        body_weight_kg=weight_kg,
+        half_life_h=settings.caffeine_half_life_h,
+        vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
+        min_cognitive_mg=settings.caffeine_min_cognitive_mg,
+        target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
+        instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
+        cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
+    )
+    adjusted_max = max_dose_for_bedtime(
+        hours_until_bedtime=rec.hours_until_bedtime,
+        body_weight_kg=weight_kg,
+        bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
+        half_life_h=settings.caffeine_half_life_h,
+        vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        existing_residual_mg=existing_residual,
+    )
+    recommended = rec.recommended_mg
+    if recommended is not None and adjusted_max < recommended:
+        recommended = (
+            None
+            if adjusted_max < settings.caffeine_min_cognitive_mg
+            else round(max(settings.caffeine_min_cognitive_mg, adjusted_max), 0)
+        )
+    return {
+        "available": True,
+        "recommended_mg": recommended,
+        "instant_coffee_g": (
+            round(recommended / settings.instant_coffee_mg_per_g, 1)
+            if recommended
+            else None
+        ),
+        "max_safe_mg": round(adjusted_max, 0),
+        "existing_residual_mg": round(existing_residual, 1),
+        "hours_until_bedtime": round(rec.hours_until_bedtime, 2),
+        "bedtime_residual_mg": rec.bedtime_residual_if_consumed_mg,
+        "concentration_at_bedtime_mg_per_l": rec.blood_concentration_at_bedtime_mg_per_l,
+        "reason": rec.reason,
+    }
+
+
+def _gather_caffeine_intakes_today(target: date_type) -> list[dict[str, Any]]:
+    """当日のカフェイン摂取記録 (頭痛薬含む)。LLM が二重提案を避けるため。"""
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+    from app.models import CaffeineIntake
+    from app.scoring.timewindow import jst_day_bounds
+
+    settings = get_settings()
+    tz = ZoneInfo(settings.app_tz)
+    start_utc, _ = jst_day_bounds(target)
+    with session_scope() as session:
+        rows = session.execute(
+            select(CaffeineIntake)
+            .where(CaffeineIntake.ts >= start_utc)
+            .order_by(CaffeineIntake.ts)
+        ).scalars().all()
+        return [
+            {
+                "ts_jst": (
+                    r.ts.replace(tzinfo=UTC).astimezone(tz).strftime("%H:%M")
+                ),
+                "source": r.source,
+                "amount": r.amount,
+                "unit": r.unit,
+                "mg": r.mg,
+            }
+            for r in rows
+        ]
+
+
+def _gather_migraine_summary(target: date_type) -> dict[str, Any]:
+    """偏頭痛の状態 (active かどうか + 30 日件数 + 直近 3 件)。"""
+    from app.models import MigraineEpisode
+
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    with session_scope() as session:
+        rows = session.execute(
+            select(MigraineEpisode)
+            .where(MigraineEpisode.started_at >= since)
+            .order_by(MigraineEpisode.started_at.desc())
+        ).scalars().all()
+        completed = [r for r in rows if r.ended_at is not None]
+        active = next((r for r in rows if r.ended_at is None), None)
+        return {
+            "active": (
+                {
+                    "started_at": (
+                        active.started_at.replace(tzinfo=UTC).isoformat()
+                        if active.started_at.tzinfo is None
+                        else active.started_at.isoformat()
+                    ),
+                    "severity": active.severity,
+                }
+                if active
+                else None
+            ),
+            "count_30d": len(completed),
+            "recent": [
+                {
+                    "duration_min": (
+                        int((r.ended_at - r.started_at).total_seconds() / 60)
+                        if r.ended_at
+                        else None
+                    ),
+                    "severity": r.severity,
+                }
+                for r in completed[:3]
+            ],
+        }
+
+
+def _gather_pressure() -> dict[str, Any] | None:
+    """気圧スナップショット。"""
+    from app.integrations.weather import get_pressure_snapshot, to_dict
+
+    try:
+        return to_dict(get_pressure_snapshot())
+    except Exception as exc:  # フェールセーフ (オフライン環境等)
+        logger.info("pressure_fetch_skipped", error=str(exc))
+        return None
+
+
+def _gather_wellbeing_alerts(
+    target: date_type, pressure: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    from app.config import get_settings
+    from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict
+
+    s = get_settings()
+    with session_scope() as sess:
+        alerts = evaluate_alerts(
+            sess,
+            target,
+            pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
+            target_weight_kg=s.target_weight_kg,
+            weight_lower_kg=s.target_weight_kg - 1.0,
+        )
+    return [to_dict(a) for a in alerts]
+
+
 def _gather_today_payload(target: date_type) -> dict[str, Any]:
     from app.models import BodyBattery
 
@@ -521,6 +778,12 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
                 return {"status": "rate_limited"}
 
     today_payload = _gather_today_payload(target)
+    today_payload["focus"] = _gather_focus(target)
+    today_payload["caffeine"] = _gather_caffeine(target)
+    today_payload["caffeine_intakes_today"] = _gather_caffeine_intakes_today(target)
+    today_payload["migraine"] = _gather_migraine_summary(target)
+    today_payload["pressure"] = _gather_pressure()
+    today_payload["alerts"] = _gather_wellbeing_alerts(target, today_payload["pressure"])
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
@@ -553,18 +816,44 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     )
     prompt_hash = _hash_messages(system, messages)
 
+    # ルールベース fallback advice を準備 (LLM 不通時に使う)
+    def _build_rule_based_fallback() -> dict[str, Any]:
+        from zoneinfo import ZoneInfo as _ZI
+
+        from app.scoring.fallback_advice import build_fallback_advice
+
+        s = get_settings()
+        now_jst = datetime.now(_ZI(s.app_tz))
+        return build_fallback_advice(
+            now=now_jst,
+            alerts=today_payload.get("alerts"),
+            caffeine=today_payload.get("caffeine"),
+            focus=today_payload.get("focus"),
+            tonight_plan=today_payload.get("tonight_plan"),
+            pressure=today_payload.get("pressure"),
+            morning_light=today_payload.get("morning_light"),
+        )
+
     if not api_key:
-        comment = _FALLBACK_MESSAGE
-        _store_comment(target, "fallback", prompt_hash, comment)
-        return {"status": "fallback", "comment": comment, "payload": None}
+        fb = _build_rule_based_fallback()
+        prose = _payload_to_prose(fb)
+        _store_comment(target, "fallback", prompt_hash, prose, payload=fb)
+        return {"status": "fallback", "comment": prose, "payload": fb, "model": "fallback"}
 
     try:
         payload = await _call_anthropic(
             system=system, messages=messages, model=settings.llm_model, api_key=api_key
         )
         if not payload:
-            _store_comment(target, "fallback", prompt_hash, _FALLBACK_MESSAGE)
-            return {"status": "fallback", "comment": _FALLBACK_MESSAGE, "payload": None}
+            fb = _build_rule_based_fallback()
+            prose = _payload_to_prose(fb)
+            _store_comment(target, "fallback", prompt_hash, prose, payload=fb)
+            return {
+                "status": "fallback",
+                "comment": prose,
+                "payload": fb,
+                "model": "fallback",
+            }
         prose = _payload_to_prose(payload)
         _store_comment(target, settings.llm_model, prompt_hash, prose, payload=payload)
         return {
@@ -575,11 +864,14 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
         }
     except Exception as exc:
         logger.warning("llm_call_failed", error=str(exc))
-        _store_comment(target, "fallback", prompt_hash, _FALLBACK_MESSAGE)
+        fb = _build_rule_based_fallback()
+        prose = _payload_to_prose(fb)
+        _store_comment(target, "fallback", prompt_hash, prose, payload=fb)
         return {
             "status": "fallback",
-            "comment": _FALLBACK_MESSAGE,
-            "payload": None,
+            "comment": prose,
+            "payload": fb,
+            "model": "fallback",
             "error": str(exc),
         }
 

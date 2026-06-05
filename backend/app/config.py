@@ -129,6 +129,23 @@ class Settings(BaseSettings):
     target_water_ml_per_kg: float = 35.0
     # 摂取カロリー目標は TDEE (= 当日の active + basal energy 合計、Apple Health から推定) を基準にする
 
+    # --- カフェイン薬物動態パラメータ ---
+    # 1コンパートメント、即時吸収・1次消失モデルで「就寝時血中濃度」を逆算する。
+    # 個人差: CYP1A2 遺伝多型・喫煙 (誘導↑) ・経口避妊薬 (阻害↓) で T_half は 2-12h と幅がある。
+    # 既定値は健常成人の平均 (Statland 1980, Carrillo 2000)。.env で個別調整可。
+    caffeine_half_life_h: float = 5.0
+    caffeine_vd_l_per_kg: float = 0.5
+    # 就寝時の血中濃度がこれを下回れば睡眠への影響を最小化できる (Roehrs & Roth 2008)
+    caffeine_bedtime_threshold_mg_per_l: float = 0.5
+    # 認知効果が有意になる最低有効量 (Smith 2002 メタ解析、~1mg/kg)
+    caffeine_min_cognitive_mg: float = 60.0
+    # 目標摂取量 (mg/kg)。1.0 が標準、0.5-0.75 は感受性高い人 / 妊娠中
+    caffeine_target_mg_per_kg: float = 1.0
+    # 就寝何時間前以降は推奨しない (Drake 2013)
+    caffeine_cutoff_hours_before_bed: float = 6.0
+    # インスタントコーヒー 1g あたりカフェイン量 (AGF/Nescafe/UCC 平均 ≈ 60mg)
+    instant_coffee_mg_per_g: float = 60.0
+
     # --- 睡眠リズム目標 ---
     target_wake_time: str = "06:30"  # 平日想定の起床時刻 (HH:MM, JST)
     target_sleep_min: int = 480  # 8h を ideal とする (推奨 7-9h)
@@ -163,6 +180,17 @@ class Settings(BaseSettings):
         "**次に利用可能な重量** へ進む (例: 8kg → 12kg、12kg → 16kg)。達成できなければ重量維持して "
         "reps を 1 ずつ伸ばすか RIR を改善する。中間サイズ (10kg / 6kg 等) は存在しない。"
     )
+
+    # --- 気圧 (片頭痛トリガー監視) ---
+    # 東京都練馬区の代表座標。気圧降下 (前 24h で -6 hPa 以上) と片頭痛発症の
+    # 相関がメタ解析で示されている (Mukamal 2009, Hoffmann 2015 等)。
+    weather_latitude: float = 35.7356
+    weather_longitude: float = 139.6517
+    weather_location_label: str = "東京都練馬区"
+    # 急降下とみなす閾値 (hPa)。前 24h での低下量 (絶対値) がこれを超えたら warning。
+    pressure_drop_warning_hpa: float = 6.0
+    # 重度の急降下閾値 (台風接近など)
+    pressure_drop_severe_hpa: float = 10.0
 
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"

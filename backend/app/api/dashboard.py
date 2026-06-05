@@ -14,6 +14,7 @@ from app.models import (
     DailySummary,
     HrvDaily,
     LlmComment,
+    MetricSample,
     SleepSession,
     SourceSync,
     WeightSample,
@@ -40,7 +41,10 @@ def _today() -> date:
 
 
 @router.get("/api/today")
-async def today() -> dict[str, Any]:
+async def today(
+    lat: float | None = Query(default=None, description="気圧取得用の緯度 (省略時 config)"),
+    lon: float | None = Query(default=None, description="気圧取得用の経度"),
+) -> dict[str, Any]:
     d = _today()
     with session_scope() as session:
         score = session.get(DailyScore, d)
@@ -171,6 +175,54 @@ async def today() -> dict[str, Any]:
         )
         tonight_plan = compute_tonight_plan(d, last_training_end_jst=last_training_end_jst)
 
+        # --- 大気質 + 朝光暴露 (Focus に環境補正を入れる) ---
+        from app.integrations.weather import (
+            air_quality_to_dict,
+            get_air_quality_snapshot,
+        )
+        from app.scoring.morning_light import compute_morning_light_score
+
+        air_snap = get_air_quality_snapshot(latitude=lat, longitude=lon)
+        air_quality = air_quality_to_dict(air_snap)
+        morning_light = compute_morning_light_score(session, d)
+
+        # --- 集中力 (Focus Readiness) ---
+        # 現在時刻における認知準備度を proxy 指標から算出する。
+        # 直接的な集中力測定 (EEG 等) ではないことに注意。
+        focus = _build_focus(
+            session,
+            target=d,
+            sleep=sleep,
+            hrv=hrv,
+            bb_current=bb_latest.value if bb_latest else None,
+            pm2_5=air_snap.pm2_5 if air_snap else None,
+            morning_light_score=morning_light.get("score"),
+        )
+
+        # --- 気圧 (片頭痛トリガー) ---
+        pressure = _build_pressure(lat=lat, lon=lon)
+
+        # --- Wellbeing Alerts (ヤバい状態の自動検知) ---
+        from app.config import get_settings as _get_settings
+        from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict as alert_to_dict
+
+        _s = _get_settings()
+        alerts_raw = evaluate_alerts(
+            session,
+            d,
+            pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
+            target_weight_kg=_s.target_weight_kg,
+            weight_lower_kg=_s.target_weight_kg - 1.0,
+        )
+        alerts = [alert_to_dict(a) for a in alerts_raw]
+
+        # --- カフェイン提案 ---
+        # 1コンパートメント薬物動態モデルで「今飲んでも就寝に影響しない最大量」を逆算。
+        caffeine = _build_caffeine(
+            tonight_plan=tonight_plan,
+            current_weight_kg=weight_row.weight_kg if weight_row else None,
+        )
+
         # 最終更新時刻 (sync の最新 + score.computed_at + comment.generated_at の最新)
         candidates: list[datetime] = []
         for row in sync_rows:
@@ -191,6 +243,12 @@ async def today() -> dict[str, Any]:
             "sub_context": sub_context,
             "nutrition": nutrition,
             "tonight_plan": tonight_plan,
+            "focus": focus,
+            "caffeine": caffeine,
+            "pressure": pressure,
+            "air_quality": air_quality,
+            "morning_light": morning_light,
+            "alerts": alerts,
             "metrics": {
                 "sleep": _sleep_to_dict(sleep),
                 "hrv": _hrv_to_dict(hrv),
@@ -303,6 +361,260 @@ def _build_sub_reasons(
         "load": load_reason,
         "weight": weight_reason,
         "body_fat": bf_reason,
+    }
+
+
+def _build_focus(
+    session,
+    *,
+    target: date,
+    sleep: SleepSession | None,
+    hrv: HrvDaily | None,
+    bb_current: float | None,
+    pm2_5: float | None = None,
+    morning_light_score: float | None = None,
+) -> dict[str, Any]:
+    """現在時刻における集中可能性 (proxy) を返す。"""
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+    from app.scoring.focus import (
+        compute_focus_readiness,
+        extract_peak_windows,
+        predict_today_curve,
+    )
+    from app.scoring.recompute import _hrv_baseline
+
+    settings = get_settings()
+    tz = ZoneInfo(settings.app_tz)
+    now_jst = datetime.now(tz)
+
+    # 直近 60 分のストレス平均 (Garmin は -1/-2 を invalid に使う)
+    stress_recent_avg: float | None = None
+    since = now_jst.astimezone(UTC).replace(tzinfo=None) - timedelta(minutes=60)
+    stress_rows = session.execute(
+        select(MetricSample.value).where(
+            MetricSample.metric_key == "stress",
+            MetricSample.ts >= since,
+            MetricSample.value.is_not(None),
+            MetricSample.value >= 0,
+        )
+    ).all()
+    if stress_rows:
+        vals = [float(r[0]) for r in stress_rows]
+        stress_recent_avg = sum(vals) / len(vals)
+
+    baseline = _hrv_baseline(session, target)
+    wake_t = None
+    try:
+        h, _, m = settings.target_wake_time.partition(":")
+        from datetime import time as _time
+
+        wake_t = _time(int(h), int(m))
+    except Exception:
+        wake_t = None
+
+    fr = compute_focus_readiness(
+        now=now_jst,
+        hrv_value=hrv.last_night_avg if hrv else None,
+        hrv_baseline=baseline,
+        body_battery_current=bb_current,
+        stress_recent_avg=stress_recent_avg,
+        sleep_score=sleep.sleep_score if sleep else None,
+        sleep_total_min=sleep.total_min if sleep else None,
+        wake_time=wake_t,
+        pm2_5=pm2_5,
+        morning_light_score=morning_light_score,
+    )
+    curve = predict_today_curve(
+        now=now_jst,
+        hrv_value=hrv.last_night_avg if hrv else None,
+        hrv_baseline=baseline,
+        body_battery_current=bb_current,
+        stress_recent_avg=stress_recent_avg,
+        sleep_score=sleep.sleep_score if sleep else None,
+        sleep_total_min=sleep.total_min if sleep else None,
+        wake_time=wake_t,
+        pm2_5=pm2_5,
+        morning_light_score=morning_light_score,
+    )
+    windows = extract_peak_windows(curve)
+
+    return {
+        "score": round(fr.score, 1) if fr.score is not None else None,
+        "level": fr.level,
+        "rationale": fr.rationale,
+        "components": {
+            "hrv": round(fr.components.hrv, 1) if fr.components.hrv is not None else None,
+            "body_battery": (
+                round(fr.components.body_battery, 1)
+                if fr.components.body_battery is not None
+                else None
+            ),
+            "stress": round(fr.components.stress, 1) if fr.components.stress is not None else None,
+            "sleep": round(fr.components.sleep, 1) if fr.components.sleep is not None else None,
+            "circadian": (
+                round(fr.components.circadian, 1)
+                if fr.components.circadian is not None
+                else None
+            ),
+            "air_quality": (
+                round(fr.components.air_quality, 1)
+                if fr.components.air_quality is not None
+                else None
+            ),
+            "morning_light": (
+                round(fr.components.morning_light, 1)
+                if fr.components.morning_light is not None
+                else None
+            ),
+        },
+        "curve": curve,
+        "peak_windows": [
+            {
+                "start": w.start_hhmm,
+                "end": w.end_hhmm,
+                "avg_score": w.avg_score,
+            }
+            for w in windows
+        ],
+        "stress_recent_avg": (
+            round(stress_recent_avg, 1) if stress_recent_avg is not None else None
+        ),
+        "disclaimer": "wearable データによる proxy 指標で、直接的な認知測定 (EEG 等) ではありません。",
+    }
+
+
+def _build_pressure(
+    *, lat: float | None = None, lon: float | None = None
+) -> dict[str, Any] | None:
+    """気圧スナップショット (Open-Meteo) を返す。失敗時 None。"""
+    from app.integrations.weather import get_pressure_snapshot, to_dict
+
+    return to_dict(get_pressure_snapshot(latitude=lat, longitude=lon))
+
+
+def _build_caffeine(
+    *,
+    tonight_plan: dict[str, Any] | None,
+    current_weight_kg: float | None,
+) -> dict[str, Any]:
+    """カフェイン推奨摂取量を返す。
+
+    bedtime が無い (= tonight_plan が出ない異常系) や体重 0 のときは空レスポンス。
+    """
+    from zoneinfo import ZoneInfo
+
+    from app.api.caffeine import current_residual_mg
+    from app.config import get_settings
+    from app.scoring.caffeine import (
+        predict_decay_curve,
+        recommend_caffeine,
+    )
+
+    settings = get_settings()
+    if tonight_plan is None or not tonight_plan.get("bedtime"):
+        return {"available": False, "reason": "tonight_plan が未計算"}
+
+    weight_kg = current_weight_kg if current_weight_kg else settings.target_weight_kg
+    if not weight_kg or weight_kg <= 0:
+        return {"available": False, "reason": "体重データなし"}
+
+    tz = ZoneInfo(settings.app_tz)
+    now_jst = datetime.now(tz)
+
+    # 本日の摂取記録からの現時点残量
+    existing_residual = current_residual_mg(now_jst, settings.caffeine_half_life_h)
+
+    rec = recommend_caffeine(
+        now=now_jst,
+        bedtime_jst_hhmm=tonight_plan["bedtime"],
+        body_weight_kg=weight_kg,
+        half_life_h=settings.caffeine_half_life_h,
+        vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
+        min_cognitive_mg=settings.caffeine_min_cognitive_mg,
+        target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
+        instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
+        cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
+    )
+    # max_safe を existing_residual で減算 (recommend_caffeine 経由で渡せないので
+    # 上書きする形)
+    from app.scoring.caffeine import max_dose_for_bedtime
+
+    adjusted_max_safe = max_dose_for_bedtime(
+        hours_until_bedtime=rec.hours_until_bedtime,
+        body_weight_kg=weight_kg,
+        bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
+        half_life_h=settings.caffeine_half_life_h,
+        vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        existing_residual_mg=existing_residual,
+    )
+    # 既存残量を考慮した再計算が必要なケース (adjusted_max_safe < 現推奨 mg)
+    recommended_mg = rec.recommended_mg
+    if rec.recommended_mg is not None and adjusted_max_safe < rec.recommended_mg:
+        # 既に体内に十分残ってる → 推奨量を下げるか、認知最低量を下回るなら None
+        if adjusted_max_safe < settings.caffeine_min_cognitive_mg:
+            recommended_mg = None
+        else:
+            recommended_mg = round(max(settings.caffeine_min_cognitive_mg, adjusted_max_safe), 0)
+
+    # 就寝時刻 datetime (今夜)
+    bh, _, bm = tonight_plan["bedtime"].partition(":")
+    bedtime_dt = now_jst.replace(hour=int(bh), minute=int(bm), second=0, microsecond=0)
+    if bedtime_dt <= now_jst:
+        bedtime_dt = bedtime_dt + timedelta(days=1)
+
+    # 推奨量を「今」飲んだ場合の血中濃度カーブ (UI のグラフ用)
+    decay_curve: list[dict[str, float | str]] = []
+    if recommended_mg:
+        decay_curve = predict_decay_curve(
+            dose_mg=float(recommended_mg),
+            intake_time=now_jst,
+            bedtime=bedtime_dt,
+            body_weight_kg=weight_kg,
+            half_life_h=settings.caffeine_half_life_h,
+            vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        )
+
+    # 既存残量が反映された coffee_g とサマリ
+    instant_coffee_g = (
+        round(recommended_mg / settings.instant_coffee_mg_per_g, 1)
+        if recommended_mg
+        else None
+    )
+    final_reason = rec.reason
+    if existing_residual > 0 and recommended_mg != rec.recommended_mg:
+        final_reason = (
+            f"既に体内に {existing_residual:.0f}mg 残存。"
+            + (
+                f"安全上限を更新 → {round(adjusted_max_safe):.0f}mg"
+                if recommended_mg
+                else "追加摂取は非推奨"
+            )
+        )
+
+    return {
+        "available": True,
+        "recommended_mg": recommended_mg,
+        "instant_coffee_g": instant_coffee_g,
+        "max_safe_mg": round(adjusted_max_safe, 0),
+        "min_cognitive_mg": rec.min_cognitive_mg,
+        "hours_until_bedtime": round(rec.hours_until_bedtime, 2),
+        "bedtime": tonight_plan["bedtime"],
+        "body_weight_kg": round(weight_kg, 1),
+        "half_life_h": rec.half_life_h,
+        "bedtime_residual_if_consumed_mg": rec.bedtime_residual_if_consumed_mg,
+        "blood_concentration_at_bedtime_mg_per_l": (
+            rec.blood_concentration_at_bedtime_mg_per_l
+        ),
+        "existing_residual_mg": round(existing_residual, 1),
+        "reason": final_reason,
+        "decay_curve": decay_curve,
+        "disclaimer": (
+            "1コンパートメント薬物動態モデルによる推定。"
+            "個人差 (CYP1A2 遺伝多型・喫煙・経口避妊薬) で半減期は 2-12h と幅があります。"
+        ),
     }
 
 

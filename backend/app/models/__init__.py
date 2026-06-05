@@ -1,11 +1,14 @@
 from app.models.health import (
+    AlcoholIntake,
     BodyBattery,
     BodyBatteryDaily,
+    CaffeineIntake,
     DailyScore,
     DailySummary,
     HrvDaily,
     LlmComment,
     MetricSample,
+    MigraineEpisode,
     SleepSession,
     SourceSync,
     WeightSample,
@@ -13,13 +16,16 @@ from app.models.health import (
 )
 
 __all__ = [
+    "AlcoholIntake",
     "BodyBattery",
     "BodyBatteryDaily",
+    "CaffeineIntake",
     "DailyScore",
     "DailySummary",
     "HrvDaily",
     "LlmComment",
     "MetricSample",
+    "MigraineEpisode",
     "SleepSession",
     "SourceSync",
     "WeightSample",

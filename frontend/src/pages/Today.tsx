@@ -6,9 +6,17 @@ import { AdviceCard } from "../components/AdviceCard";
 import { Sparkline } from "../components/Sparkline";
 import { NutritionPanel } from "../components/NutritionPanel";
 import { TonightPlanPanel } from "../components/TonightPlanPanel";
+import { FocusPanel } from "../components/FocusPanel";
+import { CaffeinePanel } from "../components/CaffeinePanel";
+import { MigrainePanel } from "../components/MigrainePanel";
+import { AlcoholPanel } from "../components/AlcoholPanel";
+import { EnvironmentPanel } from "../components/EnvironmentPanel";
+import { StaleBanner } from "../components/StaleBanner";
+import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
+import { useGeolocation } from "../lib/geolocation";
 
 function formatMinutes(min: number | null): string {
   if (min == null) return "--";
@@ -28,7 +36,13 @@ type Props = {
 
 export function TodayPage({ onOpenDebug }: Props) {
   const qc = useQueryClient();
-  const today = useQuery({ queryKey: ["today"], queryFn: api.today });
+  const geo = useGeolocation();
+  const coords = geo.coords;
+  const today = useQuery({
+    queryKey: ["today", coords?.lat ?? null, coords?.lon ?? null],
+    queryFn: () =>
+      api.today(coords ? { lat: coords.lat, lon: coords.lon } : null),
+  });
   const scoreSeries = useQuery({
     queryKey: ["timeseries", "score"],
     queryFn: () => api.timeseries("score", 14),
@@ -204,6 +218,17 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
+      <StaleBanner
+        lastUpdateIso={data.last_data_update_at}
+        isRefreshing={fullRefresh.isPending}
+        onRefresh={() => fullRefresh.mutate()}
+      />
+
+      {/* ===== ⚠️ アラート ===== */}
+      <WellbeingAlertsBanner alerts={data.alerts} />
+
+      {/* ===== 🎯 今日のアクション ===== */}
+      <SectionHeader label="今日のアクション" hint="LLM が状況を統合して 3 件まで" />
       <AdviceCard
         advice={data.advice}
         onRegenerate={() => regenerate.mutate()}
@@ -212,12 +237,37 @@ export function TodayPage({ onOpenDebug }: Props) {
         pending={regenerate.isPending}
       />
 
+      {/* ===== 📊 今の状態 ===== */}
+      <SectionHeader label="いまの状態" hint="リアルタイムの集中力 + 環境" />
+      <FocusPanel focus={data.focus} />
+      <EnvironmentPanel
+        pressure={data.pressure}
+        airQuality={data.air_quality}
+        morningLight={data.morning_light}
+        geo={{
+          coords: geo.coords,
+          busy: geo.busy,
+          error: geo.error,
+          denied: geo.denied,
+          onRequest: geo.request,
+          onClear: geo.clear,
+        }}
+      />
+
+      {/* ===== 📈 今日のスコア (24h 振り返り) ===== */}
+      <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
-
       <NutritionPanel nutrition={data.nutrition} />
-
       <TonightPlanPanel plan={data.tonight_plan} />
 
+      {/* ===== 📝 記録 (折りたたみ可) ===== */}
+      <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
+      <CaffeinePanel caffeine={data.caffeine} />
+      <MigrainePanel />
+      <AlcoholPanel />
+
+      {/* ===== 📉 振り返り (詳細データ) ===== */}
+      <SectionHeader label="振り返り" hint="メトリクスとトレンド" />
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <MetricTile
           label="睡眠"
@@ -288,5 +338,16 @@ export function TodayPage({ onOpenDebug }: Props) {
       </section>
 
     </main>
+  );
+}
+
+function SectionHeader({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mt-2 flex items-baseline gap-3 border-b border-slate-800 pb-1">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        {label}
+      </h2>
+      {hint && <span className="text-[10px] text-slate-600">{hint}</span>}
+    </div>
   );
 }
