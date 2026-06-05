@@ -40,7 +40,7 @@ def test_get_life(app_client):
     assert resp.status_code == 200
     body = resp.json()
     assert "life_score" in body
-    assert {d["key"] for d in body["domains"]} == {"health", "meditation", "speech"}
+    assert {d["key"] for d in body["domains"]} == {"health", "meditation", "speech", "learning", "work"}
     assert any(p["key"] == "balanced" for p in body["presets"])
 
 

@@ -20,10 +20,16 @@ from app.models import MetricSample
 
 # プリセット (ドメイン -> 重み)。将来ドメイン追加時にここへ追記する。
 DOMAIN_WEIGHT_PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"label": "バランス", "weights": {"health": 1.0, "meditation": 1.0, "speech": 1.0}},
-    "recovery": {"label": "回復優先", "weights": {"health": 2.0, "meditation": 1.0, "speech": 0.5}},
-    "mindful": {"label": "内省優先", "weights": {"health": 1.0, "meditation": 2.0, "speech": 0.5}},
-    "speech_focus": {"label": "発話強化", "weights": {"health": 1.0, "meditation": 0.5, "speech": 2.0}},
+    "balanced": {"label": "バランス",
+                 "weights": {"health": 1.0, "meditation": 1.0, "speech": 1.0, "learning": 1.0, "work": 1.0}},
+    "recovery": {"label": "回復優先",
+                 "weights": {"health": 2.0, "meditation": 1.0, "speech": 0.5, "learning": 0.5, "work": 0.5}},
+    "mindful": {"label": "内省優先",
+                "weights": {"health": 1.0, "meditation": 2.0, "speech": 0.5, "learning": 1.0, "work": 0.5}},
+    "deep_work": {"label": "仕事集中",
+                  "weights": {"health": 1.0, "meditation": 0.5, "speech": 1.0, "learning": 1.5, "work": 2.0}},
+    "speech_focus": {"label": "発話強化",
+                     "weights": {"health": 1.0, "meditation": 0.5, "speech": 2.0, "learning": 0.5, "work": 1.0}},
 }
 
 
@@ -114,11 +120,27 @@ def speech_achievement(target: date_type) -> float | None:
     return round(float(score), 2)
 
 
+def _external_achievement(domain_key: str) -> Callable[[date_type], float | None]:
+    """ExternalDomainEntry (学習・仕事 等) の当日達成度を返す関数を生成する。"""
+
+    def fn(target: date_type) -> float | None:
+        from app.models import ExternalDomainEntry
+
+        with session_scope() as session:
+            row = session.get(ExternalDomainEntry, (domain_key, target))
+            ach = row.achievement if row else None
+        return round(float(ach), 2) if ach is not None else None
+
+    return fn
+
+
 # ドメイン定義: (key, label, 達成度関数)
 LIFE_DOMAINS: list[tuple[str, str, Callable[[date_type], float | None]]] = [
     ("health", "健康", health_achievement),
     ("meditation", "瞑想", meditation_achievement),
     ("speech", "発話力", speech_achievement),
+    ("learning", "学習", _external_achievement("learning")),
+    ("work", "仕事", _external_achievement("work")),
 ]
 
 

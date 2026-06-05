@@ -232,5 +232,16 @@ class SpeechSession(Base):
     score_filler: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class ExternalDomainEntry(Base):
+    """外部ライフドメイン (学習・仕事 等) の日次達成度を取り込む汎用テーブル。"""
+
+    __tablename__ = "external_domain_entry"
+
+    domain: Mapped[str] = mapped_column(String(32), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    achievement: Mapped[float | None] = mapped_column(Float, nullable=True)
+    detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

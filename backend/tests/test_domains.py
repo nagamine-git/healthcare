@@ -52,7 +52,7 @@ def test_compute_life_weighted(db_engine):
                            weight_kg=56.5, body_fat_pct=14.0, source="hae"))
     out = domains.compute_life(today, {"health": 1.0, "meditation": 3.0})
     assert out["life_score"] is not None
-    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech"}
+    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}
     med = next(d for d in out["domains"] if d["key"] == "meditation")
     assert med["achievement"] == 100.0
     assert med["weight"] == 3.0

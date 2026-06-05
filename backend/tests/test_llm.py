@@ -193,4 +193,4 @@ def test_gather_life_domains(db_engine):
 
     out = _gather_life_domains(date.today())
     assert "life_score" in out
-    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech"}
+    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}

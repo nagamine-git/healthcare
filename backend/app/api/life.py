@@ -48,6 +48,12 @@ def _detail(key: str, target: date) -> str | None:
         return "発話練習スコア (speech-coach)"
     if key == "health":
         return "6指標の達成度平均"
+    if key in ("learning", "work"):
+        from app.models import ExternalDomainEntry
+
+        with session_scope() as session:
+            row = session.get(ExternalDomainEntry, (key, target))
+            return row.detail if row else None
     return None
 
 
