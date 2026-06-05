@@ -688,6 +688,18 @@ def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
     return out
 
 
+def _gather_life_domains(target: date_type) -> dict[str, Any]:
+    """ライフドメインの達成度・重み・ライフスコアを LLM 用に返す。"""
+    from app.models import DomainWeight
+    from app.scoring import domains as dom
+
+    with session_scope() as session:
+        rows = session.execute(select(DomainWeight)).scalars().all()
+        saved = {r.domain: r.weight for r in rows}
+    weights = {key: saved.get(key, 1.0) for key, _, _ in dom.LIFE_DOMAINS}
+    return dom.compute_life(target, weights)
+
+
 def _hash_messages(system: list[dict[str, Any]], messages: list[dict[str, Any]]) -> str:
     blob = json.dumps({"system": system, "messages": messages}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
@@ -830,6 +842,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     today_payload.update(_gather_today_activity(target))
     today_payload["recent_trends"] = _gather_recent_trends(target)
+    today_payload["life_domains"] = _gather_life_domains(target)
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 

@@ -184,3 +184,13 @@ def test_gather_recent_trends_builds_directions(db_engine):
     assert trends["sleep"]["direction"] in ("improving", "stable", "declining", None)
     # コンパクト化のため series は含めない
     assert "series" not in trends["sleep"]
+
+
+def test_gather_life_domains(db_engine):
+    from datetime import date
+
+    from app.llm.client import _gather_life_domains
+
+    out = _gather_life_domains(date.today())
+    assert "life_score" in out
+    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech"}
