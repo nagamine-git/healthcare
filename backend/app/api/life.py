@@ -39,11 +39,12 @@ def _save_weights(weights: dict[str, float]) -> None:
                 row.weight = float(weight)
 
 
-def _detail(key: str, target: date) -> str | None:
+def _detail(key: str, target: date, weight: float = 1.0) -> str | None:
     if key == "meditation":
         m = dom.meditation_minutes(target)
-        tgt = get_settings().meditation_target_min
-        return f"{m:.0f}/{tgt}分" if m is not None else None
+        # 重み＝期待水準なので実効目標 (目標 × weight) を表示する
+        tgt = get_settings().meditation_target_min * (weight if weight > 0 else 1.0)
+        return f"{m:.0f}/{tgt:g}分" if m is not None else None
     if key == "speech":
         return "発話練習スコア (speech-coach)"
     if key == "health":
@@ -61,7 +62,7 @@ def _state(target: date) -> dict[str, Any]:
     weights = _load_weights()
     life = dom.compute_life(target, weights)
     for d in life["domains"]:
-        d["detail"] = _detail(d["key"], target)
+        d["detail"] = _detail(d["key"], target, d["weight"])
     presets = [{"key": k, "label": v["label"]} for k, v in dom.DOMAIN_WEIGHT_PRESETS.items()]
     return {
         "life_score": life["life_score"],

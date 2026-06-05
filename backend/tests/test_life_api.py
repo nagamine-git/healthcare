@@ -51,6 +51,24 @@ def test_put_weights(app_client):
     assert med["weight"] == 3.0
 
 
+def test_life_includes_raw_achievement_and_scaled_detail(app_client):
+    """achievement は補正後、raw_achievement は生値、瞑想 detail は実効目標表示。"""
+    from app.db import session_scope
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date.today()
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=6.0))
+
+    resp = app_client.put("/api/life/weights", json={"weights": {"meditation": 0.5}})
+    assert resp.status_code == 200
+    med = next(d for d in resp.json()["domains"] if d["key"] == "meditation")
+    assert med["raw_achievement"] == 40.0  # 6/15分
+    assert med["achievement"] == 80.0  # 40 / 0.5
+    assert med["detail"] == "6/7.5分"  # 実効目標 15 × 0.5
+
+
 def test_apply_preset(app_client):
     resp = app_client.post("/api/life/preset/mindful")
     assert resp.status_code == 200

@@ -71,20 +71,73 @@ def test_health_achievement_averages(db_engine):
     assert a is not None and 0 <= a <= 100
 
 
-def test_compute_life_weighted(db_engine):
+def test_compute_life_weight_scales_expectation(db_engine):
+    """重み＝期待水準: achievement は min(100, 生達成度/weight) に補正される。"""
     from app.scoring import domains
     from app.scoring.timewindow import jst_day_bounds
 
     today = date(2026, 5, 20)
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
-        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=15.0))  # 100点
+        # 7.5分 → 生達成度 50 (目標15分)
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=7.5))
+    out = domains.compute_life(today, {"meditation": 0.5})
+    med = next(d for d in out["domains"] if d["key"] == "meditation")
+    assert med["raw_achievement"] == 50.0
+    assert med["achievement"] == 100.0  # 50 / 0.5 → 100 (期待半分なら満点)
+    assert med["weight"] == 0.5
+
+
+def test_compute_life_weight_above_one_caps(db_engine):
+    """weight > 1 は要求が上がる: 生100点でも 100/weight 止まり。"""
+    from app.scoring import domains
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date(2026, 5, 20)
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=15.0))
+    out = domains.compute_life(today, {"meditation": 2.0})
+    med = next(d for d in out["domains"] if d["key"] == "meditation")
+    assert med["raw_achievement"] == 100.0
+    assert med["achievement"] == 50.0
+
+
+def test_compute_life_simple_mean(db_engine):
+    """ライフスコアは補正後スコアの単純平均 (null は除外)。"""
+    from app.scoring import domains
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date(2026, 5, 20)
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=7.5))
         s.add(SleepSession(date=today, source="garmin", total_min=480, sleep_score=80))
         s.add(WeightSample(ts=datetime.combine(today, datetime.min.time()),
                            weight_kg=56.5, body_fat_pct=14.0, source="hae"))
-    out = domains.compute_life(today, {"health": 1.0, "meditation": 3.0})
-    assert out["life_score"] is not None
-    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}
+    out = domains.compute_life(today, {"health": 1.0, "meditation": 0.5})
     med = next(d for d in out["domains"] if d["key"] == "meditation")
+    health = next(d for d in out["domains"] if d["key"] == "health")
     assert med["achievement"] == 100.0
-    assert med["weight"] == 3.0
+    # 単純平均 (speech/learning/work は null で除外)
+    expected = round((health["achievement"] + med["achievement"]) / 2, 2)
+    assert out["life_score"] == expected
+
+
+def test_compute_life_weight_zero_excluded(db_engine):
+    """weight=0 のドメインは集計から除外され、achievement は生値のまま。"""
+    from app.scoring import domains
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date(2026, 5, 20)
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=7.5))
+        s.add(SleepSession(date=today, source="garmin", total_min=480, sleep_score=80))
+        s.add(WeightSample(ts=datetime.combine(today, datetime.min.time()),
+                           weight_kg=56.5, body_fat_pct=14.0, source="hae"))
+    out = domains.compute_life(today, {"health": 1.0, "meditation": 0.0})
+    med = next(d for d in out["domains"] if d["key"] == "meditation")
+    health = next(d for d in out["domains"] if d["key"] == "health")
+    assert med["achievement"] == 50.0  # 生値のまま
+    assert out["life_score"] == health["achievement"]  # 瞑想は集計外

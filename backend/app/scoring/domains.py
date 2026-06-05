@@ -156,17 +156,31 @@ LIFE_DOMAINS: list[tuple[str, str, Callable[[date_type], float | None]]] = [
 
 
 def compute_life(target: date_type, weights: dict[str, float]) -> dict[str, Any]:
-    """各ドメインの達成度と重み付きライフスコアを返す。"""
+    """各ドメインの期待調整済みスコアとライフスコアを返す。
+
+    重みは期待水準: achievement = min(100, 生達成度 / weight)。
+    weight 0.5 なら半分の成果で満点、weight 2.0 なら2倍要求。
+    weight=0 のドメインは「今は対象外」として集計から除外 (achievement は生値)。
+    ライフスコアは補正後スコアの単純平均 (null と weight=0 は除外)。
+    """
     domains: list[dict[str, Any]] = []
     for key, label, fn in LIFE_DOMAINS:
-        ach_val = fn(target)
+        raw = fn(target)
+        weight = float(weights.get(key, 1.0))
+        if raw is None:
+            adjusted = None
+        elif weight > 0:
+            adjusted = round(min(100.0, raw / weight), 2)
+        else:
+            adjusted = raw
         domains.append({
             "key": key,
             "label": label,
-            "achievement": ach_val,
-            "weight": float(weights.get(key, 1.0)),
+            "achievement": adjusted,
+            "raw_achievement": raw,
+            "weight": weight,
         })
-    num = sum(d["weight"] * d["achievement"] for d in domains if d["achievement"] is not None)
-    den = sum(d["weight"] for d in domains if d["achievement"] is not None)
-    life_score = round(num / den, 2) if den > 0 else None
+    vals = [d["achievement"] for d in domains
+            if d["achievement"] is not None and d["weight"] > 0]
+    life_score = round(sum(vals) / len(vals), 2) if vals else None
     return {"life_score": life_score, "domains": domains}
