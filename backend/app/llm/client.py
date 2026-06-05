@@ -860,12 +860,12 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
 
     # ルールベース fallback advice を準備 (LLM 不通時に使う)
     def _build_rule_based_fallback() -> dict[str, Any]:
-        from zoneinfo import ZoneInfo as _ZI
+        from zoneinfo import ZoneInfo
 
         from app.scoring.fallback_advice import build_fallback_advice
 
         s = get_settings()
-        now_jst = datetime.now(_ZI(s.app_tz))
+        now_jst = datetime.now(ZoneInfo(s.app_tz))
         return build_fallback_advice(
             now=now_jst,
             alerts=today_payload.get("alerts"),

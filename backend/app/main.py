@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import admin as admin_api
 from app.api import alcohol as alcohol_api
 from app.api import caffeine as caffeine_api
-from app.api import migraine as migraine_api
 from app.api import dashboard, debug, health_export
+from app.api import migraine as migraine_api
 from app.config import get_settings
 from app.db import create_all, init_engine
 from app.logging import configure_logging, get_logger

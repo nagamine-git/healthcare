@@ -204,7 +204,8 @@ async def today(
 
         # --- Wellbeing Alerts (ヤバい状態の自動検知) ---
         from app.config import get_settings as _get_settings
-        from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict as alert_to_dict
+        from app.scoring.wellbeing_alerts import evaluate_alerts
+        from app.scoring.wellbeing_alerts import to_dict as alert_to_dict
 
         _s = _get_settings()
         alerts_raw = evaluate_alerts(
