@@ -19,8 +19,35 @@ const DIR_COLOR: Record<TrendDirection, string> = {
 const LINE = "#34d399";
 const BAND = "#34d39922";
 const REG = "#f59e0b";
+const TICK = { fontSize: 10, fill: "#64748b" } as const;
 
-function TrendCard({ metric, granularity, hint }: {
+/** 355 → "5時間55分" (睡眠の分表示を読みやすくする) */
+function fmtSleepMin(v: number): string {
+  const h = Math.floor(v / 60);
+  const m = Math.round(v % 60);
+  return `${h}時間${m.toString().padStart(2, "0")}分`;
+}
+
+function fmtCurrent(metricKey: TrendMetricKey, metric: TrendMetric): string {
+  if (metric.current_raw == null) return "--";
+  if (metricKey === "sleep") return fmtSleepMin(metric.current_raw);
+  return `${metric.current_raw}${metric.unit}`;
+}
+
+/** Y軸目盛: 睡眠は時間単位、他は小数1桁まで */
+function fmtTick(metricKey: TrendMetricKey, v: number): string {
+  if (metricKey === "sleep") return `${Math.round(v / 60)}h`;
+  return Number.isInteger(v) ? `${v}` : v.toFixed(1);
+}
+
+/** X軸目盛: "2026-05-10" → "5/10" */
+function fmtDate(d: string): string {
+  const parts = d.split("-");
+  return parts.length === 3 ? `${+parts[1]}/${+parts[2]}` : d;
+}
+
+function TrendCard({ metricKey, metric, granularity, hint }: {
+  metricKey: TrendMetricKey;
   metric: TrendMetric;
   granularity: "daily" | "weekly";
   hint?: string;
@@ -74,13 +101,24 @@ function TrendCard({ metric, granularity, hint }: {
     border: "1px solid #334155",
     fontSize: 12,
   };
+  const tooltipFormatter = (v: number | string) =>
+    metricKey === "sleep" && typeof v === "number" ? fmtSleepMin(v) : `${v}${metric.unit}`;
+
+  const xAxis = (
+    <XAxis dataKey="date" tickFormatter={fmtDate} tick={TICK}
+           tickLine={false} axisLine={false} minTickGap={32} interval="preserveStartEnd" />
+  );
+  const yAxis = (
+    <YAxis domain={[lowFn, highFn]} tick={TICK} tickFormatter={(v: number) => fmtTick(metricKey, v)}
+           tickLine={false} axisLine={false} width={34} tickCount={4} />
+  );
 
   return (
     <div className="rounded-2xl bg-slate-900/70 p-4">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-sm text-slate-200">{metric.label}</span>
         <span className="text-2xl font-light tabular-nums text-slate-100">
-          {metric.current_raw != null ? `${metric.current_raw}${metric.unit}` : "--"}
+          {fmtCurrent(metricKey, metric)}
         </span>
       </div>
       {hint ? <div className="mb-1 text-xs text-slate-500">{hint}</div> : null}
@@ -93,22 +131,22 @@ function TrendCard({ metric, granularity, hint }: {
           {wow ? `前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(0)}` : ""}
         </span>
       </div>
-      <div className="h-32">
+      <div className="h-36">
         <ResponsiveContainer width="100%" height="100%">
           {granularity === "weekly" ? (
             <ComposedChart data={merged}>
-              <XAxis dataKey="date" hide />
-              <YAxis hide domain={[lowFn, highFn]} />
-              <Tooltip contentStyle={tooltipStyle} />
+              {xAxis}
+              {yAxis}
+              <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
               {idealOverlay}
               <Bar dataKey="value" fill={LINE} radius={[3, 3, 0, 0]} />
               {regLine}
             </ComposedChart>
           ) : (
             <LineChart data={merged}>
-              <XAxis dataKey="date" hide />
-              <YAxis hide domain={[lowFn, highFn]} />
-              <Tooltip contentStyle={tooltipStyle} />
+              {xAxis}
+              {yAxis}
+              <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
               {idealOverlay}
               <Line type="monotone" dataKey="value" stroke={LINE} strokeWidth={2} dot={false} />
               {regLine}
@@ -152,8 +190,8 @@ export function TrendsSection({ hints, extras }: {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ORDER.map((key) => (
-            <TrendCard key={key} metric={query.data.metrics[key]} granularity={granularity}
-                       hint={hints?.[key]} />
+            <TrendCard key={key} metricKey={key} metric={query.data.metrics[key]}
+                       granularity={granularity} hint={hints?.[key]} />
           ))}
           {extras && extras.length > 0 ? (
             <div className="grid grid-cols-2 gap-3">
