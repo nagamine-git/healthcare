@@ -482,6 +482,21 @@ export type DebugSources = {
   llm_comments: Array<Record<string, unknown>>;
 };
 
+export type LifeDomain = {
+  key: string;
+  label: string;
+  achievement: number | null;
+  weight: number;
+  detail: string | null;
+};
+export type LifePreset = { key: string; label: string };
+export type LifeResponse = {
+  life_score: number | null;
+  domains: LifeDomain[];
+  presets: LifePreset[];
+  generated_at: string;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -574,4 +589,12 @@ export const api = {
     }),
   alcoholDelete: (id: number) =>
     request<{ deleted: number }>(`/api/alcohol/${id}`, { method: "DELETE" }),
+  life: () => request<LifeResponse>("/api/life"),
+  setLifeWeights: (weights: Record<string, number>) =>
+    request<LifeResponse>("/api/life/weights", {
+      method: "PUT",
+      body: JSON.stringify({ weights }),
+    }),
+  applyLifePreset: (name: string) =>
+    request<LifeResponse>(`/api/life/preset/${name}`, { method: "POST" }),
 };

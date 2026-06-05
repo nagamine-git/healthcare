@@ -1,0 +1,109 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import type { LifeDomain } from "../lib/api";
+
+function barColor(ach: number | null): string {
+  if (ach == null) return "bg-slate-700";
+  if (ach >= 70) return "bg-emerald-500";
+  if (ach >= 40) return "bg-amber-500";
+  return "bg-rose-500";
+}
+
+function DomainRow({
+  domain,
+  onWeight,
+}: {
+  domain: LifeDomain;
+  onWeight: (w: number) => void;
+}) {
+  const ach = domain.achievement;
+  return (
+    <div className="rounded-xl bg-slate-900/70 p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm text-slate-200">{domain.label}</span>
+        <span className="text-lg font-light tabular-nums text-slate-100">
+          {ach != null ? Math.round(ach) : "--"}
+        </span>
+      </div>
+      {domain.detail && <div className="text-[10px] text-slate-500">{domain.detail}</div>}
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className={`h-full rounded-full ${barColor(ach)}`} style={{ width: `${ach ?? 0}%` }} />
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-[10px] text-slate-500">重み</span>
+        <input
+          type="range"
+          min={0}
+          max={3}
+          step={0.5}
+          value={domain.weight}
+          onChange={(e) => onWeight(parseFloat(e.target.value))}
+          className="flex-1 accent-emerald-500"
+        />
+        <span className="w-8 text-right text-[10px] tabular-nums text-slate-400">
+          {domain.weight.toFixed(1)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function LifeSection() {
+  const qc = useQueryClient();
+  const life = useQuery({ queryKey: ["life"], queryFn: api.life });
+  const setWeights = useMutation({
+    mutationFn: (weights: Record<string, number>) => api.setLifeWeights(weights),
+    onSuccess: (data) => qc.setQueryData(["life"], data),
+  });
+  const applyPreset = useMutation({
+    mutationFn: (name: string) => api.applyLifePreset(name),
+    onSuccess: (data) => qc.setQueryData(["life"], data),
+  });
+
+  const data = life.data;
+
+  return (
+    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wider text-slate-400">
+          理想への総合接近度
+        </span>
+        <span className="text-3xl font-light tabular-nums text-emerald-300">
+          {data?.life_score != null ? Math.round(data.life_score) : "--"}
+        </span>
+      </div>
+
+      {data && (
+        <div className="flex flex-wrap gap-1.5">
+          {data.presets.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => applyPreset.mutate(p.key)}
+              className="rounded-full bg-slate-800/70 px-3 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {life.isLoading ? (
+        <div className="text-sm text-slate-400">読み込み中...</div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {data?.domains.map((d) => (
+            <DomainRow
+              key={d.key}
+              domain={d}
+              onWeight={(w) => {
+                const weights: Record<string, number> = {};
+                for (const dd of data.domains) weights[dd.key] = dd.key === d.key ? w : dd.weight;
+                setWeights.mutate(weights);
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
