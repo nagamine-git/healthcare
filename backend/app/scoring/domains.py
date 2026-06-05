@@ -2,7 +2,7 @@
 
 各ドメインは target 日の達成度 (0-100, 高いほど理想に近い) を返す。
 - health: 既存トレンド6指標の最新達成度の平均
-- meditation: 当日 mindful_minutes 合計の目標達成度
+- meditation: 当日の瞑想分 (mindful_minutes + breathwork) 合計の目標達成度
 DB は内部で session_scope を使う (呼び出し側は target 日付だけ渡す)。
 """
 
@@ -80,7 +80,9 @@ def health_achievement(target: date_type) -> float | None:
 
 
 def meditation_minutes(target: date_type) -> float | None:
-    """当日 (JST) の mindful_minutes 合計。計測が1件も無ければ None。"""
+    """当日 (JST) の瞑想分合計。mindful_minutes (HAE) と breathwork ワークアウト
+    (garmin) を合算する。計測が1件も無ければ None。"""
+    from app.models import Workout
     from app.scoring.timewindow import jst_day_bounds
 
     start, end = jst_day_bounds(target)
@@ -92,9 +94,18 @@ def meditation_minutes(target: date_type) -> float | None:
                 MetricSample.ts < end,
             )
         ).all()
-    if not rows:
+        breath = session.execute(
+            select(Workout.duration_s).where(
+                Workout.type == "breathwork",
+                Workout.start >= start,
+                Workout.start < end,
+            )
+        ).all()
+    if not rows and not breath:
         return None
-    return round(sum(float(r[0]) for r in rows if r[0] is not None), 1)
+    total = sum(float(r[0]) for r in rows if r[0] is not None)
+    total += sum(float(b[0]) / 60.0 for b in breath if b[0] is not None)
+    return round(total, 1)
 
 
 def meditation_achievement(target: date_type) -> float | None:
