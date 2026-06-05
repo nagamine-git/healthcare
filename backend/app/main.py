@@ -9,6 +9,7 @@ from app.api import admin as admin_api
 from app.api import alcohol as alcohol_api
 from app.api import caffeine as caffeine_api
 from app.api import dashboard, debug, health_export
+from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.config import get_settings
 from app.db import create_all, init_engine
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_export.router)
     app.include_router(dashboard.router)
+    app.include_router(life_api.router)
     app.include_router(admin_api.router)
     app.include_router(caffeine_api.router)
     app.include_router(migraine_api.router)

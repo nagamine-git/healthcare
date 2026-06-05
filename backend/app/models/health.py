@@ -208,5 +208,14 @@ class SourceSync(Base):
     cursor_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class DomainWeight(Base):
+    """ライフドメインの重み (ユーザーが調整。プリセット適用 or スライダー)。"""
+
+    __tablename__ = "domain_weight"
+
+    domain: Mapped[str] = mapped_column(String(32), primary_key=True)
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

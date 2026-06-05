@@ -192,6 +192,9 @@ class Settings(BaseSettings):
     # 重度の急降下閾値 (台風接近など)
     pressure_drop_severe_hpa: float = 10.0
 
+    # --- ライフドメイン (自己目標管理) ---
+    meditation_target_min: int = 15  # 1 日の瞑想目標分 (mindful_minutes 合計の目標)
+
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"
     scheduler_recompute_cron: str = "15 * * * *"
