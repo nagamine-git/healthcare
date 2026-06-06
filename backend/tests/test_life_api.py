@@ -69,6 +69,32 @@ def test_life_includes_raw_achievement_and_scaled_detail(app_client):
     assert med["detail"] == "6/7.5分"  # 実効目標 15 × 0.5
 
 
+def test_life_freshness_and_coverage(app_client):
+    """各ドメインに最終データ日と stale フラグ、トップに記録率 coverage が付く。"""
+    from app.db import session_scope
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date.today()
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=10.0))
+
+    resp = app_client.get("/api/life")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    med = next(d for d in body["domains"] if d["key"] == "meditation")
+    assert med["last_data_at"] == today.isoformat()
+    assert med["stale"] is False
+
+    learning = next(d for d in body["domains"] if d["key"] == "learning")
+    assert learning["last_data_at"] is None
+    assert learning["stale"] is True  # データ未受信は stale 扱い
+
+    # 既定重み 1.0 × 5 ドメインのうち達成度があるのは瞑想だけ
+    assert body["coverage"] == {"active": 1, "total": 5}
+
+
 def test_apply_preset(app_client):
     resp = app_client.post("/api/life/preset/mindful")
     assert resp.status_code == 200

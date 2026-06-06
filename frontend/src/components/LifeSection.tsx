@@ -9,6 +9,14 @@ function barColor(ach: number | null): string {
   return "bg-rose-500";
 }
 
+/** "2026-01-04" → "1/4 (152日前)" */
+function staleLabel(lastDataAt: string | null): string {
+  if (!lastDataAt) return "データ未受信";
+  const last = new Date(lastDataAt);
+  const days = Math.floor((Date.now() - last.getTime()) / 86_400_000);
+  return `最終データ ${last.getMonth() + 1}/${last.getDate()} (${days}日前)`;
+}
+
 function DomainRow({
   domain,
   onWeight,
@@ -26,6 +34,9 @@ function DomainRow({
         </span>
       </div>
       {domain.detail && <div className="text-[10px] text-slate-500">{domain.detail}</div>}
+      {domain.stale && domain.weight > 0 && (
+        <div className="text-[10px] text-amber-400">⚠ {staleLabel(domain.last_data_at)}</div>
+      )}
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
         <div className={`h-full rounded-full ${barColor(ach)}`} style={{ width: `${ach ?? 0}%` }} />
       </div>
@@ -68,8 +79,16 @@ export function LifeSection() {
         <span className="text-xs uppercase tracking-wider text-slate-400">
           理想への総合接近度
         </span>
-        <span className="text-3xl font-light tabular-nums text-emerald-300">
-          {data?.life_score != null ? Math.round(data.life_score) : "--"}
+        <span className="flex items-baseline gap-2">
+          {data?.coverage && data.coverage.active < data.coverage.total && (
+            <span className="text-[10px] tabular-nums text-amber-400/80"
+                  title="達成度データがあるドメイン数。少ないほどライフスコアは一部のドメインだけの平均になる">
+              記録 {data.coverage.active}/{data.coverage.total}
+            </span>
+          )}
+          <span className="text-3xl font-light tabular-nums text-emerald-300">
+            {data?.life_score != null ? Math.round(data.life_score) : "--"}
+          </span>
         </span>
       </div>
 

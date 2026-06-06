@@ -57,6 +57,27 @@ def test_meditation_none_when_no_data(db_engine):
     assert domains.meditation_achievement(date(2026, 5, 20)) is None
 
 
+def test_domain_last_data(db_engine):
+    """ドメイン単位の最終データ日。ソース死活では中身の途絶を検出できないため。"""
+    from app.models import ExternalDomainEntry, Workout
+    from app.scoring import domains
+    from app.scoring.timewindow import jst_day_bounds
+
+    old_day = date(2026, 1, 4)
+    new_day = date(2026, 5, 20)
+    old_start, _ = jst_day_bounds(old_day)
+    new_start, _ = jst_day_bounds(new_day)
+    with session_scope() as s:
+        # 瞑想: mindful_minutes は古く、breathwork が新しい → 新しい方を採用
+        s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=old_start, value=3.0))
+        s.add(Workout(id="bw-ld", source="garmin", start=new_start + timedelta(hours=8),
+                      type="breathwork", duration_s=300))
+        s.add(ExternalDomainEntry(domain="learning", date=old_day, achievement=60.0))
+    assert domains.domain_last_data("meditation") == new_day
+    assert domains.domain_last_data("learning") == old_day
+    assert domains.domain_last_data("work") is None  # データ未受信
+
+
 def test_health_achievement_averages(db_engine):
     from app.scoring import domains
 

@@ -154,6 +154,50 @@ LIFE_DOMAINS: list[tuple[str, str, Callable[[date_type], float | None]]] = [
     ("work", "仕事", _external_achievement("work")),
 ]
 
+# この日数を超えてデータが無いドメインは「途絶 (stale)」とみなす
+STALE_AFTER_DAYS: dict[str, int] = {
+    "health": 2, "meditation": 7, "speech": 7, "learning": 7, "work": 7,
+}
+
+
+def _jst_date(ts) -> date_type:
+    from datetime import timedelta
+    return (ts + timedelta(hours=9)).date()
+
+
+def domain_last_data(key: str) -> date_type | None:
+    """ドメインの最終データ日 (JST)。供給パイプラインの死活監視に使う。
+
+    ソース単位の死活 (source_sync) では「ソースは生きているが特定メトリクスだけ
+    停止」(例: HAE は同期成功し続けつつ mindful_minutes だけ途絶) を検出できない
+    ため、ドメインが実際に読むデータの最終日を見る。
+    """
+    from sqlalchemy import func
+
+    from app.models import ExternalDomainEntry, SleepSession, SpeechSession, Workout
+
+    with session_scope() as session:
+        if key == "health":
+            return session.execute(select(func.max(SleepSession.date))).scalar()
+        if key == "meditation":
+            mindful_ts = session.execute(
+                select(func.max(MetricSample.ts)).where(
+                    MetricSample.metric_key == "mindful_minutes")
+            ).scalar()
+            breath_ts = session.execute(
+                select(func.max(Workout.start)).where(Workout.type == "breathwork")
+            ).scalar()
+            dates = [_jst_date(t) for t in (mindful_ts, breath_ts) if t is not None]
+            return max(dates) if dates else None
+        if key == "speech":
+            return session.execute(select(func.max(SpeechSession.date))).scalar()
+        if key in ("learning", "work"):
+            return session.execute(
+                select(func.max(ExternalDomainEntry.date)).where(
+                    ExternalDomainEntry.domain == key)
+            ).scalar()
+    return None
+
 
 def compute_life(target: date_type, weights: dict[str, float]) -> dict[str, Any]:
     """各ドメインの期待調整済みスコアとライフスコアを返す。

@@ -63,10 +63,20 @@ def _state(target: date) -> dict[str, Any]:
     life = dom.compute_life(target, weights)
     for d in life["domains"]:
         d["detail"] = _detail(d["key"], target, d["weight"])
+        last = dom.domain_last_data(d["key"])
+        d["last_data_at"] = last.isoformat() if last else None
+        threshold = dom.STALE_AFTER_DAYS.get(d["key"], 7)
+        d["stale"] = last is None or (target - last).days > threshold
+    active_domains = [d for d in life["domains"] if d["weight"] > 0]
+    coverage = {
+        "active": sum(1 for d in active_domains if d["achievement"] is not None),
+        "total": len(active_domains),
+    }
     presets = [{"key": k, "label": v["label"]} for k, v in dom.DOMAIN_WEIGHT_PRESETS.items()]
     return {
         "life_score": life["life_score"],
         "domains": life["domains"],
+        "coverage": coverage,
         "presets": presets,
         "generated_at": datetime.now(UTC).isoformat(),
     }

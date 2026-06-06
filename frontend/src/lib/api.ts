@@ -486,13 +486,19 @@ export type LifeDomain = {
   key: string;
   label: string;
   achievement: number | null;
+  raw_achievement: number | null;
   weight: number;
   detail: string | null;
+  /** このドメインが実際に読むデータの最終日 (供給死活監視) */
+  last_data_at: string | null;
+  stale: boolean;
 };
 export type LifePreset = { key: string; label: string };
 export type LifeResponse = {
   life_score: number | null;
   domains: LifeDomain[];
+  /** 記録率: weight>0 のドメインのうち達成度データがある数 */
+  coverage: { active: number; total: number };
   presets: LifePreset[];
   generated_at: string;
 };
