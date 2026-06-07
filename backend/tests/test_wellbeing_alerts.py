@@ -135,6 +135,32 @@ def test_moh_high_when_12_or_more_painkillers(session):
     assert "moh_risk_high" in codes
 
 
+def test_moh_counts_distinct_days_not_doses(session):
+    """同じ日に複数回服用しても 1 日として数える (ICHD-3 は服用日数基準)。"""
+    from app.models import CaffeineIntake
+
+    today = date(2026, 5, 23)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    # 4 日間、各日 5 錠ずつ = 20 レコードだが 4 日 → どの MOH 域にも入らない
+    for day in range(4):
+        for dose in range(5):
+            session.add(
+                CaffeineIntake(
+                    ts=now - timedelta(days=day, hours=dose),
+                    source="ibuquick",
+                    amount=1.0,
+                    unit="錠",
+                    mg=40.0,
+                )
+            )
+    session.flush()
+
+    alerts = evaluate_alerts(session, today)
+    codes = [a.code for a in alerts]
+    assert "moh_risk_high" not in codes
+    assert "moh_risk_mid" not in codes
+
+
 def test_moh_mid_when_8_to_11(session):
     from app.models import CaffeineIntake
 
@@ -260,6 +286,20 @@ def test_sleep_spo2_single_low_night_does_not_trigger(session):
     session.flush()
     alerts = evaluate_alerts(session, today)
     assert all(a.code != "sleep_spo2_low" for a in alerts)
+
+
+def test_sleep_spo2_low_via_lowest_desaturation(session):
+    """平均は正常でも最低値が複数夜 80% 未満なら無呼吸スクリーニングで発火。"""
+    today = date(2026, 5, 23)
+    for i in range(3):
+        _add_metric(session, "sleep_spo2_avg", today, 95.0, i)  # avg は正常
+    _add_metric(session, "sleep_spo2_lowest", today, 78.0, 0)
+    _add_metric(session, "sleep_spo2_lowest", today, 79.0, 1)
+    _add_metric(session, "sleep_spo2_lowest", today, 88.0, 2)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    a = next((x for x in alerts if x.code == "sleep_spo2_low"), None)
+    assert a is not None
 
 
 def test_respiration_elevated_vs_baseline(session):

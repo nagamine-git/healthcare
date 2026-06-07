@@ -804,17 +804,17 @@ async def trends(
 
     mid_pairs = _physio("sleep_midpoint_hour")
     if mid_pairs:
-        import statistics
+        from app.scoring.circadian import circular_mean_hour, circular_sd_hours
 
         mid_values = [v for _, v in mid_pairs]
-        median = statistics.median(mid_values)
+        center = circular_mean_hour(mid_values) or 3.0
         recent = [v for d, v in mid_pairs if d > today - timedelta(days=14)]
-        sd14 = statistics.stdev(recent) if len(recent) >= 2 else None
+        sd14 = circular_sd_hours(recent)
         metrics["sleep_midpoint"] = _metric(
             "睡眠中点 (リズム)", "時",
-            {"type": "band", "lo": round(median - 0.75, 2), "hi": round(median + 0.75, 2)},
+            {"type": "band", "lo": round(center - 0.75, 2), "hi": round(center + 0.75, 2)},
             mid_pairs,
-            _ach_map(mid_pairs, lambda v: ach.band_achievement(v, median - 0.75, median + 0.75, 0.75)),
+            _ach_map(mid_pairs, lambda v: ach.band_achievement(v, center - 0.75, center + 0.75, 0.75)),
             subtitle=f"ばらつき ±{sd14:.1f}h (14日)" if sd14 is not None else None,
         )
 

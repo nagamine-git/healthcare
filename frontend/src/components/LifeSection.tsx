@@ -2,13 +2,17 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { api } from "../lib/api";
+import { achState } from "../lib/achievement";
 import type { LifeDomain } from "../lib/api";
 
 function barColor(ach: number | null): string {
-  if (ach == null) return "bg-slate-700";
-  if (ach >= 70) return "bg-emerald-500";
-  if (ach >= 40) return "bg-amber-500";
-  return "bg-rose-500";
+  // 閾値は lib/achievement に一元化 (StatusLamps と共有)
+  switch (achState(ach)) {
+    case "good": return "bg-emerald-500";
+    case "warn": return "bg-amber-500";
+    case "bad": return "bg-rose-500";
+    default: return "bg-slate-700";
+  }
 }
 
 /** "2026-01-04" → "1/4 (152日前)" */

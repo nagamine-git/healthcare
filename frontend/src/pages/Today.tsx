@@ -204,7 +204,11 @@ export function TodayPage({ onOpenDebug }: Props) {
       </header>
 
       {/* ===== 🚥 計器盤ランプ (ファーストビューの状態一覧) ===== */}
-      <StatusLamps alerts={data.alerts} pressure={data.pressure} />
+      <StatusLamps
+        alerts={data.alerts}
+        pressure={data.pressure}
+        igniteSignal={data.last_data_update_at ?? data.date}
+      />
 
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}

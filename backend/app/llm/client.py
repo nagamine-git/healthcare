@@ -693,8 +693,6 @@ def _gather_physio(target: date_type) -> dict[str, Any]:
 
     readiness は要因分解 (raw_json) 付き。睡眠規則性は中点の 14 日 SD。
     """
-    import statistics
-
     from app.models import MetricSample
     from app.scoring.trend_sources import metric_daily_series
 
@@ -714,11 +712,12 @@ def _gather_physio(target: date_type) -> dict[str, Any]:
 
     mid_pairs = metric_daily_series("sleep_midpoint_hour", target, 14)
     if mid_pairs:
+        from app.scoring.circadian import circular_sd_hours
+
         values = [v for _, v in mid_pairs]
         out["sleep_midpoint_hour"] = round(values[-1], 2)
-        out["sleep_midpoint_sd_14d_hour"] = (
-            round(statistics.stdev(values), 2) if len(values) >= 2 else None
-        )
+        sd = circular_sd_hours(values)
+        out["sleep_midpoint_sd_14d_hour"] = round(sd, 2) if sd is not None else None
 
     # Training Readiness: スコア + 要因分解 (raw_json)
     with session_scope() as session:

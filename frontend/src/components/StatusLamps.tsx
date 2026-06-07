@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { achState, type AchState } from "../lib/achievement";
 import type {
   Pressure,
   TrendMetric,
@@ -33,18 +34,20 @@ import type {
  * マウント時は全灯が白く一閃する「イグニッションチェック」。
  */
 
-type LampState = "good" | "warn" | "bad" | "off";
+type LampState = AchState;
 
 const STATE_CLASS: Record<LampState, string> = {
-  good: "text-emerald-300 bg-emerald-400/10",
+  // good は発光を弱め、warn/bad を相対的に目立たせる (図と地の分離)
+  good: "text-emerald-300/90 bg-emerald-400/5",
   warn: "text-amber-300 bg-amber-400/10",
   bad: "text-rose-400 bg-rose-500/10 lamp-throb",
   off: "text-slate-700/70",
 };
 
-// SVG は textShadow が効かないので drop-shadow フィルタで発光させる
+// SVG は textShadow が効かないので drop-shadow フィルタで発光させる。
+// good は静かな点灯、warn/bad だけ強く光らせる。
 const STATE_GLOW: Record<LampState, string> = {
-  good: "drop-shadow(0 0 5px rgba(52,211,153,.65))",
+  good: "none",
   warn: "drop-shadow(0 0 5px rgba(252,211,77,.65))",
   bad: "drop-shadow(0 0 6px rgba(251,113,133,.8))",
   off: "none",
@@ -53,13 +56,6 @@ const STATE_GLOW: Record<LampState, string> = {
 const DIR_LABEL: Record<string, string> = {
   improving: "改善傾向", stable: "横ばい", declining: "低下傾向",
 };
-
-function achState(ach: number | null | undefined): LampState {
-  if (ach == null) return "off";
-  if (ach >= 70) return "good";
-  if (ach >= 40) return "warn";
-  return "bad";
-}
 
 function fmtValue(key: TrendMetricKey, m: TrendMetric): string {
   if (m.current_raw == null) return "--";
@@ -107,41 +103,52 @@ function LampCell({
   lamp,
   index,
   selected,
+  ignite,
   onTap,
 }: {
   lamp: Lamp;
   index: number;
   selected: boolean;
+  ignite: boolean;
   onTap: () => void;
 }) {
   const Icon = lamp.icon;
+  // reduced-motion 時は点滅の代わりにリングで bad を静的強調
+  const badRing = lamp.state === "bad" ? "motion-reduce:ring-1 motion-reduce:ring-rose-500/80" : "";
   return (
     <button
       type="button"
       aria-label={lamp.label}
       aria-expanded={selected}
       onClick={onTap}
-      className={`relative grid h-8 w-8 shrink-0 place-items-center rounded-md transition-transform active:scale-90 ${STATE_CLASS[lamp.state]} ${
-        selected ? "ring-1 ring-slate-400/70" : ""
-      }`}
+      // ヒット領域 44px (HIG/Material 準拠) を確保しつつアイコンは 8px 角の発光面に集約
+      className="relative grid h-11 w-11 shrink-0 place-items-center"
     >
-      <Icon size={16} strokeWidth={2.2} style={{ filter: STATE_GLOW[lamp.state] }} />
-      {lamp.badge != null && lamp.badge > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-rose-500 px-0.5 text-[9px] font-bold text-white">
-          {lamp.badge}
-        </span>
-      )}
-      {/* イグニッションチェックの一閃 */}
       <span
-        aria-hidden
-        className="lamp-ignite-overlay pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-slate-200/10 text-slate-100"
-        style={{ animationDelay: `${index * 45}ms` }}
+        className={`relative grid h-8 w-8 place-items-center rounded-md transition-transform active:scale-90 ${STATE_CLASS[lamp.state]} ${badRing} ${
+          selected ? "ring-1 ring-slate-400/70" : ""
+        }`}
       >
-        <Icon
-          size={16}
-          strokeWidth={2.2}
-          style={{ filter: "drop-shadow(0 0 7px rgba(241,245,249,.9))" }}
-        />
+        <Icon size={16} strokeWidth={2.2} style={{ filter: STATE_GLOW[lamp.state] }} />
+        {lamp.badge != null && lamp.badge > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-rose-500 px-0.5 text-[9px] font-bold text-white">
+            {lamp.badge}
+          </span>
+        )}
+        {/* イグニッションチェックの一閃 (初回 / 更新時のみ) */}
+        {ignite && (
+          <span
+            aria-hidden
+            className="lamp-ignite-overlay pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-slate-200/10 text-slate-100"
+            style={{ animationDelay: `${index * 45}ms` }}
+          >
+            <Icon
+              size={16}
+              strokeWidth={2.2}
+              style={{ filter: "drop-shadow(0 0 7px rgba(241,245,249,.9))" }}
+            />
+          </span>
+        )}
       </span>
     </button>
   );
@@ -150,11 +157,27 @@ function LampCell({
 export function StatusLamps({
   alerts,
   pressure,
+  igniteSignal,
 }: {
   alerts?: WellbeingAlert[];
   pressure?: Pressure | null;
+  /** 値が変わると起動演出を再生 (初回マウント=初回、データ更新時=手動/自動更新)。 */
+  igniteSignal?: string | number | null;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [ignite, setIgnite] = useState(false);
+  const lastSignal = useRef<string | number | null | undefined>(undefined);
+
+  useEffect(() => {
+    // 初回マウント、または igniteSignal が変化したときだけ一閃を再生する。
+    // (毎レンダーでは光らないので「開くたび」の煩わしさを避ける)
+    if (lastSignal.current === igniteSignal) return;
+    lastSignal.current = igniteSignal;
+    setIgnite(true);
+    const t = setTimeout(() => setIgnite(false), 1400);
+    return () => clearTimeout(t);
+  }, [igniteSignal]);
+
   const trends = useQuery({
     queryKey: ["trends", "daily"],
     queryFn: () => api.trends("daily", 28),
@@ -244,13 +267,14 @@ export function StatusLamps({
       className="rounded-2xl bg-slate-950/80 p-2 ring-1 ring-slate-800/60"
       aria-label="状態インジケータ"
     >
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex flex-wrap items-center gap-0.5">
         {lamps.map((lamp, i) => (
           <LampCell
             key={lamp.id}
             lamp={lamp}
             index={i}
             selected={openId === lamp.id}
+            ignite={ignite}
             onTap={() => setOpenId(openId === lamp.id ? null : lamp.id)}
           />
         ))}

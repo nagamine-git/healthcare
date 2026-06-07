@@ -143,7 +143,7 @@ def _check_chronic_sleep_deficit(
             title="3 日中 2 夜が 5 時間未満",
             detail=(
                 f"短時間睡眠が {len(short_nights)} 日続き、平均 {avg_h:.1f}h。"
-                "認知機能は BAC 0.05-0.1% (酒気帯び相当) まで低下"
+                "酒気帯び運転に近い注意力低下が報告される水準で、判断ミスが増えやすい"
             ),
             action="今日は重要判断を避け、可能なら 20 分のパワーナップを 14-15 時に",
         )
@@ -265,37 +265,42 @@ def _check_weight_loss(
 
 
 def _check_moh_risk(session: Session, target: date) -> WellbeingAlert | None:
-    """月の頭痛薬服用回数で MOH (Medication Overuse Headache) リスクを警告。
+    """頭痛薬の服用「日数」で MOH (Medication Overuse Headache) リスクを警告。
 
-    国際頭痛分類 (ICHD-3): 月 10 日以上の鎮痛薬服用が 3 ヶ月以上で MOH と分類。
-    保守的に月 8 回で amber、12 回で rose。
+    国際頭痛分類 (ICHD-3): 複合鎮痛薬・トリプタン・NSAIDs は月 10 日以上、
+    単純鎮痛薬 (アセトアミノフェン単剤) は月 15 日以上の服用が 3 ヶ月以上 **かつ**
+    頭痛が月 15 日以上で MOH と診断される。ここでは服用日数だけを見るため
+    「診断」ではなく「乱用リスク域」として提示する。1 日に複数回飲んでも 1 日。
+    保守的に 8 日で warning、12 日で critical。
     """
     thirty_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
-    count = session.execute(
-        select(func.count(CaffeineIntake.id)).where(
+    # JST 日付ごとに distinct 集計 (同日複数回は 1 日)
+    day_expr = func.date(CaffeineIntake.ts, "+9 hours")
+    days = session.execute(
+        select(func.count(func.distinct(day_expr))).where(
             CaffeineIntake.ts >= thirty_days_ago,
             CaffeineIntake.source.in_(("ibuquick", "bufferin_premium")),
         )
     ).scalar()
-    count = int(count or 0)
-    if count >= 12:
+    days = int(days or 0)
+    if days >= 12:
         return WellbeingAlert(
             code="moh_risk_high",
             severity="critical",
-            title=f"鎮痛薬 30 日で {count} 回服用",
+            title=f"鎮痛薬を 30 日で {days} 日服用",
             detail=(
-                "月 10 回以上 × 3 ヶ月で薬物乱用頭痛 (MOH) と診断される閾値超え。"
-                "予防薬の医師相談を検討"
+                "月 10 日以上の服用が続くと薬物乱用頭痛 (MOH) の乱用リスク域。"
+                "予防薬や頓挫薬の見直しを医師に相談する価値あり"
             ),
-            action="今週中に頭痛外来の予約を取る (神経内科 or 頭痛専門医)",
+            action="今月中に頭痛外来の予約を取る (神経内科 or 頭痛専門医)",
         )
-    if count >= 8:
+    if days >= 8:
         return WellbeingAlert(
             code="moh_risk_mid",
             severity="warning",
-            title=f"鎮痛薬 30 日で {count} 回",
-            detail="月 10 日が MOH の閾値。あと少しで予防薬の検討域",
-            action="頻発するなら頭痛専門医を一度受診、予防薬の選択肢を相談",
+            title=f"鎮痛薬を 30 日で {days} 日",
+            detail="月 10 日が MOH の乱用域の目安。あと少しで検討ライン",
+            action="頻発するなら頭痛専門医を一度受診し、予防薬の選択肢を相談",
         )
     return None
 
@@ -389,21 +394,30 @@ def _daily_metric_values(
 
 
 def _check_sleep_spo2_low(session: Session, target: date) -> WellbeingAlert | None:
-    """直近 3 夜中 2 夜が平均 SpO2 <93%。
+    """直近 3 夜中 2 夜が 平均 SpO2 <93% または 最低 SpO2 <80%。
 
-    成人の正常域は 95% 以上。手首式 PPG は誤検出が多いため単夜では出さず、
-    継続時のみ「受診のきっかけ」として提示する (診断ではない)。
+    成人の正常域は 95% 以上。平均が保たれていても最低値が 80% を切る
+    間欠的脱飽和は睡眠時無呼吸の典型像で、最低値の方が感度が高い。
+    手首式 PPG は誤検出・外れ値が多いため単夜では出さず、複数夜の継続時のみ
+    「受診のきっかけ」として提示する (診断ではない)。
     """
-    values = _daily_metric_values(session, "sleep_spo2_avg", target, 3)
-    low = [v for v in values if v < 93.0]
-    if len(low) >= 2:
+    avg_vals = _daily_metric_values(session, "sleep_spo2_avg", target, 3)
+    low_vals = _daily_metric_values(session, "sleep_spo2_lowest", target, 3)
+    avg_low_nights = [v for v in avg_vals if v < 93.0]
+    desat_nights = [v for v in low_vals if v < 80.0]
+    if len(avg_low_nights) >= 2 or len(desat_nights) >= 2:
+        parts: list[str] = []
+        if avg_low_nights:
+            parts.append(f"平均 {min(avg_low_nights):.0f}%")
+        if desat_nights:
+            parts.append(f"最低 {min(desat_nights):.0f}%")
         return WellbeingAlert(
             code="sleep_spo2_low",
             severity="warning",
             title="睡眠中の血中酸素が低め",
             detail=(
-                f"直近 3 夜中 {len(low)} 夜で平均 SpO2 <93% (最低 {min(low):.0f}%)。"
-                "手首計測の誤差もあるが、継続するなら無呼吸の可能性"
+                f"直近 3 夜のうち複数夜で低酸素 ({' / '.join(parts)})。"
+                "手首計測の誤差もあるが、継続するなら睡眠時無呼吸の可能性"
             ),
             action="まず装着位置 (手首骨の上を避けて密着) を確認。来週も続くなら睡眠外来へ",
         )
@@ -460,18 +474,19 @@ def _check_readiness_low_streak(
 
 
 def _check_sleep_irregular(session: Session, target: date) -> WellbeingAlert | None:
-    """睡眠中点の 14 日 SD >1.5h。
+    """睡眠中点の 14 日 循環 SD >1.5h。
 
     睡眠規則性の低下は睡眠時間と独立に心身リスクと相関し、
-    概日リズムの乱れは偏頭痛のトリガーにもなる。
+    概日リズムの乱れは偏頭痛のトリガーにもなる。中点は時刻 (循環量) なので
+    0 時をまたぐ人でも正しく評価するため循環統計を使う。
     """
-    import statistics
+    from app.scoring.circadian import circular_sd_hours
 
     values = _daily_metric_values(session, "sleep_midpoint_hour", target, 14)
     if len(values) < 7:
         return None
-    sd = statistics.stdev(values)
-    if sd > 1.5:
+    sd = circular_sd_hours(values)
+    if sd is not None and sd > 1.5:
         return WellbeingAlert(
             code="sleep_irregular",
             severity="info",

@@ -55,3 +55,15 @@ body {
 .lamp-throb {
   animation: lamp-throb 1.6s ease-in-out infinite;
 }
+
+/* 動きを減らす設定 / 片頭痛・前庭への配慮: 点滅と一閃を止める。
+   bad 状態はリングで静的に強調する (StatusLamps 側でフォールバック)。 */
+@media (prefers-reduced-motion: reduce) {
+  .lamp-throb,
+  .lamp-ignite-overlay {
+    animation: none !important;
+  }
+  .lamp-ignite-overlay {
+    display: none !important;
+  }
+}
