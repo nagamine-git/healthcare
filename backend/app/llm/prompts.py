@@ -51,11 +51,7 @@ SYSTEM_PERSONA_TEMPLATE = """\
     - actions が 0-2 件に減って構わない (穴埋めしない)
   - 健康関連でない予定 (打合せ等) は actions に入れず、それを避けて他のアクションを組む
 - **絶対禁止: Z1 / Z2 / Z3 / Zone N / 「Z1-Z2」 のようなゾーン記法は一切使わない**。すべて **絶対値の心拍数 (bpm)** で書く。**範囲も禁止** (「心拍 110-130」「心拍 100-120」NG)、**単一値で確定** (「心拍 130」OK)。
-- 利用者の心拍ゾーン (年齢 31y / 安静時心拍 49 から Karvonen 法で算出):
-  - 軽強度 (会話余裕、回復ペース) = **心拍 120 bpm**
-  - 中強度 (会話可能だが息やや弾む、有酸素ベースのメイン) = **心拍 140 bpm**
-  - 中-高強度 (テンポ、会話途切れる) = **心拍 155 bpm**
-  - 高強度 (HIIT 作業区間 ピーク) = **心拍 175 bpm**
+{heart_rate_zones}
 - 専門用語 (例: ラッキング, RPE, ACWR) を使う場合は、初出に括弧で **短い補足を必ず付ける**。例: 「ラッキング (重い荷物を背負って歩く)」「RPE 6 (10 段階の主観強度、ややきつい)」
 - ケガ歴を尊重: 腰に高負荷をかけるヒンジ系は安全重量に抑える
 - 仕事のパフォーマンスを最優先。HRV/Body Battery が低い日は強度を落とす
@@ -243,6 +239,27 @@ training/cardio の action では **必ず ``exercises`` 配列を埋める**。
 """
 
 
+def _karvonen_zones(age: int, resting_hr: int) -> str:
+    """年齢と安静時心拍から Karvonen 法 (心拍予備能 HRR) で心拍ゾーンを算出する。
+
+    target_hr = resting_hr + intensity * (max_hr - resting_hr), max_hr = 220 - age。
+    個人の安静時心拍と年齢に追従するので、誰が使っても自分の bpm が出る。
+    """
+    max_hr = 220 - age
+    hrr = max_hr - resting_hr
+
+    def hr(intensity: float) -> int:
+        return round(resting_hr + intensity * hrr)
+
+    return (
+        f"- 利用者の心拍ゾーン (年齢 {age}y / 安静時心拍 {resting_hr} から Karvonen 法で算出):\n"
+        f"  - 軽強度 (会話余裕、回復ペース) = **心拍 {hr(0.50)} bpm**\n"
+        f"  - 中強度 (会話可能だが息やや弾む、有酸素ベースのメイン) = **心拍 {hr(0.65)} bpm**\n"
+        f"  - 中-高強度 (テンポ、会話途切れる) = **心拍 {hr(0.75)} bpm**\n"
+        f"  - 高強度 (HIIT 作業区間 ピーク) = **心拍 {hr(0.90)} bpm**"
+    )
+
+
 def _format_persona() -> str:
     """Settings の値を埋め込んだ persona テキストを返す。"""
     from app.config import get_settings
@@ -263,6 +280,7 @@ def _format_persona() -> str:
         weekly_target_hint=s.user_weekly_target_hint,
         starting_weights=starting,
         progression_rule=s.user_progression_rule,
+        heart_rate_zones=_karvonen_zones(s.user_age, s.user_resting_hr),
     )
 
 

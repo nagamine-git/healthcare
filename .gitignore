@@ -33,6 +33,7 @@ frontend/tsconfig.node.tsbuildinfo
 .env.*.local
 .env.runtime
 !.env.tmpl
+!.env.example
 
 # Data
 /data/

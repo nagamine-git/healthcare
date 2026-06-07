@@ -41,11 +41,14 @@ class Settings(BaseSettings):
     score_version: str = "v2"
 
     # --- ユーザープロファイル (LLM プロンプトと採点で使用) ---
-    user_age: int = 31
+    # 以下は「例のプロファイル」。自分の値に合わせて環境変数 (USER_AGE, TARGET_WEIGHT_KG
+    # 等) または .env で上書きする。採点と LLM 助言の個人化に使われる。
+    user_age: int = 30
     user_sex: str = "male"  # "male" | "female"
-    user_height_cm: float = 165.0
-    target_weight_kg: float = 56.5
-    target_body_fat_pct: float = 14.0
+    user_height_cm: float = 170.0
+    user_resting_hr: int = 60  # 安静時心拍 (Karvonen 法の心拍ゾーン算出に使用)
+    target_weight_kg: float = 65.0
+    target_body_fat_pct: float = 18.0
     body_fat_tolerance_pct: float = 1.5
 
     # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
@@ -182,11 +185,12 @@ class Settings(BaseSettings):
     )
 
     # --- 気圧 (片頭痛トリガー監視) ---
-    # 東京都練馬区の代表座標。気圧降下 (前 24h で -6 hPa 以上) と片頭痛発症の
-    # 相関がメタ解析で示されている (Mukamal 2009, Hoffmann 2015 等)。
-    weather_latitude: float = 35.7356
-    weather_longitude: float = 139.6517
-    weather_location_label: str = "東京都練馬区"
+    # 例: 東京駅の座標。WEATHER_LATITUDE / WEATHER_LONGITUDE で自分の地域に上書きする。
+    # 気圧降下 (前 24h で -6 hPa 以上) と片頭痛発症の相関が研究で示されている
+    # (Mukamal 2009, Hoffmann 2015 等)。
+    weather_latitude: float = 35.6812
+    weather_longitude: float = 139.7671
+    weather_location_label: str = "Tokyo"
     # 急降下とみなす閾値 (hPa)。前 24h での低下量 (絶対値) がこれを超えたら warning。
     pressure_drop_warning_hpa: float = 6.0
     # 重度の急降下閾値 (台風接近など)

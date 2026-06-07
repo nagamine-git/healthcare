@@ -1,139 +1,192 @@
-# Healthcare Dashboard
+# Healthcare Dashboard — Self-Hosted Garmin + Apple Health Analytics with AI Coaching
 
-Tailscale tailnet 内からのみアクセスする、シングルユーザー向けの「今日のコンディション採点 + アドバイス」ダッシュボード。
+A **self-hosted, single-user health dashboard** that turns your **Garmin Connect** and
+**Apple Health** data into a daily "how am I doing today?" score, evidence-based wellbeing
+alerts, and **LLM-generated coaching** — served privately over your own
+[Tailscale](https://tailscale.com) network.
 
-詳細仕様は [SPEC.md](./SPEC.md) を参照。
+It reads the data your wearables already collect (sleep, HRV, SpO2, respiration, Body
+Battery, Training Readiness, resting heart rate, weight, body fat, steps, stress) and
+answers three questions every morning:
 
-## 構成
+1. **What state am I in today?** — a 0–100 condition score across sleep, autonomic
+   recovery (HRV), energy, training load, body composition, and physiology.
+2. **What should I watch out for?** — rule-based medical alerts (sleep debt, HRV decline,
+   low blood-oxygen, irregular circadian rhythm, medication-overuse-headache risk,
+   barometric migraine triggers) grounded in published research.
+3. **What should I do?** — concise, personalized daily actions from Claude, weighted by
+   your goals and today's recovery.
+
+> ⚠️ **Disclaimer.** This is a personal quantified-self tool, **not a medical device**.
+> Scores, alerts, and AI advice are informational only and are **not diagnosis or
+> treatment**. Wrist-based optical sensors (SpO2, respiration) are noisy; alerts are
+> deliberately conservative and framed as "reasons to pay attention / see a doctor,"
+> never as a clinical verdict. Consult a qualified professional for medical decisions.
+
+---
+
+## Why this exists
+
+Wearables collect an enormous amount of data and then bury the useful parts. Garmin's app
+shows you a sleep score but not "your blood-oxygen has dropped three nights running."
+Apple Health stores everything but interprets nothing. This project is the missing
+**interpretation layer**: it joins both sources, scores them against personalized targets
+and published clinical norms, and produces a short, actionable readout — privately, on
+hardware you control, with no third-party health cloud.
+
+## Features
+
+- **Daily condition score (0–100)** across sleep, HRV, energy (Body Battery), training
+  load (ACWR), weight, and body fat — each with an achievement curve toward an ideal band.
+- **Physiology trends** extracted from Garmin sleep data: **blood oxygen (SpO2, avg +
+  lowest), respiration rate, nocturnal resting HR, sleep midpoint (circadian regularity),
+  Training Readiness, fitness age** — with 28-day sparklines and week-over-week deltas.
+- **Evidence-based wellbeing alerts** — chronic sleep deficit (Belenky 2003), HRV chronic
+  decline (Plews 2013), recovery failure, blood-oxygen desaturation (apnea screening),
+  elevated respiration vs. baseline, low Training Readiness streaks, irregular circadian
+  rhythm (circular statistics), medication-overuse-headache risk (ICHD-3), and barometric
+  pressure migraine triggers.
+- **LLM daily coaching** (Anthropic Claude) — 1–3 concrete actions per day, personalized
+  to your goals, equipment, injury history, and Karvonen heart-rate zones, with optional
+  Google Calendar scheduling.
+- **Instrument-cluster status lamps** — a car-dashboard-style icon row giving an at-a-glance
+  read of every metric, with tap-to-expand detail.
+- **Life-domain scoring** — extend beyond health to track meditation, learning, work, and
+  more, with adjustable importance weights.
+- **Private by default** — runs in Docker on your machine, exposed only inside your
+  Tailscale tailnet via a `tailscale serve` sidecar (HTTPS, no public ingress).
+
+## Architecture
 
 ```
-[iPhone Health Auto Export] ─POST/JSON─▶ [FastAPI /ingest/health-auto-export]
-[Garmin Connect] ◀──python-garminconnect── [APScheduler 毎時]
-                                                    │
-                                                    ▼
-                                          [SQLite (WAL) + 採点 + LLM]
-                                                    │
+[iPhone Health Auto Export] ──POST/JSON──▶ [FastAPI /ingest/health-auto-export]
+[Garmin Connect] ◀──python-garminconnect── [APScheduler, hourly]
+                                                   │
+                                                   ▼
+                                   [SQLite (WAL) + scoring + Claude LLM]
+                                                   │
 [Browser via tailnet HTTPS] ── tailscale serve sidecar (443→80) ── nginx → FastAPI
 ```
 
-- Backend: Python 3.12 / FastAPI / SQLAlchemy / APScheduler / anthropic SDK / python-garminconnect
-- Frontend: React + Vite + TanStack Query + Tailwind + recharts
-- Container: docker compose (`backend`, `frontend`, `tailscale` sidecar)
-- Secrets: 1Password CLI (`op run`)
+**Stack**
 
-## ユーザーが用意するもの
+| Layer | Tech |
+|---|---|
+| Backend | Python 3.12, FastAPI, SQLAlchemy, APScheduler, Anthropic SDK, python-garminconnect |
+| Frontend | React, Vite, TanStack Query, Tailwind CSS, Recharts, lucide-react |
+| Data | SQLite (WAL) |
+| Deploy | Docker Compose (`backend`, `frontend`, `tailscale` sidecar) |
+| Secrets | 1Password CLI (`op run`) or any `.env` |
 
-`.env.tmpl` は **`Personal` Vault にある実アイテム** (UUID 指定) を参照する状態にコミット済み。
-新たに作る/設定するのは以下のみ。
+## The science
 
-1. **1Password CLI (`op`)** — `op signin` 済みであること
-2. **1Password アイテム (Personal Vault)** — 既に存在するもの:
-   - `anthropic key` (UUID: `coa3nmxh...`) → password に Anthropic API キー
-   - `Garmin` (UUID: `l3zw5muz...`) → username/password に Garmin Connect ログイン情報
-   - `TailScaleAuthKey` (UUID: `d6k2tduo...`) → password に Tailscale auth key
-   - `HealthAutoExport Bearer` (UUID: `3jtudssy...`) → password に HAE 用 Bearer (本セットアップで作成済み)
-3. **Tailscale 設定** — admin で `tag:healthcare` を作って ACL に追加し、auth key にも付与
-4. **iPhone 側 Health Auto Export** ([App Store](https://apps.apple.com/app/id1115567069))
-   - REST API automation を **新規追加**
-   - URL: `https://<hostname>.<tailnet>.ts.net/ingest/health-auto-export`
-   - Header に `Authorization` キーで `Bearer <op item get "HealthAutoExport Bearer" --reveal の値>`
-   - Data Type: Health Metrics, All Selected
-   - Export Format: JSON, Export Version: v2, Summarize Data: ON
-   - Sync Cadence: 6 hours (推奨)
-5. **オムロン体組成計** — OMRON connect アプリで Apple Health に同期する設定（既存）
-6. **MyFitnessPal** (任意) — Apple Health に栄養データを書き出す設定
+Thresholds split into two kinds, and the code keeps them separate:
 
-### .env.tmpl の解決チェック
+- **Clinical/physiological constants** (fixed for everyone): SpO2 normal ≥95% / hypoxemia
+  <90%; resting respiration 12–18 brpm; ACWR sweet spot 0.8–1.3; HRV evaluated as an
+  individual z-score against a 28-day baseline rather than absolute values.
+- **Personal targets** (configurable per user): target weight, body fat, age, sex, height,
+  resting heart rate, sleep goal, caffeine half-life, protein target.
 
-```bash
-op run --env-file=.env.tmpl -- env | grep -E '^(ANTHROPIC|GARMIN|HAE_|TS_AUTHKEY)='
-```
+Notable correctness details: the **sleep midpoint** (a standard circadian marker) is a
+*cyclic* quantity, so regularity is computed with **circular statistics** — a naive linear
+standard deviation breaks for anyone whose midpoint crosses midnight. Medication-overuse
+risk counts **distinct medication days** (per ICHD-3), not doses. See
+[`docs/superpowers/specs/`](./docs/superpowers/specs/) for the design rationale and
+[SPEC.md](./SPEC.md) for the full spec.
 
-5 行すべてに値が入っていれば OK。
+## Quick start
 
-## 初回セットアップ
+**Prerequisites:** Docker, a Garmin Connect account, an Anthropic API key, a Tailscale
+account, and (optionally) an iPhone with [Health Auto Export](https://apps.apple.com/app/id1115567069)
+for Apple Health metrics.
 
 ```bash
-# 1. 環境疎通の事前チェック (1Password 参照が全部解けるか)
-bin/verify.sh
+# 1. Configure secrets and personal profile
+cp .env.example .env        # then edit: ANTHROPIC_API_KEY, GARMIN_*, TS_AUTHKEY, HAE_INGEST_TOKEN
+                            # and your profile: USER_AGE, TARGET_WEIGHT_KG, WEATHER_LATITUDE, ...
 
-# 2. ビルド & 起動 (op run が env を解決して docker compose に渡す)
-bin/up.sh
+# 2. Build & start (backend + frontend + tailscale sidecar)
+docker compose up -d --build
 
-# 3. Garmin の初回ログイン (MFA に対応するため対話実行)
-bin/garmin-login.sh
+# 3. First Garmin login (interactive, handles MFA)
+docker compose exec backend python -m app.cli garmin-login
 
-# 4. ブラウザで https://<hostname>.<tailnet>.ts.net を開く
+# 4. Open the dashboard inside your tailnet
+#    https://<hostname>.<tailnet>.ts.net
 ```
 
-### Tailscale ACL の確認
+> The repo includes 1Password-based helper scripts (`bin/up.sh`, `bin/verify.sh`) for
+> resolving secrets via `op run`. If you don't use 1Password, a plain `.env` works the
+> same way.
 
-`tag:healthcare` を auth key で使うには、ACL ファイルに `tagOwners` が必要。
-admin の Access controls → Edit file で以下を含めること:
+### Personalize your profile
 
-```json
-{
-  "tagOwners": {
-    "tag:healthcare": ["tsuyoshi.nagamine@efg-technologies.com"]
-  }
-}
-```
+Your biometric targets and training profile live in `backend/app/config.py` as an **example
+profile** and are overridable via environment variables. Set at least:
 
-(タグを Tags ページから作った場合は自動で書かれていることが多い)
+| Variable | Meaning |
+|---|---|
+| `USER_AGE`, `USER_SEX`, `USER_HEIGHT_CM`, `USER_RESTING_HR` | drives Karvonen HR zones & coaching |
+| `TARGET_WEIGHT_KG`, `TARGET_BODY_FAT_PCT` | body-composition scoring |
+| `WEATHER_LATITUDE`, `WEATHER_LONGITUDE`, `WEATHER_LOCATION_LABEL` | barometric migraine monitoring |
+| `MEDITATION_TARGET_MIN` | meditation life-domain goal |
 
-## 開発
+### Apple Health (optional)
+
+In [Health Auto Export](https://apps.apple.com/app/id1115567069), add a REST API automation:
+
+- URL: `https://<hostname>.<tailnet>.ts.net/ingest/health-auto-export`
+- Header `Authorization: Bearer <your HAE_INGEST_TOKEN>`
+- Data Type: Health Metrics (All), Format: JSON v2, Summarize: ON, Cadence: 6 h
+
+## Development
 
 ```bash
 # Backend (Python 3.12)
 cd backend
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -e '.' --group dev
-.venv/bin/python -m pytest                  # 75 tests
+.venv/bin/python -m pytest
 .venv/bin/python -m ruff check app/ tests/
-APP_DATA_DIR=/tmp/hc HAE_INGEST_TOKEN=t ANTHROPIC_API_KEY=t \
-  .venv/bin/uvicorn app.main:app --reload
 
 # Frontend
 cd frontend
 npm install
-npm run dev          # http://localhost:5173 (proxies /api to localhost:8000)
+npm run dev      # http://localhost:5173 (proxies /api to :8000)
 npm run build
 ```
 
 ## CLI
 
-`docker compose exec backend python -m app.cli ...` で実行可。
+`docker compose exec backend python -m app.cli <command>`
 
-| サブコマンド | 用途 |
+| Command | Purpose |
 |---|---|
-| `garmin-login` | Garmin Connect への対話ログイン（MFA 必要時） |
-| `sync-garmin` | Garmin から手動で取得 |
-| `recompute [YYYY-MM-DD]` | 指定日のスコアを再計算（省略時は本日） |
-| `regenerate-advice [YYYY-MM-DD]` | LLM コメントを強制再生成 |
+| `garmin-login` | Interactive Garmin Connect login (for MFA) |
+| `sync-garmin` | Manual pull from Garmin |
+| `recompute [YYYY-MM-DD]` | Recompute a day's score (default: today) |
+| `regenerate-advice [YYYY-MM-DD]` | Force-regenerate LLM advice |
 
-## Healthcare が触ってよい Calendar イベント
+## Tailscale ACL
 
-LLM が再提案で時刻/内容を **上書きできる** イベントは、以下のいずれか:
+To use the `tag:healthcare` auth-key tag, add a `tagOwner` in your tailnet ACL:
 
-1. Healthcare の「Calendar に追加」で作ったイベント (自動で `extendedProperties.private.hc_managed=1` 付与)
-2. ユーザーが手動で作った既存イベントで、**説明欄に `[hc-adjustable]` を含む** もの
-
-例: 「【筋トレ】全身：基礎代謝最大化メニュー」「【有酸素＆腹筋＆ふくらはぎ】...」を Healthcare の判断で時間/内容調整させたい場合は、各イベントの説明欄に `[hc-adjustable]` を 1 行入れておく。
-
-調整不可 (会議、固定予定) のイベントは LLM が触らず、そこを避けて提案する。
-
-## openclaw 連携 (Telegram critical 通知)
-
-健康指標が critical な日だけ Telegram に飛ばす。健康な日は完全サイレント。
-
-job 定義の真実源は `systemd/openclaw-healthcare-watch.json` (cron 式 / agent / message 等)。openclaw-gateway が動いている状態で `~/.openclaw/cron/jobs.json` を直接編集しても in-memory state から書き戻されて消えるため、必ず CLI 経由で登録する。
-
-```bash
-./bin/install-openclaw-job.sh   # 再実行可能。同名ジョブがあれば削除してから再登録
+```json
+{
+  "tagOwners": {
+    "tag:healthcare": ["your-email@example.com"]
+  }
+}
 ```
 
-判定ロジック (どれか 1 つで通知): `priority=critical` の advice、Body Battery 朝 < 30、睡眠 < 5h、HRV BAD、ACWR ≥ 1.5、score < 40、`sync.last_error` あり。詳細は JSON 内 `payload.message`。即時実行は `openclaw cron run <id>` (id は `openclaw cron list` で確認)。
+## License
 
-## ライセンス・スコープ
+[MIT](./LICENSE) © 2026 nagamine-git
 
-個人専用。Garmin Connect の利用規約を遵守し、自分のデータのみを取り扱う。
+---
+
+<sub>Keywords: self-hosted health dashboard, Garmin Connect API, Apple Health integration,
+HRV tracking, sleep analysis, SpO2 monitoring, Body Battery, Training Readiness, quantified
+self, FastAPI, React, Tailscale, Anthropic Claude, LLM health coaching, circadian rhythm,
+wearable data analytics, personal health record, open source health app.</sub>
