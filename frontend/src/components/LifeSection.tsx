@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { api } from "../lib/api";
 import type { LifeDomain } from "../lib/api";
 
@@ -19,9 +21,11 @@ function staleLabel(lastDataAt: string | null): string {
 
 function DomainRow({
   domain,
+  showSlider,
   onWeight,
 }: {
   domain: LifeDomain;
+  showSlider: boolean;
   onWeight: (w: number) => void;
 }) {
   const ach = domain.achievement;
@@ -40,27 +44,30 @@ function DomainRow({
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
         <div className={`h-full rounded-full ${barColor(ach)}`} style={{ width: `${ach ?? 0}%` }} />
       </div>
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-[10px] text-slate-500">重み</span>
-        <input
-          type="range"
-          min={0}
-          max={3}
-          step={0.5}
-          value={domain.weight}
-          onChange={(e) => onWeight(parseFloat(e.target.value))}
-          className="flex-1 accent-emerald-500"
-        />
-        <span className="w-8 text-right text-[10px] tabular-nums text-slate-400">
-          {domain.weight.toFixed(1)}
-        </span>
-      </div>
+      {showSlider && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[10px] text-slate-500">重み</span>
+          <input
+            type="range"
+            min={0}
+            max={3}
+            step={0.5}
+            value={domain.weight}
+            onChange={(e) => onWeight(parseFloat(e.target.value))}
+            className="flex-1 accent-emerald-500"
+          />
+          <span className="w-8 text-right text-[10px] tabular-nums text-slate-400">
+            {domain.weight.toFixed(1)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
 export function LifeSection() {
   const qc = useQueryClient();
+  const [editWeights, setEditWeights] = useState(false);
   const life = useQuery({ queryKey: ["life"], queryFn: api.life });
   const setWeights = useMutation({
     mutationFn: (weights: Record<string, number>) => api.setLifeWeights(weights),
@@ -92,7 +99,19 @@ export function LifeSection() {
         </span>
       </div>
 
-      {data && (
+      {/* 重み調整 (プリセット + スライダー) は普段使わないので開閉式・既定で閉 */}
+      <button
+        type="button"
+        onClick={() => setEditWeights(!editWeights)}
+        aria-expanded={editWeights}
+        className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-300"
+      >
+        {editWeights ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <SlidersHorizontal size={12} />
+        重み調整 (期待水準)
+      </button>
+
+      {editWeights && data && (
         <div className="flex flex-wrap gap-1.5">
           {data.presets.map((p) => (
             <button
@@ -110,10 +129,21 @@ export function LifeSection() {
         <div className="text-sm text-slate-400">読み込み中...</div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
-          {data?.domains.map((d) => (
+          {data?.domains
+            .slice()
+            // 重み (重要度) 降順 → データありを先 → 達成度が低い順 (要テコ入れが上)
+            .sort((a, b) => {
+              if (b.weight !== a.weight) return b.weight - a.weight;
+              const aNull = a.achievement == null ? 1 : 0;
+              const bNull = b.achievement == null ? 1 : 0;
+              if (aNull !== bNull) return aNull - bNull;
+              return (a.achievement ?? 0) - (b.achievement ?? 0);
+            })
+            .map((d) => (
             <DomainRow
               key={d.key}
               domain={d}
+              showSlider={editWeights}
               onWeight={(w) => {
                 const weights: Record<string, number> = {};
                 for (const dd of data.domains) weights[dd.key] = dd.key === d.key ? w : dd.weight;
