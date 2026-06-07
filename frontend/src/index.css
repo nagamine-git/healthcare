@@ -25,3 +25,33 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+/* ===== 計器盤ランプ (StatusLamps) ===== */
+/* イグニッションチェック: 起動時に全ランプが白く一閃 → 実状態へ */
+@keyframes lamp-ignite {
+  0% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.lamp-ignite-overlay {
+  animation: lamp-ignite 0.7s ease-out backwards;
+  opacity: 0;
+}
+/* 赤ランプの鼓動 (車の警告灯) */
+@keyframes lamp-throb {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.lamp-throb {
+  animation: lamp-throb 1.6s ease-in-out infinite;
+}

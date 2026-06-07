@@ -11,6 +11,7 @@ import { MigrainePanel } from "../components/MigrainePanel";
 import { AlcoholPanel } from "../components/AlcoholPanel";
 import { EnvironmentPanel } from "../components/EnvironmentPanel";
 import { StaleBanner } from "../components/StaleBanner";
+import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
 import { LifeSection } from "../components/LifeSection";
 import { SyncMenu } from "../components/SyncMenu";
@@ -202,6 +203,9 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
+      {/* ===== 🚥 計器盤ランプ (ファーストビューの状態一覧) ===== */}
+      <StatusLamps alerts={data.alerts} pressure={data.pressure} />
+
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
         isRefreshing={fullRefresh.isPending}
@@ -209,11 +213,15 @@ export function TodayPage({ onOpenDebug }: Props) {
       />
 
       {/* ===== ⚠️ アラート ===== */}
-      <WellbeingAlertsBanner alerts={data.alerts} />
+      <div id="alerts-section">
+        <WellbeingAlertsBanner alerts={data.alerts} />
+      </div>
 
       {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}
-      <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
-      <LifeSection />
+      <div id="life-section">
+        <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
+        <LifeSection />
+      </div>
 
       {/* ===== 🎯 今日のアクション ===== */}
       <SectionHeader label="今日のアクション" hint="LLM が状況を統合して 3 件まで" />
@@ -247,6 +255,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
 
       {/* ===== 📈 トレンド (理想への接近度 + 今の各メトリクス) ===== */}
+      <div id="trends-section">
       <TrendsSection
         hints={{
           sleep: sleep?.sleep_score != null ? `スコア ${Math.round(sleep.sleep_score)}` : undefined,
@@ -273,6 +282,7 @@ export function TodayPage({ onOpenDebug }: Props) {
           },
         ]}
       />
+      </div>
 
       <NutritionPanel nutrition={data.nutrition} />
       <TonightPlanPanel plan={data.tonight_plan} />
