@@ -9,9 +9,43 @@ from typing import Any
 from sqlalchemy import select
 
 from app.db import session_scope
-from app.models import BodyBatteryDaily, HrvDaily, SleepSession, WeightSample
+from app.models import BodyBatteryDaily, HrvDaily, MetricSample, SleepSession, WeightSample
 from app.scoring.baselines import build_baseline
 from app.scoring.recompute import _training_load
+
+# トレンド対象の日次 MetricSample キー (garmin_sync / sleep_extras が書く)
+PHYSIO_METRIC_KEYS = (
+    "training_readiness",
+    "sleep_spo2_avg",
+    "sleep_spo2_lowest",
+    "sleep_respiration_avg",
+    "sleep_resting_hr",
+    "sleep_midpoint_hour",
+    "sleep_bb_change",
+    "fitness_age",
+)
+
+
+def metric_daily_series(
+    key: str, target: date_type, days: int
+) -> list[tuple[date_type, float]]:
+    """metric_sample の日次系列 (JST 日付ごとの平均) を返す。"""
+    from app.scoring.timewindow import JST
+
+    start = datetime.combine(target - timedelta(days=days), datetime.min.time())
+    with session_scope() as session:
+        rows = session.execute(
+            select(MetricSample.ts, MetricSample.value)
+            .where(MetricSample.metric_key == key, MetricSample.ts >= start)
+            .order_by(MetricSample.ts)
+        ).all()
+    by_day: dict[date_type, list[float]] = {}
+    for ts, v in rows:
+        if v is None:
+            continue
+        d = ts.replace(tzinfo=UTC).astimezone(JST).date()
+        by_day.setdefault(d, []).append(float(v))
+    return [(d, sum(vs) / len(vs)) for d, vs in sorted(by_day.items())]
 
 
 def _weight_daily(rows: list[tuple[datetime, float | None]]) -> list[tuple[date_type, float]]:

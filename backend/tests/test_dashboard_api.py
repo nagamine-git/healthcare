@@ -215,3 +215,34 @@ def test_trends_endpoint_weekly(app_client):
     sleep = body["metrics"]["sleep"]
     assert sleep["regression"] is not None  # 週平均系列にも回帰線
     assert len(sleep["raw_series"]) <= 3
+
+
+def test_trends_includes_physio_metrics(app_client):
+    from app.db import session_scope
+    from app.models import MetricSample
+
+    today = date.today()
+    with session_scope() as session:
+        for i in range(8):
+            d = today - timedelta(days=7 - i)
+            ts = datetime.combine(d, datetime.min.time()).replace(hour=7)
+            session.add(MetricSample(source="garmin", metric_key="training_readiness", ts=ts, value=50 + i))
+            session.add(MetricSample(source="garmin", metric_key="sleep_spo2_avg", ts=ts, value=93.0))
+            session.add(MetricSample(source="garmin", metric_key="sleep_spo2_lowest", ts=ts, value=80.0 - i))
+            session.add(MetricSample(source="garmin", metric_key="sleep_respiration_avg", ts=ts, value=13.0))
+            session.add(MetricSample(source="garmin", metric_key="sleep_resting_hr", ts=ts, value=46.0))
+            session.add(MetricSample(source="garmin", metric_key="sleep_midpoint_hour", ts=ts, value=3.0 + i * 0.1))
+
+    resp = app_client.get("/api/trends", params={"granularity": "daily", "days": 28})
+    assert resp.status_code == 200
+    m = resp.json()["metrics"]
+    for key in ("readiness", "spo2", "respiration", "rhr_night", "sleep_midpoint"):
+        assert key in m, key
+        assert len(m[key]["raw_series"]) == 8
+        assert m[key]["achievement"] is not None
+
+    assert m["readiness"]["current_raw"] == 57.0
+    assert m["spo2"]["ideal"] == {"type": "band", "lo": 94, "hi": 100}
+    assert "最低" in (m["spo2"]["subtitle"] or "")  # 直近の最低 SpO2
+    assert m["sleep_midpoint"]["ideal"]["type"] == "band"  # 個人中央値 ±0.75h
+    assert "ばらつき" in (m["sleep_midpoint"]["subtitle"] or "")

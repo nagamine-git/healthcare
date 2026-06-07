@@ -433,14 +433,19 @@ export type TrendMetric = {
   achievement_week_over_week: { delta: number; pct: number | null } | null;
   direction: TrendDirection | null;
   regression: { start: TimeseriesPoint; end: TimeseriesPoint } | null;
+  /** API 側で計算する補足 (例: "最低 72% (直近)") */
+  subtitle?: string | null;
 };
 
-export type TrendMetricKey = "sleep" | "hrv" | "energy" | "load" | "weight" | "body_fat";
+export type TrendMetricKey =
+  | "sleep" | "hrv" | "energy" | "load" | "weight" | "body_fat"
+  | "readiness" | "spo2" | "respiration" | "rhr_night" | "sleep_midpoint";
 
 export type TrendsResponse = {
   granularity: "daily" | "weekly";
   generated_at: string | null;
-  metrics: Record<TrendMetricKey, TrendMetric>;
+  /** 生理指標系はデータがある場合のみ含まれる */
+  metrics: Partial<Record<TrendMetricKey, TrendMetric>>;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

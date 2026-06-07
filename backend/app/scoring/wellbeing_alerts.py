@@ -6,7 +6,7 @@
 - ルールベース (LLM 不要) で即時・コストゼロ
 - 過剰アラート (alert fatigue) を避けるため、しきい値は保守的に設定
 
-# 7 つのルール
+# 11 のルール
 1. 慢性睡眠不足 (Belenky 2003)
 2. HRV 慢性低下 (Plews 2013)
 3. 回復不全 (Body Battery)
@@ -14,6 +14,12 @@
 5. MOH = Medication Overuse Headache (鎮痛薬乱用)
 6. カフェイン依存サイクル (睡眠不足↔カフェイン)
 7. 気圧急降下 + 偏頭痛履歴
+8. 睡眠時 SpO2 低下継続 (無呼吸スクリーニング。手首式は誤検出が多いため複数夜で判定)
+9. 安静呼吸数のベースライン超過 (感染症・過労の早期サイン)
+10. Training Readiness 低値連続 (回復日推奨)
+11. 睡眠中点の乱れ (概日リズム。偏頭痛トリガーでもある)
+
+注: 8-11 は診断ではなく「注意・受診のきっかけ」の文言にとどめる。
 """
 
 from __future__ import annotations
@@ -91,6 +97,17 @@ def evaluate_alerts(
         a7 = _check_pressure_migraine(session, target, pressure_risk_level)
         if a7:
             alerts.append(a7)
+
+    # ルール 8-11: 生理指標 (sleep raw_json / Training Readiness 由来)
+    for check in (
+        _check_sleep_spo2_low,
+        _check_respiration_elevated,
+        _check_readiness_low_streak,
+        _check_sleep_irregular,
+    ):
+        a = check(session, target)
+        if a:
+            alerts.append(a)
 
     # 重要度順 (critical -> warning -> info)
     rank = {"critical": 0, "warning": 1, "info": 2}
@@ -354,6 +371,118 @@ def _check_pressure_migraine(
         ),
         action="今日は屋外活動を控え、頭痛薬を手元に。光・音刺激を最小化",
     )
+
+
+def _daily_metric_values(
+    session: Session, key: str, target: date, days: int
+) -> list[float]:
+    """直近 days 日の MetricSample 値 (日次 1 サンプル想定) を新しい順で返す。"""
+    from app.models import MetricSample
+
+    start = datetime.combine(target - timedelta(days=days), datetime.min.time())
+    rows = session.execute(
+        select(MetricSample.value)
+        .where(MetricSample.metric_key == key, MetricSample.ts >= start)
+        .order_by(MetricSample.ts.desc())
+    ).all()
+    return [float(r[0]) for r in rows if r[0] is not None]
+
+
+def _check_sleep_spo2_low(session: Session, target: date) -> WellbeingAlert | None:
+    """直近 3 夜中 2 夜が平均 SpO2 <93%。
+
+    成人の正常域は 95% 以上。手首式 PPG は誤検出が多いため単夜では出さず、
+    継続時のみ「受診のきっかけ」として提示する (診断ではない)。
+    """
+    values = _daily_metric_values(session, "sleep_spo2_avg", target, 3)
+    low = [v for v in values if v < 93.0]
+    if len(low) >= 2:
+        return WellbeingAlert(
+            code="sleep_spo2_low",
+            severity="warning",
+            title="睡眠中の血中酸素が低め",
+            detail=(
+                f"直近 3 夜中 {len(low)} 夜で平均 SpO2 <93% (最低 {min(low):.0f}%)。"
+                "手首計測の誤差もあるが、継続するなら無呼吸の可能性"
+            ),
+            action="まず装着位置 (手首骨の上を避けて密着) を確認。来週も続くなら睡眠外来へ",
+        )
+    return None
+
+
+def _check_respiration_elevated(
+    session: Session, target: date
+) -> WellbeingAlert | None:
+    """直近 3 夜平均の睡眠時呼吸数が 28 日 baseline +2 brpm 以上。
+
+    安静呼吸数の上昇は発熱・感染症・過労の先行指標になりうる。
+    """
+    all_values = _daily_metric_values(session, "sleep_respiration_avg", target, 28)
+    if len(all_values) < 10:
+        return None
+    recent = all_values[:3]
+    baseline_vals = all_values[3:]
+    if len(recent) < 3 or not baseline_vals:
+        return None
+    recent_avg = sum(recent) / len(recent)
+    baseline = sum(baseline_vals) / len(baseline_vals)
+    if recent_avg - baseline >= 2.0:
+        return WellbeingAlert(
+            code="respiration_elevated",
+            severity="info",
+            title="睡眠時呼吸数が普段より高い",
+            detail=(
+                f"直近 3 夜平均 {recent_avg:.1f}/分 (普段 {baseline:.1f}/分)。"
+                "体調変化 (感染・過労) の先行サインのことがある"
+            ),
+            action="今日は負荷を抑えめにして、水分と睡眠を優先",
+        )
+    return None
+
+
+def _check_readiness_low_streak(
+    session: Session, target: date
+) -> WellbeingAlert | None:
+    """Training Readiness <30 が 3 日連続。Garmin の合成回復指標が底のとき。"""
+    values = _daily_metric_values(session, "training_readiness", target, 3)
+    if len(values) >= 3 and all(v < 30 for v in values):
+        return WellbeingAlert(
+            code="readiness_low_streak",
+            severity="warning",
+            title="Readiness 低値が 3 日連続",
+            detail=(
+                f"Training Readiness が 3 日続けて 30 未満 (平均 {sum(values)/len(values):.0f})。"
+                "身体は回復を要求している"
+            ),
+            action="今日は完全休息 or 散歩程度に。トレーニングは Readiness 50 回復後に再開",
+        )
+    return None
+
+
+def _check_sleep_irregular(session: Session, target: date) -> WellbeingAlert | None:
+    """睡眠中点の 14 日 SD >1.5h。
+
+    睡眠規則性の低下は睡眠時間と独立に心身リスクと相関し、
+    概日リズムの乱れは偏頭痛のトリガーにもなる。
+    """
+    import statistics
+
+    values = _daily_metric_values(session, "sleep_midpoint_hour", target, 14)
+    if len(values) < 7:
+        return None
+    sd = statistics.stdev(values)
+    if sd > 1.5:
+        return WellbeingAlert(
+            code="sleep_irregular",
+            severity="info",
+            title="就寝リズムが乱れ気味",
+            detail=(
+                f"睡眠中点の 14 日ばらつきが ±{sd:.1f}h。"
+                "リズムの乱れは睡眠の質低下・偏頭痛のトリガーになる"
+            ),
+            action="今夜はいつもの就寝時刻 ±30 分以内を目標に",
+        )
+    return None
 
 
 def to_dict(a: WellbeingAlert) -> dict[str, Any]:

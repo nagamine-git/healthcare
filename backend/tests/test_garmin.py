@@ -167,6 +167,45 @@ class FakeGarminAPI:
             ]
         }
 
+    def get_training_readiness(self, cdate: str):
+        return [
+            {
+                "score": 50,
+                "level": "MODERATE",
+                "feedbackShort": "FOCUS_ON_ENERGY_LEVELS",
+                "sleepScoreFactorPercent": 38,
+                "recoveryTimeFactorPercent": 100,
+                "acwrFactorPercent": 100,
+                "hrvFactorPercent": 75,
+                "stressHistoryFactorPercent": 74,
+                "sleepHistoryFactorPercent": 55,
+            }
+        ]
+
+    def get_fitnessage_data(self, cdate: str):
+        return {
+            "chronologicalAge": 31,
+            "fitnessAge": 25.4,
+            "achievableFitnessAge": 24.3,
+        }
+
+    def get_respiration_data(self, cdate: str):
+        return {"avgWakingRespirationValue": 15.0, "avgSleepRespirationValue": 13.0}
+
+    def get_floors(self, cdate: str):
+        return {
+            "floorsValueDescriptorDTOList": [
+                {"key": "startTimeGMT", "index": 0},
+                {"key": "endTimeGMT", "index": 1},
+                {"key": "floorsAscended", "index": 2},
+                {"key": "floorsDescended", "index": 3},
+            ],
+            "floorValuesArray": [
+                ["2026-05-01T00:00:00.0", "2026-05-01T00:15:00.0", 3, 1],
+                ["2026-05-01T08:00:00.0", "2026-05-01T08:15:00.0", 5, 2],
+            ],
+        }
+
 
 def test_sync_garmin_persists_all_categories(db_engine, session):
     api = FakeGarminAPI()
@@ -204,6 +243,30 @@ def test_sync_garmin_persists_all_categories(db_engine, session):
     assert sync_status is not None
     assert sync_status.last_synced_at is not None
     assert sync_status.last_error is None
+
+
+def test_sync_garmin_persists_readiness_and_wellness_metrics(db_engine, session):
+    from app.models import MetricSample
+
+    api = FakeGarminAPI()
+    client = GarminClient(api)
+    target = date(2026, 5, 1)
+    sync_garmin(client, target=target)
+
+    rows = session.execute(
+        select(MetricSample.metric_key, MetricSample.value, MetricSample.raw_json)
+    ).all()
+    by_key = {r[0]: (r[1], r[2]) for r in rows}
+
+    assert by_key["training_readiness"][0] == 50.0
+    assert by_key["training_readiness"][1]["level"] == "MODERATE"
+    assert by_key["training_readiness"][1]["sleepScoreFactorPercent"] == 38
+
+    assert by_key["fitness_age"][0] == 25.4
+    assert by_key["fitness_age"][1]["chronologicalAge"] == 31
+
+    assert by_key["respiration_waking_avg"][0] == 15.0
+    assert by_key["floors_up"][0] == 8.0  # 3 + 5
 
 
 def test_sync_garmin_records_error_when_login_fails(db_engine, session):

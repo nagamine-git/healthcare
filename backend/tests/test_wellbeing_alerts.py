@@ -230,3 +230,67 @@ def test_alerts_sorted_by_severity(session):
     # critical が warning より前
     if "critical" in severities and "warning" in severities:
         assert severities.index("critical") < severities.index("warning")
+
+
+def _add_metric(session, key: str, target: date, value: float, days_ago: int = 0):
+    from app.models import MetricSample
+
+    d = target - timedelta(days=days_ago)
+    ts = datetime.combine(d, datetime.min.time()).replace(hour=7)
+    session.add(MetricSample(source="garmin", metric_key=key, ts=ts, value=value))
+
+
+def test_sleep_spo2_low_triggers_warning(session):
+    today = date(2026, 5, 23)
+    # 直近 3 日中 2 日が avg < 93
+    _add_metric(session, "sleep_spo2_avg", today, 91.0, 0)
+    _add_metric(session, "sleep_spo2_avg", today, 92.0, 1)
+    _add_metric(session, "sleep_spo2_avg", today, 95.0, 2)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    a = next((x for x in alerts if x.code == "sleep_spo2_low"), None)
+    assert a is not None and a.severity == "warning"
+
+
+def test_sleep_spo2_single_low_night_does_not_trigger(session):
+    today = date(2026, 5, 23)
+    _add_metric(session, "sleep_spo2_avg", today, 91.0, 0)
+    _add_metric(session, "sleep_spo2_avg", today, 96.0, 1)
+    _add_metric(session, "sleep_spo2_avg", today, 96.0, 2)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    assert all(a.code != "sleep_spo2_low" for a in alerts)
+
+
+def test_respiration_elevated_vs_baseline(session):
+    today = date(2026, 5, 23)
+    # 28 日 baseline ~13、直近 3 日が +2 以上
+    for i in range(4, 28):
+        _add_metric(session, "sleep_respiration_avg", today, 13.0, i)
+    for i in range(3):
+        _add_metric(session, "sleep_respiration_avg", today, 15.5, i)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    a = next((x for x in alerts if x.code == "respiration_elevated"), None)
+    assert a is not None and a.severity == "info"
+
+
+def test_readiness_low_streak(session):
+    today = date(2026, 5, 23)
+    for i in range(3):
+        _add_metric(session, "training_readiness", today, 25.0, i)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    a = next((x for x in alerts if x.code == "readiness_low_streak"), None)
+    assert a is not None and a.severity == "warning"
+
+
+def test_sleep_irregular_midpoint(session):
+    today = date(2026, 5, 23)
+    # 中点が 1:00 と 5:00 を交互 → SD ≈ 2h
+    for i in range(14):
+        _add_metric(session, "sleep_midpoint_hour", today, 1.0 if i % 2 == 0 else 5.0, i)
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    a = next((x for x in alerts if x.code == "sleep_irregular"), None)
+    assert a is not None and a.severity == "info"

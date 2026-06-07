@@ -50,3 +50,37 @@ def test_hrv_achievement_clamps():
     assert ach.hrv_achievement(60.0, bl) == 50.0   # z=0
     assert ach.hrv_achievement(120.0, bl) == 100.0  # z>=2
     assert ach.hrv_achievement(0.0, bl) == 0.0      # z<=-2
+
+
+def test_spo2_achievement_bounds():
+    from app.scoring import achievement as ach
+
+    assert ach.spo2_achievement(95.0) == 100.0
+    assert ach.spo2_achievement(98.0) == 100.0
+    assert ach.spo2_achievement(90.0) == 0.0
+    assert 50 < ach.spo2_achievement(93.0) < 70  # (93-90)/5 = 60
+
+
+def test_respiration_achievement_band():
+    from app.scoring import achievement as ach
+
+    assert ach.respiration_achievement(13.0) == 100.0
+    assert ach.respiration_achievement(18.0) == 100.0
+    assert ach.respiration_achievement(21.0) == 50.0  # softness 3 で半減
+
+
+def test_sleep_regularity_achievement():
+    from app.scoring import achievement as ach
+
+    assert ach.sleep_regularity_achievement(0.3) == 100.0
+    assert ach.sleep_regularity_achievement(0.5) == 100.0
+    assert ach.sleep_regularity_achievement(2.0) == 0.0
+    assert abs(ach.sleep_regularity_achievement(1.25) - 50.0) < 0.01
+
+
+def test_rhr_night_achievement():
+    from app.scoring import achievement as ach
+
+    assert ach.rhr_night_achievement(46.0) == 100.0
+    assert ach.rhr_night_achievement(55.0) == 100.0
+    assert ach.rhr_night_achievement(70.0) < 50.0

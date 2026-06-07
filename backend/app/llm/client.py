@@ -688,6 +688,54 @@ def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
     return out
 
 
+def _gather_physio(target: date_type) -> dict[str, Any]:
+    """生理指標 (sleep raw_json / Training Readiness 由来) を LLM に渡す。
+
+    readiness は要因分解 (raw_json) 付き。睡眠規則性は中点の 14 日 SD。
+    """
+    import statistics
+
+    from app.models import MetricSample
+    from app.scoring.trend_sources import metric_daily_series
+
+    out: dict[str, Any] = {}
+
+    def _latest(key: str) -> float | None:
+        pairs = metric_daily_series(key, target, 3)
+        return round(pairs[-1][1], 1) if pairs else None
+
+    out["sleep_spo2_avg_pct"] = _latest("sleep_spo2_avg")
+    out["sleep_spo2_lowest_pct"] = _latest("sleep_spo2_lowest")
+    out["sleep_respiration_brpm"] = _latest("sleep_respiration_avg")
+    out["sleep_resting_hr_bpm"] = _latest("sleep_resting_hr")
+    out["sleep_bb_recharge"] = _latest("sleep_bb_change")
+    out["sleep_nap_min"] = _latest("sleep_nap_min")
+    out["fitness_age"] = _latest("fitness_age")
+
+    mid_pairs = metric_daily_series("sleep_midpoint_hour", target, 14)
+    if mid_pairs:
+        values = [v for _, v in mid_pairs]
+        out["sleep_midpoint_hour"] = round(values[-1], 2)
+        out["sleep_midpoint_sd_14d_hour"] = (
+            round(statistics.stdev(values), 2) if len(values) >= 2 else None
+        )
+
+    # Training Readiness: スコア + 要因分解 (raw_json)
+    with session_scope() as session:
+        row = session.execute(
+            select(MetricSample.value, MetricSample.raw_json)
+            .where(MetricSample.metric_key == "training_readiness")
+            .order_by(MetricSample.ts.desc())
+            .limit(1)
+        ).first()
+    if row:
+        out["training_readiness"] = {
+            "score": float(row[0]) if row[0] is not None else None,
+            **(row[1] or {}),
+        }
+    return out
+
+
 def _gather_life_domains(target: date_type) -> dict[str, Any]:
     """ライフドメインの達成度・重み・ライフスコアを LLM 用に返す。"""
     from app.models import DomainWeight
@@ -843,6 +891,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload.update(_gather_today_activity(target))
     today_payload["recent_trends"] = _gather_recent_trends(target)
     today_payload["life_domains"] = _gather_life_domains(target)
+    today_payload["physio"] = _gather_physio(target)
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 

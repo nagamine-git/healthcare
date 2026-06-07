@@ -8,7 +8,11 @@ import { api } from "../lib/api";
 import type { TrendDirection, TrendMetric, TrendMetricKey } from "../lib/api";
 import { MetricTile } from "./MetricTile";
 
-const ORDER: TrendMetricKey[] = ["sleep", "hrv", "energy", "load", "weight", "body_fat"];
+const ORDER: TrendMetricKey[] = [
+  "sleep", "hrv", "energy", "readiness", "load",
+  "spo2", "respiration", "rhr_night", "sleep_midpoint",
+  "weight", "body_fat",
+];
 
 const DIR_LABEL: Record<TrendDirection, string> = {
   improving: "改善傾向", stable: "横ばい", declining: "低下傾向",
@@ -28,15 +32,24 @@ function fmtSleepMin(v: number): string {
   return `${h}時間${m.toString().padStart(2, "0")}分`;
 }
 
+/** 3.25 → "3:15" (睡眠中点の時刻表示) */
+function fmtClockHour(v: number): string {
+  const h = Math.floor(v);
+  const m = Math.round((v - h) * 60);
+  return `${h}:${m.toString().padStart(2, "0")}`;
+}
+
 function fmtCurrent(metricKey: TrendMetricKey, metric: TrendMetric): string {
   if (metric.current_raw == null) return "--";
   if (metricKey === "sleep") return fmtSleepMin(metric.current_raw);
+  if (metricKey === "sleep_midpoint") return fmtClockHour(metric.current_raw);
   return `${metric.current_raw}${metric.unit}`;
 }
 
-/** Y軸目盛: 睡眠は時間単位、他は小数1桁まで */
+/** Y軸目盛: 睡眠は時間単位、中点は時刻、他は小数1桁まで */
 function fmtTick(metricKey: TrendMetricKey, v: number): string {
   if (metricKey === "sleep") return `${Math.round(v / 60)}h`;
+  if (metricKey === "sleep_midpoint") return fmtClockHour(v);
   return Number.isInteger(v) ? `${v}` : v.toFixed(1);
 }
 
@@ -101,8 +114,12 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
     border: "1px solid #334155",
     fontSize: 12,
   };
-  const tooltipFormatter = (v: number | string) =>
-    metricKey === "sleep" && typeof v === "number" ? fmtSleepMin(v) : `${v}${metric.unit}`;
+  const tooltipFormatter = (v: number | string) => {
+    if (typeof v !== "number") return `${v}${metric.unit}`;
+    if (metricKey === "sleep") return fmtSleepMin(v);
+    if (metricKey === "sleep_midpoint") return fmtClockHour(v);
+    return `${v}${metric.unit}`;
+  };
 
   const xAxis = (
     <XAxis dataKey="date" tickFormatter={fmtDate} tick={TICK}
@@ -189,10 +206,14 @@ export function TrendsSection({ hints, extras }: {
         <div className="text-sm text-rose-400">トレンド取得に失敗しました</div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {ORDER.map((key) => (
-            <TrendCard key={key} metricKey={key} metric={query.data.metrics[key]}
-                       granularity={granularity} hint={hints?.[key]} />
-          ))}
+          {ORDER.map((key) => {
+            const m = query.data.metrics[key];
+            if (!m) return null; // 生理指標はデータが入るまで非表示
+            return (
+              <TrendCard key={key} metricKey={key} metric={m}
+                         granularity={granularity} hint={hints?.[key] ?? m.subtitle ?? undefined} />
+            );
+          })}
           {extras && extras.length > 0 ? (
             <div className="grid grid-cols-2 gap-3">
               {extras.map((e) => (

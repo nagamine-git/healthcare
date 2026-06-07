@@ -80,6 +80,41 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
             with session_scope() as session:
                 counts["hydration"] = _upsert_hydration(session, hydration)
 
+        readiness = client.get_training_readiness(target)
+        if readiness:
+            with session_scope() as session:
+                _upsert_daily_metric(
+                    session, target, "training_readiness",
+                    readiness["score"], "score", readiness.get("factors"),
+                )
+            counts["readiness"] = 1
+
+        fitness_age = client.get_fitness_age(target)
+        if fitness_age:
+            with session_scope() as session:
+                _upsert_daily_metric(
+                    session, target, "fitness_age",
+                    fitness_age["fitness_age"], "歳", fitness_age.get("raw"),
+                )
+            counts["fitness_age"] = 1
+
+        respiration = client.get_respiration(target)
+        if respiration:
+            with session_scope() as session:
+                _upsert_daily_metric(
+                    session, target, "respiration_waking_avg",
+                    respiration["waking_avg"], "brpm", None,
+                )
+            counts["respiration"] = 1
+
+        floors = client.get_floors(target)
+        if floors:
+            with session_scope() as session:
+                _upsert_daily_metric(
+                    session, target, "floors_up", floors["ascended"], "階", None,
+                )
+            counts["floors"] = 1
+
     except Exception as exc:
         error = str(exc)
         logger.warning("garmin_sync_error", error=error)
@@ -129,6 +164,8 @@ async def sync_garmin_job() -> dict[str, Any]:
 
 
 def _upsert_sleep(session: Session, target: date_type, sleep: dict[str, Any]) -> None:
+    from app.ingest.sleep_extras import store_sleep_extras
+
     existing = session.get(SleepSession, target)
     fields = {
         "source": "garmin",
@@ -146,6 +183,9 @@ def _upsert_sleep(session: Session, target: date_type, sleep: dict[str, Any]) ->
             setattr(existing, k, v)
     else:
         session.add(SleepSession(date=target, **fields))
+
+    # raw_json から生理指標 (SpO2/呼吸/睡眠中点 等) を MetricSample へ抽出
+    store_sleep_extras(session, target, sleep.get("raw_json"))
 
 
 def _upsert_hrv(session: Session, target: date_type, hrv: dict[str, Any]) -> None:
@@ -280,6 +320,33 @@ def _upsert_summary(session: Session, target: date_type, summary: dict[str, Any]
             set_={"value": stmt.excluded.value},
         )
         session.execute(stmt)
+
+
+def _upsert_daily_metric(
+    session: Session,
+    target: date_type,
+    key: str,
+    value: float,
+    unit: str | None,
+    raw_json: dict[str, Any] | None,
+) -> None:
+    """日次 1 サンプルの指標を MetricSample に upsert (ts=対象日 07:00)。"""
+    ts = datetime.combine(target, datetime.min.time()).replace(hour=7)
+    stmt = sqlite_insert(MetricSample).values(
+        [{
+            "source": "garmin",
+            "metric_key": key,
+            "ts": ts,
+            "value": float(value),
+            "unit": unit,
+            "raw_json": raw_json,
+        }]
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
+        set_={"value": stmt.excluded.value, "raw_json": stmt.excluded.raw_json},
+    )
+    session.execute(stmt)
 
 
 def _upsert_hydration(session: Session, hydration: dict[str, Any]) -> int:

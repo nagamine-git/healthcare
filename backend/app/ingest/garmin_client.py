@@ -22,6 +22,10 @@ class GarminAPIProtocol(Protocol):
     def get_user_summary(self, cdate: str) -> Any: ...
     def get_stress_data(self, cdate: str) -> Any: ...
     def get_hydration_data(self, cdate: str) -> Any: ...
+    def get_training_readiness(self, cdate: str) -> Any: ...
+    def get_fitnessage_data(self, cdate: str) -> Any: ...
+    def get_respiration_data(self, cdate: str) -> Any: ...
+    def get_floors(self, cdate: str) -> Any: ...
     def garth(self) -> Any: ...
 
 
@@ -107,6 +111,44 @@ class GarminClient:
         except Exception:
             return []
         return _normalise_stress(raw)
+
+    def get_training_readiness(self, target: date_type) -> dict[str, Any] | None:
+        """Training Readiness (0-100 合成スコア + 要因分解)。対応端末のみ値が返る。"""
+        self.login()
+        try:
+            raw = self._api.get_training_readiness(target.isoformat())
+        except Exception:
+            return None
+        return _normalise_training_readiness(raw)
+
+    def get_fitness_age(self, target: date_type) -> dict[str, Any] | None:
+        self.login()
+        try:
+            raw = self._api.get_fitnessage_data(target.isoformat())
+        except Exception:
+            return None
+        return _normalise_fitness_age(raw)
+
+    def get_respiration(self, target: date_type) -> dict[str, Any] | None:
+        """日次呼吸サマリ (覚醒時平均)。睡眠時平均は sleep raw_json 側で取る。"""
+        self.login()
+        try:
+            raw = self._api.get_respiration_data(target.isoformat())
+        except Exception:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        v = raw.get("avgWakingRespirationValue")
+        return {"waking_avg": float(v)} if v is not None else None
+
+    def get_floors(self, target: date_type) -> dict[str, Any] | None:
+        """当日の昇り階数合計。"""
+        self.login()
+        try:
+            raw = self._api.get_floors(target.isoformat())
+        except Exception:
+            return None
+        return _normalise_floors(raw)
 
     def get_hydration(self, target: date_type) -> dict[str, Any] | None:
         """Garmin Connect で記録された水分量 (日次集計、mL)。
@@ -287,6 +329,72 @@ def _normalise_hydration(raw: Any, target: date_type) -> dict[str, Any] | None:
         "ts": datetime.combine(target, datetime.min.time()),
         "raw_json": raw,
     }
+
+
+# Training Readiness の要因分解として raw_json に残すフィールド
+_READINESS_FACTOR_KEYS = (
+    "level",
+    "feedbackShort",
+    "sleepScore",
+    "sleepScoreFactorPercent",
+    "recoveryTime",
+    "recoveryTimeFactorPercent",
+    "acwrFactorPercent",
+    "acuteLoad",
+    "hrvFactorPercent",
+    "hrvWeeklyAverage",
+    "sleepHistoryFactorPercent",
+    "stressHistoryFactorPercent",
+)
+
+
+def _normalise_training_readiness(raw: Any) -> dict[str, Any] | None:
+    envelope = raw[0] if isinstance(raw, list) and raw else raw
+    if not isinstance(envelope, dict):
+        return None
+    score = envelope.get("score")
+    if score is None:
+        return None
+    factors = {k: envelope.get(k) for k in _READINESS_FACTOR_KEYS if envelope.get(k) is not None}
+    return {"score": float(score), "factors": factors}
+
+
+def _normalise_fitness_age(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    age = raw.get("fitnessAge")
+    if age is None:
+        return None
+    return {
+        "fitness_age": float(age),
+        "raw": {
+            k: raw.get(k)
+            for k in ("chronologicalAge", "achievableFitnessAge", "previousFitnessAge")
+            if raw.get(k) is not None
+        },
+    }
+
+
+def _normalise_floors(raw: Any) -> dict[str, Any] | None:
+    """floorValuesArray を descriptor で読み、floorsAscended の合計を返す。"""
+    if not isinstance(raw, dict):
+        return None
+    descriptors = raw.get("floorsValueDescriptorDTOList") or []
+    idx = None
+    for d in descriptors:
+        if isinstance(d, dict) and d.get("key") == "floorsAscended":
+            idx = d.get("index")
+            break
+    if idx is None:
+        return None
+    total = 0.0
+    for entry in raw.get("floorValuesArray") or []:
+        if isinstance(entry, list) and len(entry) > idx and entry[idx] is not None:
+            try:
+                total += float(entry[idx])
+            except (TypeError, ValueError):
+                continue
+    return {"ascended": total}
 
 
 def _normalise_stress(raw: dict[str, Any]) -> list[dict[str, Any]]:

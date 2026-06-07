@@ -26,6 +26,25 @@ LOAD_BAND_LO = 0.8
 LOAD_BAND_HI = 1.3
 LOAD_BAND_SOFTNESS = 0.3
 
+# 睡眠時 SpO2: 成人の正常域は 95% 以上、90% 未満は低酸素 (臨床的閾値)。
+SPO2_FLOOR = 90.0
+SPO2_GOOD = 95.0
+
+# 睡眠時呼吸数: 成人安静時の正常域 12-20 brpm の保守側 12-18 を理想帯に。
+RESPIRATION_BAND_LO = 12.0
+RESPIRATION_BAND_HI = 18.0
+RESPIRATION_BAND_SOFTNESS = 3.0
+
+# 夜間安静時心拍の理想帯 (トレーニング習慣のある成人)。
+RHR_NIGHT_BAND_LO = 40.0
+RHR_NIGHT_BAND_HI = 55.0
+RHR_NIGHT_BAND_SOFTNESS = 8.0
+
+# 睡眠中点の規則性 (14日 SD)。SD ≤0.5h で満点、2.0h で 0。
+# 睡眠規則性は睡眠時間と独立に死亡リスク・気分と相関 (Windred 2024 ほか SRI 研究)。
+REGULARITY_SD_GOOD = 0.5
+REGULARITY_SD_BAD = 2.0
+
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
@@ -117,3 +136,42 @@ def body_fat_achievement(value: float | None, target_pct: float, tol: float) -> 
     if value is None or target_pct <= 0:
         return None
     return band_achievement(float(value), target_pct - tol, target_pct + tol, max(tol * 2, 0.5))
+
+
+def spo2_achievement(avg: float | None) -> float | None:
+    """睡眠時平均 SpO2。95% 以上で満点、90% で 0 (成人の臨床的正常域に基づく)。"""
+    if avg is None:
+        return None
+    return upper_achievement(float(avg), SPO2_FLOOR, SPO2_GOOD)
+
+
+def respiration_achievement(avg: float | None) -> float | None:
+    """睡眠時平均呼吸数。成人安静域 12-18 brpm を理想帯とする。"""
+    if avg is None:
+        return None
+    return band_achievement(
+        float(avg), RESPIRATION_BAND_LO, RESPIRATION_BAND_HI, RESPIRATION_BAND_SOFTNESS
+    )
+
+
+def rhr_night_achievement(bpm: float | None) -> float | None:
+    """夜間安静時心拍。40-55 bpm を理想帯とする。"""
+    if bpm is None:
+        return None
+    return band_achievement(
+        float(bpm), RHR_NIGHT_BAND_LO, RHR_NIGHT_BAND_HI, RHR_NIGHT_BAND_SOFTNESS
+    )
+
+
+def sleep_regularity_achievement(sd_hour: float | None) -> float | None:
+    """睡眠中点の 14 日標準偏差 (時)。小さいほど概日リズムが規則的。"""
+    if sd_hour is None:
+        return None
+    sd = float(sd_hour)
+    if sd <= REGULARITY_SD_GOOD:
+        return 100.0
+    if sd >= REGULARITY_SD_BAD:
+        return 0.0
+    return _clamp(
+        (REGULARITY_SD_BAD - sd) / (REGULARITY_SD_BAD - REGULARITY_SD_GOOD) * 100.0
+    )

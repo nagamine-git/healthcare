@@ -688,7 +688,7 @@ async def trends(
     def _series_out(pairs):
         return tr.weekly_average(pairs) if weekly else tr.daily_series(pairs)
 
-    def _metric(label, unit, ideal, raw_pairs, ach_series):
+    def _metric(label, unit, ideal, raw_pairs, ach_series, subtitle=None):
         trend = tr.compute_trend(ach_series, higher_is_better=True)
         out_series = _series_out(raw_pairs)
         reg_input = [(date.fromisoformat(p["date"]), p["value"]) for p in out_series]
@@ -703,6 +703,7 @@ async def trends(
             "achievement_week_over_week": trend["week_over_week"],
             "direction": trend["direction"],
             "regression": tr.linear_regression_endpoints(reg_input),
+            "subtitle": subtitle,
         }
 
     sleep_raw = [r for r in bundle["sleep"] if r[1] is not None]
@@ -752,6 +753,71 @@ async def trends(
                         lambda r: ach.body_fat_achievement(r[1], s.target_body_fat_pct, s.body_fat_tolerance_pct)),
         ),
     }
+
+    # --- 生理指標 (sleep raw_json / Training Readiness 由来の MetricSample) ---
+    today = _today()
+
+    def _physio(key: str):
+        return trend_sources.metric_daily_series(key, today, days)
+
+    def _ach_map(pairs, fn):
+        out = []
+        for d, v in pairs:
+            a = fn(v)
+            if a is not None:
+                out.append((d, a))
+        return out
+
+    readiness_pairs = _physio("training_readiness")
+    if readiness_pairs:
+        metrics["readiness"] = _metric(
+            "攻め時 (Readiness)", "",
+            {"type": "upper", "good_line": 70},
+            readiness_pairs, list(readiness_pairs),
+        )
+
+    spo2_pairs = _physio("sleep_spo2_avg")
+    if spo2_pairs:
+        spo2_low = _physio("sleep_spo2_lowest")
+        metrics["spo2"] = _metric(
+            "血中酸素 (睡眠)", "%",
+            {"type": "band", "lo": 94, "hi": 100},
+            spo2_pairs, _ach_map(spo2_pairs, ach.spo2_achievement),
+            subtitle=f"最低 {spo2_low[-1][1]:.0f}% (直近)" if spo2_low else None,
+        )
+
+    resp_pairs = _physio("sleep_respiration_avg")
+    if resp_pairs:
+        metrics["respiration"] = _metric(
+            "呼吸数 (睡眠)", "brpm",
+            {"type": "band", "lo": ach.RESPIRATION_BAND_LO, "hi": ach.RESPIRATION_BAND_HI},
+            resp_pairs, _ach_map(resp_pairs, ach.respiration_achievement),
+        )
+
+    rhr_pairs = _physio("sleep_resting_hr")
+    if rhr_pairs:
+        metrics["rhr_night"] = _metric(
+            "夜間心拍", "bpm",
+            {"type": "band", "lo": ach.RHR_NIGHT_BAND_LO, "hi": ach.RHR_NIGHT_BAND_HI},
+            rhr_pairs, _ach_map(rhr_pairs, ach.rhr_night_achievement),
+        )
+
+    mid_pairs = _physio("sleep_midpoint_hour")
+    if mid_pairs:
+        import statistics
+
+        mid_values = [v for _, v in mid_pairs]
+        median = statistics.median(mid_values)
+        recent = [v for d, v in mid_pairs if d > today - timedelta(days=14)]
+        sd14 = statistics.stdev(recent) if len(recent) >= 2 else None
+        metrics["sleep_midpoint"] = _metric(
+            "睡眠中点 (リズム)", "時",
+            {"type": "band", "lo": round(median - 0.75, 2), "hi": round(median + 0.75, 2)},
+            mid_pairs,
+            _ach_map(mid_pairs, lambda v: ach.band_achievement(v, median - 0.75, median + 0.75, 0.75)),
+            subtitle=f"ばらつき ±{sd14:.1f}h (14日)" if sd14 is not None else None,
+        )
+
     return {
         "granularity": granularity,
         "generated_at": _utc_iso(datetime.now(UTC).replace(tzinfo=None)),
