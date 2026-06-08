@@ -228,7 +228,13 @@ export function TodayPage({ onOpenDebug }: Props) {
         <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
         <LifeSection />
       </div>
-      <PhysiqueTargetSection />
+      <PhysiqueTargetSection
+        current={
+          weight?.weight_kg != null && weight?.body_fat_pct != null
+            ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
+            : null
+        }
+      />
 
       {/* ===== 🎯 今日のアクション ===== */}
       <SectionHeader label="今日のアクション" hint="LLM が状況を統合して 3 件まで" />

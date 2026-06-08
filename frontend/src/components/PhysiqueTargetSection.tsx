@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Target } from "lucide-react";
 import { api } from "../lib/api";
+import { BodyCompositionMap } from "./BodyCompositionMap";
 import { Silhouette } from "./Silhouette";
 
 /**
@@ -55,7 +56,11 @@ function note(heightCm: number, bf: number, weight: number, sex: "male" | "femal
   return { level: "ok" as const, text: `BMI ${bmi}・健康域` };
 }
 
-export function PhysiqueTargetSection() {
+export function PhysiqueTargetSection({
+  current,
+}: {
+  current?: { weight: number; bf: number } | null;
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const profile = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
@@ -167,7 +172,15 @@ export function PhysiqueTargetSection() {
             </div>
           )}
 
-          <div className="text-[10px] text-slate-500">縦=体脂肪率 / 横=体重。薄い色ほど非現実的な組合せ (緑=現実的)</div>
+          {/* 体組成マップ: 目的別ゾーンを重ねて現在地と目標を可視化 */}
+          <BodyCompositionMap
+            heightCm={heightCm}
+            sex={sex}
+            current={current}
+            target={sel ? { weight: sel.weight, bf: sel.bf } : null}
+          />
+
+          <div className="text-[10px] text-slate-500">下: 縦=体脂肪率 / 横=体重。薄い色ほど非現実的な組合せ (緑=現実的)</div>
 
           {/* 体脂肪率 × 体重 のコンパクトグリッド (横スクロール) */}
           <div className="overflow-x-auto">
