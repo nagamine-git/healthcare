@@ -15,6 +15,7 @@ import { StaleBanner } from "../components/StaleBanner";
 import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
 import { LifeSection } from "../components/LifeSection";
+import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -227,6 +228,7 @@ export function TodayPage({ onOpenDebug }: Props) {
         <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
         <LifeSection />
       </div>
+      <PhysiqueTargetSection />
 
       {/* ===== 🎯 今日のアクション ===== */}
       <SectionHeader label="今日のアクション" hint="LLM が状況を統合して 3 件まで" />

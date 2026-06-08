@@ -88,10 +88,10 @@ async def today(
         }
 
         # 各サブスコアの実世界の値とターゲット (UI 表示用)
-        from app.config import get_settings
+        from app.scoring.profile import resolve_profile
         from app.scoring.recompute import _training_load
 
-        s = get_settings()
+        s = resolve_profile()
         acute, chronic = _training_load(session, d)
         acwr = (acute / chronic) if (acute is not None and chronic and chronic > 0) else None
         sub_context = {
@@ -203,17 +203,17 @@ async def today(
         pressure = _build_pressure(lat=lat, lon=lon)
 
         # --- Wellbeing Alerts (ヤバい状態の自動検知) ---
-        from app.config import get_settings as _get_settings
+        from app.scoring.profile import resolve_profile
         from app.scoring.wellbeing_alerts import evaluate_alerts
         from app.scoring.wellbeing_alerts import to_dict as alert_to_dict
 
-        _s = _get_settings()
+        _prof = resolve_profile()
         alerts_raw = evaluate_alerts(
             session,
             d,
             pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
-            target_weight_kg=_s.target_weight_kg,
-            weight_lower_kg=_s.target_weight_kg - 1.0,
+            target_weight_kg=_prof.target_weight_kg,
+            weight_lower_kg=_prof.target_weight_kg - 1.0,
         )
         alerts = [alert_to_dict(a) for a in alerts_raw]
 
@@ -517,7 +517,8 @@ def _build_caffeine(
     if tonight_plan is None or not tonight_plan.get("bedtime"):
         return {"available": False, "reason": "tonight_plan が未計算"}
 
-    weight_kg = current_weight_kg if current_weight_kg else settings.target_weight_kg
+    from app.scoring.profile import resolve_profile
+    weight_kg = current_weight_kg if current_weight_kg else resolve_profile().target_weight_kg
     if not weight_kg or weight_kg <= 0:
         return {"available": False, "reason": "体重データなし"}
 
@@ -665,12 +666,12 @@ async def trends(
     granularity: str = Query(default="daily"),
     days: int = Query(default=28, ge=7, le=365),
 ) -> dict[str, Any]:
-    from app.config import get_settings
     from app.scoring import achievement as ach
     from app.scoring import trend_sources
     from app.scoring import trends as tr
+    from app.scoring.profile import resolve_profile
 
-    s = get_settings()
+    s = resolve_profile()
     bundle = trend_sources.collect_raw_series(_today(), days=days)
     weekly = granularity == "weekly"
 

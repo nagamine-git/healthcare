@@ -282,6 +282,25 @@ export type MigraineList = {
   count_30d: number;
 };
 
+export type UserProfileDto = {
+  height_cm: number;
+  sex: "male" | "female";
+  target_weight_kg: number;
+  target_body_fat_pct: number;
+  body_fat_tolerance_pct: number;
+  ffmi_normalized: number | null;
+  source: "db" | "default";
+};
+export type ProfileAssessment = { level: "ok" | "warning" | "blocked"; warnings: string[] };
+export type ProfileUpdate = {
+  height_cm?: number;
+  sex?: "male" | "female";
+  target_weight_kg: number;
+  target_body_fat_pct: number;
+  body_fat_tolerance_pct?: number;
+  ffmi_normalized?: number;
+};
+
 export type MigraineOnsetProfile = {
   mean_hour: number | null;
   sd_hour: number | null;
@@ -581,6 +600,12 @@ export const api = {
   migraineList: (days = 30) =>
     request<MigraineList>(`/api/migraine?days=${days}`),
   migraineTriggers: () => request<MigraineTriggers>("/api/migraine/triggers"),
+  getProfile: () => request<UserProfileDto>("/api/profile"),
+  putProfile: (body: ProfileUpdate) =>
+    request<UserProfileDto & { assessment: ProfileAssessment }>("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   migraineStart: (opts?: { severity?: number; note?: string; ts_iso?: string }) =>
     request<MigraineEpisode>("/api/migraine/start", {
       method: "POST",

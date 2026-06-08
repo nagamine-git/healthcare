@@ -217,6 +217,24 @@ class DomainWeight(Base):
     weight: Mapped[float] = mapped_column(Float, default=1.0)
 
 
+class UserProfile(Base):
+    """UI から設定する個人プロファイルの上書き (単一行、id=1 固定)。
+
+    値が NULL のフィールドは config.py (env) のデフォルトにフォールバックする。
+    目標体型シルエットで設定した体重・体脂肪率を保持する。
+    """
+
+    __tablename__ = "user_profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sex: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    target_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_fat_tolerance_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ffmi_normalized: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class SpeechSession(Base):
     """speech-coach から取り込む日次の発話練習サマリ (JST 日付ごと)。"""
 

@@ -37,8 +37,9 @@ def health_achievement(target: date_type) -> float | None:
     """既存トレンド6指標 (sleep/hrv/energy/load/weight/body_fat) の最新達成度の平均。"""
     from app.scoring import achievement as ach
     from app.scoring import trend_sources
+    from app.scoring.profile import resolve_profile
 
-    s = get_settings()
+    s = resolve_profile()
     bundle = trend_sources.collect_raw_series(target, days=28)
     vals: list[float] = []
 

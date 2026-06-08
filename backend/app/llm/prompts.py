@@ -261,18 +261,20 @@ def _karvonen_zones(age: int, resting_hr: int) -> str:
 
 
 def _format_persona() -> str:
-    """Settings の値を埋め込んだ persona テキストを返す。"""
+    """Settings + プロファイル上書きを埋め込んだ persona テキストを返す。"""
     from app.config import get_settings
+    from app.scoring.profile import resolve_profile
 
     s = get_settings()
+    prof = resolve_profile()
     starting = "\n".join(f"- {k}: {v}" for k, v in s.user_starting_weights.items())
     return SYSTEM_PERSONA_TEMPLATE.format(
         user_age=s.user_age,
-        user_sex={"male": "男性", "female": "女性"}.get(s.user_sex, s.user_sex),
-        user_height_cm=s.user_height_cm,
-        target_weight_kg=s.target_weight_kg,
-        target_body_fat_pct=s.target_body_fat_pct,
-        body_fat_tolerance_pct=s.body_fat_tolerance_pct,
+        user_sex={"male": "男性", "female": "女性"}.get(prof.sex, prof.sex),
+        user_height_cm=prof.height_cm,
+        target_weight_kg=prof.target_weight_kg,
+        target_body_fat_pct=prof.target_body_fat_pct,
+        body_fat_tolerance_pct=prof.body_fat_tolerance_pct,
         user_priority=s.user_priority,
         injury_notes=" / ".join(s.user_injury_notes),
         equipment="、".join(s.user_equipment),

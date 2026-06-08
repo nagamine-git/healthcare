@@ -554,17 +554,17 @@ def _gather_pressure() -> dict[str, Any] | None:
 def _gather_wellbeing_alerts(
     target: date_type, pressure: dict[str, Any] | None
 ) -> list[dict[str, Any]]:
-    from app.config import get_settings
+    from app.scoring.profile import resolve_profile
     from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict
 
-    s = get_settings()
+    prof = resolve_profile()
     with session_scope() as sess:
         alerts = evaluate_alerts(
             sess,
             target,
             pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
-            target_weight_kg=s.target_weight_kg,
-            weight_lower_kg=s.target_weight_kg - 1.0,
+            target_weight_kg=prof.target_weight_kg,
+            weight_lower_kg=prof.target_weight_kg - 1.0,
         )
     return [to_dict(a) for a in alerts]
 
@@ -651,12 +651,12 @@ def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
 
     series は重いので落とす。dashboard の /api/trends と同じ計算 (achievement + trends) を共有する。
     """
-    from app.config import get_settings
     from app.scoring import achievement as ach
     from app.scoring import trend_sources
     from app.scoring import trends as tr
+    from app.scoring.profile import resolve_profile
 
-    s = get_settings()
+    s = resolve_profile()
     bundle = trend_sources.collect_raw_series(target, days=days)
     hrv_bl = bundle["hrv_baseline"]
 

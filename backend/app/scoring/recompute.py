@@ -159,12 +159,14 @@ def recompute_for_date(target: date_type) -> dict[str, Any]:
         weight_baseline, recent_median = _weight_baseline_and_recent(session, target)
         weight_sub = weight_subscore(recent_median=recent_median, baseline=weight_baseline)
 
+        from app.scoring.profile import resolve_profile
         settings = get_settings()
+        prof = resolve_profile()
         recent_bf = _recent_body_fat(session, target)
         body_fat_sub = body_fat_subscore(
             recent_value=recent_bf,
-            target_pct=settings.target_body_fat_pct,
-            tolerance_pct=settings.body_fat_tolerance_pct,
+            target_pct=prof.target_body_fat_pct,
+            tolerance_pct=prof.body_fat_tolerance_pct,
         )
 
         subs = {

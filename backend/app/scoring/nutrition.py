@@ -128,16 +128,18 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
     HAE の active_energy / basal_energy は cumulative で重複加算されるリスクが高いため
     使わない。
     """
+    from app.scoring.profile import resolve_profile
     settings = get_settings()
+    prof = resolve_profile()
     out: dict[str, Any] = {}
 
     # BMR (定数)
     # 現体重を使うのが厳密だが、目標体重との差が小さいので target_weight_kg で代用
     bmr = _bmr_mifflin(
-        settings.target_weight_kg,
-        settings.user_height_cm,
+        prof.target_weight_kg,
+        prof.height_cm,
         settings.user_age,
-        settings.user_sex,
+        prof.sex,
     )
 
     # 当日の活動消費: Garmin daily_summary 優先、無ければ HAE active_energy
@@ -225,7 +227,7 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
             }
 
     # 目標値 (体重ベース)。min/ideal/max の範囲で持つ。
-    weight_kg = settings.target_weight_kg
+    weight_kg = prof.target_weight_kg
     tdee_value = out["tdee"]["value"]
 
     out["targets"] = {
