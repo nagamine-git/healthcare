@@ -160,3 +160,16 @@ def test_note_concatenation_on_end(app_client):
     note = resp.json()["note"]
     assert "右側" in note
     assert "ロキソニン" in note
+
+
+def test_triggers_endpoint_accumulating(app_client):
+    # エピソードを2件だけ作る → 判定保留
+    app_client.post("/api/migraine/start", json={"severity": 5})
+    app_client.post("/api/migraine/end", json={})
+    resp = app_client.get("/api/migraine/triggers")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "accumulating"
+    assert "onset_profile" in body
+    assert body["episode_count"] >= 1
+    assert "remaining" in body

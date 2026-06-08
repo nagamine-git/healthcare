@@ -282,6 +282,31 @@ export type MigraineList = {
   count_30d: number;
 };
 
+export type MigraineOnsetProfile = {
+  mean_hour: number | null;
+  sd_hour: number | null;
+  peak_bucket: string | null;
+  buckets: { label: string; count: number }[];
+};
+export type MigraineFactor = {
+  key: string;
+  label: string;
+  direction: string;
+  case_mean: number;
+  control_mean: number;
+  p: number;
+  q: number;
+};
+export type MigraineTriggers = {
+  episode_count: number;
+  onset_profile: MigraineOnsetProfile;
+  status: "accumulating" | "no_significant_factor" | "has_factors";
+  min_episodes: number;
+  remaining?: number;
+  factors: MigraineFactor[];
+  tested: string[];
+};
+
 export type PressurePoint = {
   time: string;
   hpa: number;
@@ -555,6 +580,7 @@ export const api = {
     }),
   migraineList: (days = 30) =>
     request<MigraineList>(`/api/migraine?days=${days}`),
+  migraineTriggers: () => request<MigraineTriggers>("/api/migraine/triggers"),
   migraineStart: (opts?: { severity?: number; note?: string; ts_iso?: string }) =>
     request<MigraineEpisode>("/api/migraine/start", {
       method: "POST",

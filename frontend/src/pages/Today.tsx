@@ -8,6 +8,7 @@ import { TonightPlanPanel } from "../components/TonightPlanPanel";
 import { FocusPanel } from "../components/FocusPanel";
 import { CaffeinePanel } from "../components/CaffeinePanel";
 import { MigrainePanel } from "../components/MigrainePanel";
+import { MigraineTriggerPanel } from "../components/MigraineTriggerPanel";
 import { AlcoholPanel } from "../components/AlcoholPanel";
 import { EnvironmentPanel } from "../components/EnvironmentPanel";
 import { StaleBanner } from "../components/StaleBanner";
@@ -295,6 +296,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
       <CaffeinePanel caffeine={data.caffeine} />
       <MigrainePanel />
+      <MigraineTriggerPanel />
       <AlcoholPanel />
 
     </main>

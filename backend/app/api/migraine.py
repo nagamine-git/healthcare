@@ -107,6 +107,18 @@ async def list_migraine(days: int = 30) -> dict[str, Any]:
         }
 
 
+@router.get("/api/migraine/triggers")
+async def migraine_triggers() -> dict[str, Any]:
+    """頭痛の発症時刻プロファイルと、統計的に有意なトリガー要因を返す。
+
+    サンプルが少ない間は status=accumulating で判定保留。
+    """
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    target = datetime.now(ZoneInfo(get_settings().app_tz)).date()
+    return analyze_triggers(target)
+
+
 class MigrainePatch(BaseModel):
     """編集用。指定したフィールドだけ更新する。"""
 
