@@ -208,12 +208,13 @@ async def today(
         from app.scoring.wellbeing_alerts import to_dict as alert_to_dict
 
         _prof = resolve_profile()
+        _bmi_floor = round(18.5 * (_prof.height_cm / 100) ** 2, 1)
         alerts_raw = evaluate_alerts(
             session,
             d,
             pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
             target_weight_kg=_prof.target_weight_kg,
-            weight_lower_kg=_prof.target_weight_kg - 1.0,
+            weight_lower_kg=_bmi_floor,
         )
         alerts = [alert_to_dict(a) for a in alerts_raw]
 

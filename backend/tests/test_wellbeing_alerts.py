@@ -93,24 +93,44 @@ def test_recovery_failure_triggers_warning(session):
     assert "recovery_failure" in codes
 
 
-def test_weight_loss_triggers_critical(session):
+def test_weight_loss_triggers_when_underweight(session):
+    """BMI 18.5 健康下限 (例 50.4kg) を下回ったら低体重アラート。"""
     from app.models import WeightSample
 
     today = date(2026, 5, 23)
-    # 目標下限 55.5kg - 1.0 = 54.5kg。中央値 54.0 で alert
     for i in range(5):
         session.add(
             WeightSample(
                 ts=datetime.combine(today, datetime.min.time()) - timedelta(days=i),
-                weight_kg=54.0,
+                weight_kg=49.5,  # BMI 18.5 floor 50.4 を下回る
                 source="hae",
             )
         )
     session.flush()
 
-    alerts = evaluate_alerts(session, today, target_weight_kg=56.5, weight_lower_kg=55.5)
+    alerts = evaluate_alerts(session, today, target_weight_kg=55.0, weight_lower_kg=50.4)
     codes = [a.code for a in alerts]
     assert "weight_loss" in codes
+
+
+def test_weight_loss_no_alert_when_below_gain_target_but_healthy(session):
+    """増量目標 (59kg) に未達でも、BMI が健康域なら誤発火しない。"""
+    from app.models import WeightSample
+
+    today = date(2026, 5, 23)
+    for i in range(5):
+        session.add(
+            WeightSample(
+                ts=datetime.combine(today, datetime.min.time()) - timedelta(days=i),
+                weight_kg=54.6,  # BMI 20.0、健康域。floor 50.4 より上
+                source="hae",
+            )
+        )
+    session.flush()
+
+    alerts = evaluate_alerts(session, today, target_weight_kg=59.0, weight_lower_kg=50.4)
+    codes = [a.code for a in alerts]
+    assert "weight_loss" not in codes
 
 
 def test_moh_high_when_12_or_more_painkillers(session):

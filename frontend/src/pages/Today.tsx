@@ -218,9 +218,21 @@ export function TodayPage({ onOpenDebug }: Props) {
         onRefresh={() => fullRefresh.mutate()}
       />
 
-      {/* ===== ⚠️ アラート ===== */}
+      {/* ===== 🧭 今日の指針 (アラート + LLMアクションを一本化) ===== */}
+      {/* アラート = 決定的な安全網 (上)、LLMアクション = 最適化 (下)。
+          重複は prompt 側で抑止 (アラートと同じ内容は出さない)。 */}
       <div id="alerts-section">
-        <WellbeingAlertsBanner alerts={data.alerts} />
+        <SectionHeader label="今日の指針" hint="アラート（安全網）+ LLMの推奨アクション" />
+        <div className="space-y-3">
+          <WellbeingAlertsBanner alerts={data.alerts} />
+          <AdviceCard
+            advice={data.advice}
+            onRegenerate={() => regenerate.mutate()}
+            onSchedule={api.gcalSchedule}
+            gcalConfigured={gcalStatus.data?.configured ?? false}
+            pending={regenerate.isPending}
+          />
+        </div>
       </div>
 
       {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}
@@ -234,16 +246,6 @@ export function TodayPage({ onOpenDebug }: Props) {
             ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
             : null
         }
-      />
-
-      {/* ===== 🎯 今日のアクション ===== */}
-      <SectionHeader label="今日のアクション" hint="LLM が状況を統合して 3 件まで" />
-      <AdviceCard
-        advice={data.advice}
-        onRegenerate={() => regenerate.mutate()}
-        onSchedule={api.gcalSchedule}
-        gcalConfigured={gcalStatus.data?.configured ?? false}
-        pending={regenerate.isPending}
       />
 
       {/* ===== 📊 今の状態 ===== */}

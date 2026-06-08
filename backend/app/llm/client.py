@@ -558,13 +558,14 @@ def _gather_wellbeing_alerts(
     from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict
 
     prof = resolve_profile()
+    bmi_floor = round(18.5 * (prof.height_cm / 100) ** 2, 1)
     with session_scope() as sess:
         alerts = evaluate_alerts(
             sess,
             target,
             pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
             target_weight_kg=prof.target_weight_kg,
-            weight_lower_kg=prof.target_weight_kg - 1.0,
+            weight_lower_kg=bmi_floor,
         )
     return [to_dict(a) for a in alerts]
 
