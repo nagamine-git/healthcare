@@ -36,16 +36,16 @@ echo "==> docker compose up -d --build (mac overlay)"
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.mac.yml \
-  --env-file .env.runtime \
+  --env-file .env.runtime --env-file .env.profile \
   up -d --build
 
 echo
 echo "==> サービス状態"
-docker compose -f docker-compose.yml -f docker-compose.mac.yml --env-file .env.runtime ps
+docker compose -f docker-compose.yml -f docker-compose.mac.yml --env-file .env.runtime --env-file .env.profile ps
 
 echo
 echo "==> tailscale sidecar ログ (起動/cert 周り)"
-docker compose -f docker-compose.yml -f docker-compose.mac.yml --env-file .env.runtime \
+docker compose -f docker-compose.yml -f docker-compose.mac.yml --env-file .env.runtime --env-file .env.profile \
   logs --tail=80 tailscale 2>&1 | grep -E "(Tailscale started|cert|MagicDNS|Logging in|userspace)" || true
 
 cat <<'NEXT'

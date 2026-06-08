@@ -42,6 +42,17 @@ services:
       GARMIN_EMAIL: ${GARMIN_EMAIL:?GARMIN_EMAIL is required}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD:?GARMIN_PASSWORD is required}
       HAE_INGEST_TOKEN: ${HAE_INGEST_TOKEN:?HAE_INGEST_TOKEN is required}
+      # 個人プロファイル (例の既定値。実値は gitignore したローカル env で上書き)
+      USER_AGE: ${USER_AGE:-30}
+      USER_SEX: ${USER_SEX:-male}
+      USER_HEIGHT_CM: ${USER_HEIGHT_CM:-170}
+      USER_RESTING_HR: ${USER_RESTING_HR:-60}
+      TARGET_WEIGHT_KG: ${TARGET_WEIGHT_KG:-65}
+      TARGET_BODY_FAT_PCT: ${TARGET_BODY_FAT_PCT:-18}
+      WEATHER_LATITUDE: ${WEATHER_LATITUDE:-35.6812}
+      WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:-139.7671}
+      WEATHER_LOCATION_LABEL: ${WEATHER_LOCATION_LABEL:-Tokyo}
+      MEDITATION_TARGET_MIN: ${MEDITATION_TARGET_MIN:-15}
     volumes:
       - ./data:/data
     restart: unless-stopped

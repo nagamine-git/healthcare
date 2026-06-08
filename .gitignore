@@ -55,3 +55,6 @@ google_tokens/
 # Logs
 *.log
 logs/
+
+# Local personal profile (not for OSS repo)
+.env.profile
