@@ -13,12 +13,13 @@ from app.config import get_settings
 from app.db import session_scope
 from app.models import DomainWeight
 from app.scoring import domains as dom
+from app.scoring.timewindow import app_today
 
 router = APIRouter()
 
 
 def _today() -> date:
-    return datetime.now().date()
+    return app_today()
 
 
 def _load_weights() -> dict[str, float]:

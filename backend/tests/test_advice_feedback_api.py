@@ -40,12 +40,14 @@ def test_rating_out_of_range_rejected(app_client):
 
 def test_feedback_attached_to_today_advice(app_client):
     """/api/today の advice に当日フィードバックが付く。"""
-    from datetime import date
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
     from app.db import session_scope
     from app.models import LlmComment
 
-    today = date.today()
+    # feedback API は JST 日付で保存するため、UTC 環境でも JST の「今日」に合わせる
+    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
     with session_scope() as s:
         s.add(LlmComment(
             date=today, generated_at=__import__("datetime").datetime.now(),

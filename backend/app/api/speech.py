@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter
@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import SpeechSession
+from app.scoring.timewindow import app_today
 
 router = APIRouter()
 
@@ -61,7 +62,7 @@ async def ingest_speech(body: SpeechIngestIn) -> dict[str, Any]:
 
 @router.get("/api/speech")
 async def list_speech(days: int = 28) -> dict[str, Any]:
-    end = datetime.now().date()
+    end = app_today()
     start = end - timedelta(days=days)
     with session_scope() as session:
         rows = session.execute(

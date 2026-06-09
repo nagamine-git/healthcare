@@ -5,6 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.scoring.timewindow import app_today
+
 router = APIRouter()
 
 
@@ -12,7 +14,7 @@ router = APIRouter()
 async def recompute(target: date_type | None = None) -> dict[str, Any]:
     from app.scoring.recompute import recompute_for_date
 
-    d = target or date_type.today()
+    d = target or app_today()
     result = recompute_for_date(d)
     return {"date": d.isoformat(), "result": result}
 
@@ -43,7 +45,7 @@ async def full_refresh(regenerate_advice: bool = True) -> dict[str, Any]:
     except Exception as exc:
         out["garmin"] = {"status": "error", "error": str(exc)}
 
-    target = date_type.today()
+    target = app_today()
     try:
         out["recompute"] = recompute_for_date(target)
     except Exception as exc:
@@ -62,7 +64,7 @@ async def full_refresh(regenerate_advice: bool = True) -> dict[str, Any]:
 async def llm_regenerate(target: date_type | None = None) -> dict[str, Any]:
     from app.llm.client import generate_advice_for_date
 
-    d = target or date_type.today()
+    d = target or app_today()
     comment = await generate_advice_for_date(d, force=True)
     return {"date": d.isoformat(), "comment": comment}
 
@@ -96,7 +98,7 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
     )
     from app.models import LlmComment
 
-    d = target or date_type.today()
+    d = target or app_today()
     with session_scope() as session:
         latest = session.execute(
             select(LlmComment)

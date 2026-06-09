@@ -20,6 +20,7 @@ from app.models import (
     WeightSample,
     Workout,
 )
+from app.scoring.timewindow import app_today
 
 
 def _utc_iso(dt: datetime | None) -> str | None:
@@ -37,7 +38,7 @@ router = APIRouter()
 
 
 def _today() -> date:
-    return datetime.now().date()
+    return app_today()
 
 
 @router.get("/api/today")

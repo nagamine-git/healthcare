@@ -7,9 +7,11 @@ session_scope の外で attribute を参照すると DetachedInstanceError が�
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
+
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture
@@ -31,7 +33,7 @@ def test_gather_caffeine_does_not_raise_detached_error(app_ctx):
     from app.llm.client import _gather_caffeine
     from app.models import WeightSample
 
-    target = date.today()
+    target = app_today()
     # 体重サンプルを 1 つ入れる
     with session_scope() as session:
         session.add(
@@ -54,7 +56,7 @@ def test_gather_caffeine_without_weight_falls_back_to_target(app_ctx):
     """体重サンプルが無くても DetachedInstanceError は出ない (config の target を使う)。"""
     from app.llm.client import _gather_caffeine
 
-    target = date.today()
+    target = app_today()
     out = _gather_caffeine(target)
     assert isinstance(out, dict)
     # 体重ゼロでなければ available=True、無ければ False。どちらでも例外は出ない
@@ -66,7 +68,7 @@ def test_gather_caffeine_intakes_today_no_detached(app_ctx):
     from app.llm.client import _gather_caffeine_intakes_today
     from app.models import CaffeineIntake
 
-    target = date.today()
+    target = app_today()
     with session_scope() as session:
         session.add(
             CaffeineIntake(
@@ -99,5 +101,5 @@ def test_gather_migraine_summary_no_detached(app_ctx):
             )
         )
 
-    out = _gather_migraine_summary(date.today())
+    out = _gather_migraine_summary(app_today())
     assert "count_30d" in out

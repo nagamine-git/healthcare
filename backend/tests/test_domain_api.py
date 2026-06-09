@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 from fastapi.testclient import TestClient
+
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def app_client(temp_data_dir, monkeypatch):
 
 
 def test_ingest_learning_and_life(app_client):
-    today = date.today().isoformat()
+    today = app_today().isoformat()
     resp = app_client.post(
         "/api/domain/learning/ingest",
         json={"date": today, "achievement": 65.0, "detail": "9軸平均偏差値58"},
@@ -38,7 +38,7 @@ def test_ingest_learning_and_life(app_client):
 
 
 def test_ingest_work_and_list(app_client):
-    today = date.today().isoformat()
+    today = app_today().isoformat()
     app_client.post(
         "/api/domain/work/ingest",
         json={"date": today, "achievement": 80.0, "detail": "step100/git100/council40"},
@@ -51,6 +51,6 @@ def test_ingest_work_and_list(app_client):
 def test_unknown_external_domain_404(app_client):
     resp = app_client.post(
         "/api/domain/health/ingest",
-        json={"date": date.today().isoformat(), "achievement": 50.0},
+        json={"date": app_today().isoformat(), "achievement": 50.0},
     )
     assert resp.status_code == 404

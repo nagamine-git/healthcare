@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 from fastapi.testclient import TestClient
 
 from app.models import MetricSample, SleepSession
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture
@@ -30,7 +29,7 @@ def test_get_life(app_client):
     from app.db import session_scope
     from app.scoring.timewindow import jst_day_bounds
 
-    today = date.today()
+    today = app_today()
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
         s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=15.0))
@@ -56,7 +55,7 @@ def test_life_includes_raw_achievement_and_scaled_detail(app_client):
     from app.db import session_scope
     from app.scoring.timewindow import jst_day_bounds
 
-    today = date.today()
+    today = app_today()
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
         s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=6.0))
@@ -74,7 +73,7 @@ def test_life_freshness_and_coverage(app_client):
     from app.db import session_scope
     from app.scoring.timewindow import jst_day_bounds
 
-    today = date.today()
+    today = app_today()
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
         s.add(MetricSample(source="hae", metric_key="mindful_minutes", ts=start, value=10.0))

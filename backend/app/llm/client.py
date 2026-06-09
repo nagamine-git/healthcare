@@ -1048,5 +1048,6 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
 
 
 async def morning_advice_job() -> dict[str, Any]:
-    target = datetime.now().date()
-    return await generate_advice_for_date(target)
+    from app.scoring.timewindow import app_today
+
+    return await generate_advice_for_date(app_today())

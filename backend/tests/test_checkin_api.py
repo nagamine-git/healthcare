@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.scoring.timewindow import app_today
+
 
 @pytest.fixture
 def app_client(temp_data_dir, monkeypatch):
@@ -61,13 +63,13 @@ def test_clear_field(app_client):
 
 
 def test_suggested_from_prior_days(app_client):
-    from datetime import date, datetime, timedelta
+    from datetime import datetime, timedelta
 
     from app.db import session_scope
     from app.models import SubjectiveCheckin
 
     _dt = datetime
-    today = date.today()
+    today = app_today()
     with session_scope() as s:
         for i in (1, 2, 3):
             s.add(SubjectiveCheckin(date=today - timedelta(days=i), mood=4, energy=2,
@@ -80,13 +82,12 @@ def test_suggested_from_prior_days(app_client):
 
 def test_suggested_from_objective_signals(app_client):
     """BB/睡眠/ストレス/トレ負荷から推定 (ORM detached を踏まない回帰)。"""
-    from datetime import date
 
     from app.db import session_scope
     from app.models import BodyBattery, SleepSession
     from app.scoring.timewindow import jst_day_bounds
 
-    today = date.today()
+    today = app_today()
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
         s.add(BodyBattery(ts=start.replace(tzinfo=None) if start.tzinfo else start, value=85.0))

@@ -23,12 +23,13 @@ from app.models import (
     SourceSync,
     Workout,
 )
+from app.scoring.timewindow import app_today
 
 logger = get_logger(__name__)
 
 
 def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[str, Any]:
-    target = target or datetime.now().date()
+    target = target or app_today()
     counts = {
         "sleep": 0,
         "hrv": 0,
@@ -420,4 +421,4 @@ def _record_sync(session: Session, source: str, error: str | None) -> None:
 
 
 def _yesterday() -> date_type:
-    return datetime.now().date() - timedelta(days=1)
+    return app_today() - timedelta(days=1)

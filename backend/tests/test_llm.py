@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import DailyScore, LlmComment
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture(autouse=True)
@@ -166,13 +167,13 @@ def test_build_messages_includes_cache_control():
 
 
 def test_gather_recent_trends_builds_directions(db_engine):
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     from app.db import session_scope
     from app.llm.client import _gather_recent_trends
     from app.models import SleepSession
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         for i in range(8):
             d = today - timedelta(days=7 - i)
@@ -187,24 +188,23 @@ def test_gather_recent_trends_builds_directions(db_engine):
 
 
 def test_gather_life_domains(db_engine):
-    from datetime import date
 
     from app.llm.client import _gather_life_domains
 
-    out = _gather_life_domains(date.today())
+    out = _gather_life_domains(app_today())
     assert "life_score" in out
     assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}
 
 
 def test_gather_subjective_and_feedback_no_detached_error(db_engine):
     """主観/フィードバックがあっても DetachedInstanceError を踏まない回帰。"""
-    from datetime import date, datetime
+    from datetime import datetime
 
     from app.db import session_scope
     from app.llm.client import _gather_advice_feedback, _gather_subjective
     from app.models import AdviceFeedback, SubjectiveCheckin
 
-    today = date.today()
+    today = app_today()
     with session_scope() as s:
         s.add(SubjectiveCheckin(date=today, mood=1, energy=1, stress=5, soreness=5,
                                 updated_at=datetime.now()))

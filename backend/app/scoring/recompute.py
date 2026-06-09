@@ -198,8 +198,9 @@ def recompute_for_date(target: date_type) -> dict[str, Any]:
 
 
 async def recompute_today_job() -> dict[str, Any]:
-    target = datetime.now().date()
-    return recompute_for_date(target)
+    from app.scoring.timewindow import app_today
+
+    return recompute_for_date(app_today())
 
 
 async def refresh_baselines_job() -> dict[str, Any]:

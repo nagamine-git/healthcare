@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -22,6 +22,7 @@ from app.models import (
     WeightSample,
     Workout,
 )
+from app.scoring.timewindow import app_today
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ async def debug_sources(
     days: int = Query(default=14, ge=1, le=365),
     metric_limit: int = Query(default=10, ge=1, le=200),
 ) -> dict[str, Any]:
-    today = date.today()
+    today = app_today()
     since_date = today - timedelta(days=days)
     since_dt = datetime.combine(since_date, datetime.min.time())
 

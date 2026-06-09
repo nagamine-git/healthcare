@@ -13,6 +13,8 @@ import sys
 from datetime import date as date_type
 from datetime import datetime
 
+from app.scoring.timewindow import app_today
+
 
 def _setup() -> None:
     from app.config import get_settings
@@ -45,7 +47,7 @@ def cmd_recompute(args: list[str]) -> int:
     _setup()
     from app.scoring.recompute import recompute_for_date
 
-    target = _parse_date(args[0]) if args else date_type.today()
+    target = _parse_date(args[0]) if args else app_today()
     result = recompute_for_date(target)
     print(target.isoformat(), result)
     return 0
@@ -55,7 +57,7 @@ def cmd_regenerate_advice(args: list[str]) -> int:
     _setup()
     from app.llm.client import generate_advice_for_date
 
-    target = _parse_date(args[0]) if args else date_type.today()
+    target = _parse_date(args[0]) if args else app_today()
     result = asyncio.run(generate_advice_for_date(target, force=True))
     print(target.isoformat(), result)
     return 0
@@ -90,7 +92,7 @@ def cmd_gcal_schedule(args: list[str]) -> int:
     from app.integrations.gcal import schedule_actions_from_comment
     from app.models import LlmComment
 
-    target = _parse_date(args[0]) if args else date_type.today()
+    target = _parse_date(args[0]) if args else app_today()
     with session_scope() as session:
         latest = session.execute(
             select(LlmComment)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 from fastapi.testclient import TestClient
+
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def app_client(temp_data_dir, monkeypatch):
 
 
 def test_ingest_and_list(app_client):
-    today = date.today().isoformat()
+    today = app_today().isoformat()
     resp = app_client.post(
         "/api/speech/ingest",
         json={
@@ -41,7 +41,7 @@ def test_ingest_and_list(app_client):
 
 
 def test_ingest_upsert(app_client):
-    today = date.today().isoformat()
+    today = app_today().isoformat()
     app_client.post("/api/speech/ingest", json={"date": today, "session_count": 1, "score_overall": 50.0})
     app_client.post("/api/speech/ingest", json={"date": today, "session_count": 3, "score_overall": 88.0})
     body = app_client.get("/api/speech").json()
@@ -54,7 +54,7 @@ def test_speech_domain_in_life(app_client):
     from app.models import SpeechSession
 
     with session_scope() as s:
-        s.add(SpeechSession(date=date.today(), session_count=1, score_overall=90.0))
+        s.add(SpeechSession(date=app_today(), session_count=1, score_overall=90.0))
     resp = app_client.get("/api/life")
     speech = next(d for d in resp.json()["domains"] if d["key"] == "speech")
     assert speech["achievement"] == 90.0

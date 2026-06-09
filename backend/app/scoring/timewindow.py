@@ -12,6 +12,13 @@ from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
 
 
+def app_today() -> date:
+    """アプリの TZ (app_tz) での「今日」。環境 TZ (UTC コンテナ等) に依存しない。"""
+    from app.config import get_settings
+
+    return datetime.now(ZoneInfo(get_settings().app_tz)).date()
+
+
 def jst_day_bounds(target: date, *, tz: ZoneInfo = JST) -> tuple[datetime, datetime]:
     """JST 暦の ``target`` 日を UTC naive datetime の (start, end) で返す。
 

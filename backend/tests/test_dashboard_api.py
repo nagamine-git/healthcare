@@ -15,6 +15,7 @@ from app.models import (
     SourceSync,
     WeightSample,
 )
+from app.scoring.timewindow import app_today
 
 
 @pytest.fixture
@@ -96,7 +97,7 @@ def _seed_today(session, today: date) -> None:
 def test_today_returns_full_payload(app_client):
     from app.db import session_scope
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         _seed_today(session, today)
 
@@ -117,7 +118,7 @@ def test_today_returns_full_payload(app_client):
 def test_timeseries_score(app_client):
     from app.db import session_scope
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         for i in range(7):
             d = today - timedelta(days=i)
@@ -143,7 +144,7 @@ def test_timeseries_score(app_client):
 def test_admin_recompute_writes_score(app_client):
     from app.db import session_scope
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         session.add(
             SleepSession(
@@ -177,7 +178,7 @@ def test_timeseries_unknown_metric_returns_empty(app_client):
 def test_trends_endpoint_daily(app_client):
     from app.db import session_scope
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         for i in range(8):
             d = today - timedelta(days=7 - i)
@@ -202,7 +203,7 @@ def test_trends_endpoint_daily(app_client):
 def test_trends_endpoint_weekly(app_client):
     from app.db import session_scope
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         for i in range(14):
             d = today - timedelta(days=13 - i)
@@ -221,7 +222,7 @@ def test_trends_includes_physio_metrics(app_client):
     from app.db import session_scope
     from app.models import MetricSample
 
-    today = date.today()
+    today = app_today()
     with session_scope() as session:
         for i in range(8):
             d = today - timedelta(days=7 - i)
