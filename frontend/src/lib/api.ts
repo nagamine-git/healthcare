@@ -292,13 +292,20 @@ export type Checkin = {
   soreness: number | null;
   note: string | null;
 };
-export type CheckinResponse = { today: Checkin | null; items: Checkin[] };
+export type CheckinSuggested = {
+  mood: number | null;
+  energy: number | null;
+  stress: number | null;
+  soreness: number | null;
+};
+export type CheckinResponse = { today: Checkin | null; items: Checkin[]; suggested: CheckinSuggested };
 export type CheckinUpdate = {
   mood?: number;
   energy?: number;
   stress?: number;
   soreness?: number;
   note?: string;
+  clear?: string[];
 };
 
 export type UserProfileDto = {

@@ -32,12 +32,16 @@ def _to_dict(row: SubjectiveCheckin) -> dict[str, Any]:
     }
 
 
+_FIELDS = ("mood", "energy", "stress", "soreness")
+
+
 class CheckinIn(BaseModel):
     mood: int | None = Field(default=None, ge=1, le=5)
     energy: int | None = Field(default=None, ge=1, le=5)
     stress: int | None = Field(default=None, ge=1, le=5)
     soreness: int | None = Field(default=None, ge=1, le=5)
     note: str | None = Field(default=None, max_length=500)
+    clear: list[str] = Field(default_factory=list)  # null に戻すフィールド名
     date: str | None = None
 
 
@@ -52,10 +56,14 @@ async def post_checkin(body: CheckinIn) -> dict[str, Any]:
             row = SubjectiveCheckin(date=target)
             session.add(row)
         # 指定されたフィールドだけ更新 (部分更新)
-        for field in ("mood", "energy", "stress", "soreness", "note"):
+        for field in (*_FIELDS, "note"):
             val = getattr(body, field)
             if val is not None:
                 setattr(row, field, val)
+        # クリア指定は None に戻す
+        for field in body.clear:
+            if field in (*_FIELDS, "note"):
+                setattr(row, field, None)
         row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     return await get_checkin()
 
@@ -72,4 +80,11 @@ async def get_checkin(days: int = 14) -> dict[str, Any]:
         ).scalars().all()
         items = [_to_dict(r) for r in rows]
         today_row = next((it for it in items if it["date"] == today.isoformat()), None)
-    return {"today": today_row, "items": items}
+
+    # サジェスト (淡色表示用): 当日を除く直近の自己平均 = 「普段の典型」
+    prior = [it for it in items if it["date"] != today.isoformat()]
+    suggested: dict[str, int | None] = {}
+    for f in _FIELDS:
+        vals = [it[f] for it in prior if it[f] is not None]
+        suggested[f] = round(sum(vals) / len(vals)) if vals else None
+    return {"today": today_row, "items": items, "suggested": suggested}

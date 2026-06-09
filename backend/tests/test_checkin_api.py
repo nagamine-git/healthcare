@@ -50,3 +50,29 @@ def test_get_empty_when_no_data(app_client):
     got = app_client.get("/api/checkin").json()
     assert got["today"] is None
     assert got["items"] == []
+
+
+def test_clear_field(app_client):
+    app_client.post("/api/checkin", json={"mood": 5, "energy": 4})
+    resp = app_client.post("/api/checkin", json={"clear": ["mood"]})
+    today = resp.json()["today"]
+    assert today["mood"] is None
+    assert today["energy"] == 4
+
+
+def test_suggested_from_prior_days(app_client):
+    from datetime import date, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import SubjectiveCheckin
+
+    _dt = datetime
+    today = date.today()
+    with session_scope() as s:
+        for i in (1, 2, 3):
+            s.add(SubjectiveCheckin(date=today - timedelta(days=i), mood=4, energy=2,
+                                    updated_at=_dt.now()))
+    got = app_client.get("/api/checkin").json()
+    assert got["suggested"]["mood"] == 4
+    assert got["suggested"]["energy"] == 2
+    assert got["suggested"]["stress"] is None
