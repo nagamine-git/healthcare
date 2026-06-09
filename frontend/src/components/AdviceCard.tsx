@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { Check, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { Advice, AdviceAction, AdvicePriority, GcalScheduleResult } from "../lib/api";
 
+type FeedbackPatch = { action_key: string; done?: boolean; rating?: number; category?: string };
 type Props = {
   advice: Advice | null;
   onRegenerate: () => void;
   onSchedule?: () => Promise<GcalScheduleResult>;
+  onFeedback?: (patch: FeedbackPatch) => void;
   gcalConfigured?: boolean;
   pending?: boolean;
 };
@@ -45,7 +48,8 @@ const PRIORITY_RANK: Record<AdvicePriority, number> = {
   low: 3,
 };
 
-export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, pending }: Props) {
+export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalConfigured, pending }: Props) {
+  const feedback = advice?.feedback ?? {};
   const [scheduling, setScheduling] = useState(false);
   const [scheduleResult, setScheduleResult] = useState<GcalScheduleResult | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -151,6 +155,17 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
                     {a.exercises && a.exercises.length > 0 && (
                       <ExerciseList exercises={a.exercises} />
                     )}
+                    {onFeedback && (
+                      <ActionFeedback
+                        fb={feedback[a.title]}
+                        onDone={(done) =>
+                          onFeedback({ action_key: a.title, done, category: a.category })
+                        }
+                        onRate={(rating) =>
+                          onFeedback({ action_key: a.title, rating, category: a.category })
+                        }
+                      />
+                    )}
                   </li>
                 ))}
             </ul>
@@ -217,6 +232,54 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, gcalConfigured, p
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function ActionFeedback({
+  fb,
+  onDone,
+  onRate,
+}: {
+  fb?: { done: boolean; rating: number };
+  onDone: (done: boolean) => void;
+  onRate: (rating: number) => void;
+}) {
+  const done = fb?.done ?? false;
+  const rating = fb?.rating ?? 0;
+  return (
+    <div className="mt-1.5 flex basis-full items-center gap-2">
+      <button
+        onClick={() => onDone(!done)}
+        aria-label="完了"
+        className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${
+          done
+            ? "border-emerald-600 bg-emerald-600/20 text-emerald-300"
+            : "border-slate-700 text-slate-400 hover:bg-slate-800"
+        }`}
+      >
+        <Check size={12} /> {done ? "完了" : "やった"}
+      </button>
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          onClick={() => onRate(rating === 1 ? 0 : 1)}
+          aria-label="役に立った"
+          className={`grid h-6 w-6 place-items-center rounded-full transition active:scale-90 ${
+            rating === 1 ? "bg-emerald-600/30 text-emerald-300" : "text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          <ThumbsUp size={13} />
+        </button>
+        <button
+          onClick={() => onRate(rating === -1 ? 0 : -1)}
+          aria-label="役に立たなかった"
+          className={`grid h-6 w-6 place-items-center rounded-full transition active:scale-90 ${
+            rating === -1 ? "bg-rose-600/30 text-rose-300" : "text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          <ThumbsDown size={13} />
+        </button>
+      </div>
     </div>
   );
 }

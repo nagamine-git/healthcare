@@ -60,3 +60,27 @@ def test_backfill_pressure_history_uses_archive(db_engine, monkeypatch):
             select(MetricSample.value).where(MetricSample.metric_key == "surface_pressure_hpa")
         ).all()
     assert len(cnt) == 2
+
+
+def test_store_pressure_points_converts_jst_to_utc_and_skips_future(db_engine):
+    from datetime import UTC, datetime, timedelta
+
+    from app.ingest.pressure_history import store_pressure_points
+
+    now = datetime.now(UTC)
+    past_jst = (now - timedelta(hours=3)).astimezone().isoformat()
+    future_jst = (now + timedelta(hours=3)).astimezone().isoformat()
+    n = store_pressure_points([
+        {"time_jst": past_jst, "pressure_hpa": 1011.0},
+        {"time_jst": future_jst, "pressure_hpa": 1009.0},  # 未来はスキップ
+    ])
+    assert n == 1
+    with session_scope() as s:
+        rows = s.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.metric_key == "surface_pressure_hpa")
+        ).all()
+    assert len(rows) == 1
+    # JST→UTC naive で保存され、過去点のみ
+    assert rows[0][1] == 1011.0
+    assert rows[0][0].tzinfo is None

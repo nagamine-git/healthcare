@@ -689,6 +689,43 @@ def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
     return out
 
 
+def _gather_advice_feedback(target: date_type, days: int = 14) -> dict[str, Any]:
+    """直近の助言フィードバックを要約 (完了率・カテゴリ別の👍👎)。
+
+    outcome ループ: 過去に👎/未完了が多い種類は避け、👍を継続するため LLM に還元。
+    """
+    from collections import defaultdict
+
+    from app.models import AdviceFeedback
+
+    since = target - timedelta(days=days)
+    with session_scope() as session:
+        rows = session.execute(
+            select(AdviceFeedback).where(AdviceFeedback.date >= since)
+        ).scalars().all()
+    if not rows:
+        return {"n": 0}
+    done = sum(1 for r in rows if r.done)
+    by_cat: dict[str, list[int]] = defaultdict(list)
+    liked: list[str] = []
+    disliked: list[str] = []
+    for r in rows:
+        if r.category:
+            by_cat[r.category].append(r.rating)
+        if r.rating > 0:
+            liked.append(r.action_key)
+        elif r.rating < 0:
+            disliked.append(r.action_key)
+    cat_avg = {c: round(sum(v) / len(v), 2) for c, v in by_cat.items() if v}
+    return {
+        "n": len(rows),
+        "completion_rate": round(done / len(rows), 2),
+        "rating_by_category": cat_avg,
+        "liked_recent": liked[-5:],
+        "disliked_recent": disliked[-5:],
+    }
+
+
 def _gather_subjective(target: date_type) -> dict[str, Any]:
     """主観チェックイン (当日 + 7日平均)。客観↔主観の乖離を LLM が見るため。"""
     from app.models import SubjectiveCheckin
@@ -913,6 +950,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["life_domains"] = _gather_life_domains(target)
     today_payload["physio"] = _gather_physio(target)
     today_payload["subjective"] = _gather_subjective(target)
+    today_payload["advice_feedback_recent"] = _gather_advice_feedback(target)
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 

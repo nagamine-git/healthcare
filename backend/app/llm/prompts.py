@@ -223,6 +223,13 @@ training/cardio の action では **必ず ``exercises`` 配列を埋める**。
   **アラートと同じ内容のアクションは作らない**。アラートが既に出している事項は、
   必要なら「補完・具体化」だけに留め、繰り返し提案しない (利用者に二重に見えるため)。
 
+# 助言フィードバック (``advice_feedback_recent``) — 提案を学習する
+- 過去 14 日のアクション完了率・カテゴリ別評価・👍/👎 履歴。
+- **completion_rate が低い / 特定カテゴリの rating_by_category がマイナス** → その種類は
+  負担が高い or 刺さっていない。**頻度・難度を下げるか別アプローチに変える**。
+- **disliked_recent と似たアクションは避ける**。**liked_recent に近いものは継続**してよい。
+- 同じ提案を繰り返し未完了なら、より小さく具体的な一歩に分解する。
+
 # 主観チェックイン (``subjective``)
 - ``today`` と ``avg_7d`` の mood/energy/stress/soreness (各 1-5)。mood/energy は高いほど良い、
   stress/soreness は高いほど悪い。null は未入力。

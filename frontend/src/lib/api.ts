@@ -89,11 +89,13 @@ export type AdvicePayload = {
   rationale: string;
 };
 
+export type AdviceFeedback = { done: boolean; rating: number };
 export type Advice = {
   comment: string;
   model: string;
   generated_at: string | null;
   payload: AdvicePayload | null;
+  feedback?: Record<string, AdviceFeedback>;
 };
 
 export type SyncStatus = {
@@ -617,6 +619,11 @@ export const api = {
   migraineList: (days = 30) =>
     request<MigraineList>(`/api/migraine?days=${days}`),
   migraineTriggers: () => request<MigraineTriggers>("/api/migraine/triggers"),
+  adviceFeedback: (body: { action_key: string; done?: boolean; rating?: number; category?: string }) =>
+    request<{ feedback: Record<string, AdviceFeedback> }>("/api/advice/feedback", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
   postCheckin: (body: CheckinUpdate) =>
     request<CheckinResponse>("/api/checkin", { method: "POST", body: JSON.stringify(body) }),

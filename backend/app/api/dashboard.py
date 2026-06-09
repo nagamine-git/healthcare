@@ -490,10 +490,22 @@ def _build_focus(
 def _build_pressure(
     *, lat: float | None = None, lon: float | None = None
 ) -> dict[str, Any] | None:
-    """気圧スナップショット (Open-Meteo) を返す。失敗時 None。"""
+    """気圧スナップショット (Open-Meteo) を返す。失敗時 None。
+
+    取得した過去系列を surface_pressure_hpa に永続化し、頭痛トリガー分析の
+    気圧履歴を当日まで前進させる (アーカイブ API の数日遅延を埋める)。
+    """
     from app.integrations.weather import get_pressure_snapshot, to_dict
 
-    return to_dict(get_pressure_snapshot(latitude=lat, longitude=lon))
+    result = to_dict(get_pressure_snapshot(latitude=lat, longitude=lon))
+    if result and result.get("series"):
+        try:
+            from app.ingest.pressure_history import store_pressure_points
+
+            store_pressure_points(result["series"])
+        except Exception:
+            pass
+    return result
 
 
 def _build_caffeine(
@@ -911,9 +923,12 @@ def _weight_to_dict(w: WeightSample | None) -> dict[str, Any] | None:
 def _comment_to_dict(c: LlmComment | None) -> dict[str, Any] | None:
     if c is None:
         return None
+    from app.api.advice_feedback import feedback_map
+
     return {
         "comment": c.comment,
         "model": c.model,
         "generated_at": _utc_iso(c.generated_at),
         "payload": c.payload,
+        "feedback": feedback_map(c.date),
     }

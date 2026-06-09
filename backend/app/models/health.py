@@ -235,6 +235,24 @@ class UserProfile(Base):
     ffmi_normalized: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class AdviceFeedback(Base):
+    """LLM 助言アクションへの完了・評価フィードバック (日 × アクション)。
+
+    「測るが効いたか検証しない」を閉じるための outcome ループ。
+    action_key はアクションのタイトル (その日の助言内で一意)。
+    done=完了したか、rating=有用度 (-1/0/+1)。LLM に還元して提案を学習する。
+    """
+
+    __tablename__ = "advice_feedback"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    action_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    done: Mapped[bool] = mapped_column(default=False)
+    rating: Mapped[int] = mapped_column(Integer, default=0)  # -1 / 0 / +1
+    category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class SubjectiveCheckin(Base):
     """日次の主観チェックイン (JST 日付ごと、1 日 1 行)。
 

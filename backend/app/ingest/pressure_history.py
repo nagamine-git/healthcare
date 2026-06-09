@@ -54,6 +54,34 @@ def store_pressure_samples(
     return len(payload)
 
 
+def store_pressure_points(points: list[dict[str, Any]]) -> int:
+    """ライブスナップショットの series ({time_jst, pressure_hpa}) のうち
+    **過去〜現在** の点を UTC naive に変換して保存。書いた件数を返す。
+
+    アーカイブ API には数日の遅延があるため、毎回の /api/today でこのライブ系列を
+    永続化することで surface_pressure_hpa を当日まで前進させる (頭痛分析の鮮度維持)。
+    """
+    now_utc = datetime.now(UTC).replace(tzinfo=None)
+    times: list[str] = []
+    values: list[float | None] = []
+    for p in points:
+        t = p.get("time_jst")
+        v = p.get("pressure_hpa")
+        if t is None or v is None:
+            continue
+        dt = datetime.fromisoformat(t)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(UTC).replace(tzinfo=None)
+        if dt > now_utc:  # 未来の予測点は保存しない
+            continue
+        times.append(dt.isoformat())
+        values.append(float(v))
+    if not times:
+        return 0
+    with session_scope() as session:
+        return store_pressure_samples(session, times, values)
+
+
 def _fetch_archive(lat: float, lon: float, start_date: str, end_date: str) -> dict[str, Any] | None:
     params = {
         "latitude": lat,

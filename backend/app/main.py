@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin as admin_api
+from app.api import advice_feedback as advice_feedback_api
 from app.api import alcohol as alcohol_api
 from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_api.router)
     app.include_router(caffeine_api.router)
     app.include_router(checkin_api.router)
+    app.include_router(advice_feedback_api.router)
     app.include_router(migraine_api.router)
     app.include_router(profile_api.router)
     app.include_router(alcohol_api.router)

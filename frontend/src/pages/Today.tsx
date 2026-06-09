@@ -60,6 +60,10 @@ export function TodayPage({ onOpenDebug }: Props) {
     mutationFn: api.regenerateAdvice,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
+  const adviceFeedback = useMutation({
+    mutationFn: api.adviceFeedback,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
+  });
   const fullRefresh = useMutation({
     mutationFn: () => api.fullRefresh(true),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
@@ -230,6 +234,7 @@ export function TodayPage({ onOpenDebug }: Props) {
             advice={data.advice}
             onRegenerate={() => regenerate.mutate()}
             onSchedule={api.gcalSchedule}
+            onFeedback={(patch) => adviceFeedback.mutate(patch)}
             gcalConfigured={gcalStatus.data?.configured ?? false}
             pending={regenerate.isPending}
           />
