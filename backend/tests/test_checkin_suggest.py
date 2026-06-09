@@ -33,14 +33,15 @@ def test_soreness_from_training_load():
     assert high_load["soreness"] == 5
 
 
-def test_energy_blends_body_battery_and_readiness():
+def test_energy_prefers_bb_and_falls_back_to_readiness():
     from app.scoring.checkin_suggest import estimate_subjective
 
-    # BB 85 -> 5、readiness 50 -> 3 → 平均 4
+    # Readiness は HRV/睡眠/BB を内包する合成指標 → BB と平均すると二重計上。
+    # BB があれば BB のみで判定 (readiness 50 に引きずられない)
     s = estimate_subjective(body_battery=85, stress_avg=None, sleep_score=None,
                             training_load_48h=None, training_readiness=50)
-    assert s["energy"] == 4
-    # BB が無く readiness のみでも活力を出せる
+    assert s["energy"] == 5
+    # BB が無いときだけ readiness で代用
     s2 = estimate_subjective(body_battery=None, stress_avg=None, sleep_score=None,
                              training_load_48h=None, training_readiness=90)
     assert s2["energy"] == 5

@@ -99,6 +99,7 @@ def _apply_lightweight_migrations() -> None:
     expected = {
         "daily_score": [("body_fat_sub", "REAL")],
         "llm_comment": [("payload", "JSON")],
+        "subjective_checkin": [("from_suggested", "JSON")],
     }
     with engine.begin() as conn:
         for table, cols in expected.items():

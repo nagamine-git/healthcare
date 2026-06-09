@@ -83,11 +83,16 @@ export function CheckinCard() {
                     <button
                       key={lvl}
                       aria-label={`${d.label} ${lvl}`}
-                      // 選択中の値を再タップ → クリア (トグルオフ)
+                      // 選択中の値を再タップ → クリア (トグルオフ)。
+                      // 未入力でゴースト位置をタップ = サジェスト採用として記録
+                      // (機器推定の追認か能動入力かを乖離分析で区別するため)
                       onClick={() =>
                         value === lvl
                           ? save.mutate({ clear: [d.key] })
-                          : save.mutate({ [d.key]: lvl } as CheckinUpdate)
+                          : save.mutate({
+                              [d.key]: lvl,
+                              ...(isHint ? { from_suggested: [d.key] } : {}),
+                            } as CheckinUpdate)
                       }
                       className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
                     />

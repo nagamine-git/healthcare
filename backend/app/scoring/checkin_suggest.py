@@ -67,9 +67,15 @@ def estimate_subjective(
     training_readiness: float | None = None,
 ) -> dict[str, int | None]:
     """各次元の目安 (1-5) を返す。proxy が無い次元は None。"""
-    # 活力: Body Battery と Training Readiness (どちらも回復/エネルギー proxy) の平均
-    energy_parts = [_band_0_100_to_5(v) for v in (body_battery, training_readiness) if v is not None]
-    energy = _clamp5(sum(energy_parts) / len(energy_parts)) if energy_parts else None
+    # 活力: Body Battery を主とし、無い場合のみ Training Readiness で代用。
+    # Readiness は HRV/睡眠/BB を内包する合成指標なので、BB と平均すると
+    # 同じ情報を二重計上することになる (独立な観測ではない)。
+    if body_battery is not None:
+        energy = _band_0_100_to_5(body_battery)
+    elif training_readiness is not None:
+        energy = _band_0_100_to_5(training_readiness)
+    else:
+        energy = None
     stress = _stress_from_garmin(stress_avg)
     soreness = _soreness_from_load(training_load_48h)
 

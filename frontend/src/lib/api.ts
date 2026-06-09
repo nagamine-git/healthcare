@@ -291,6 +291,8 @@ export type Checkin = {
   stress: number | null;
   soreness: number | null;
   note: string | null;
+  /** 各フィールドがサジェスト採用 (true) か能動入力 (false) か */
+  from_suggested?: Record<string, boolean>;
 };
 export type CheckinSuggested = {
   mood: number | null;
@@ -306,6 +308,8 @@ export type CheckinUpdate = {
   soreness?: number;
   note?: string;
   clear?: string[];
+  /** 送った値のうちサジェスト(推定値)をタップ採用したフィールド名 */
+  from_suggested?: string[];
 };
 
 export type UserProfileDto = {

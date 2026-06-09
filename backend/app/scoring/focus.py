@@ -109,10 +109,12 @@ class FocusReadiness:
     rationale: str
 
 
-# 重み: 「いま集中できるか」への寄与度。Body Battery が最も即時、HRV と睡眠は土台、
+# 重み: 「いま集中できるか」への寄与度。Body Battery は即時性が高いが、
+# Firstbeat が HRV/ストレス/睡眠/活動から合成した指標で HRV・睡眠と独立な
+# 観測ではない (二重計上を避けるため重みは HRV/睡眠と同等に抑える)。
 # circadian は時刻補正、stress は急性、air_quality と morning_light は環境補正。
 _WEIGHTS = {
-    "body_battery": 3.0,
+    "body_battery": 2.0,
     "hrv": 2.0,
     "sleep": 2.0,
     "circadian": 2.0,

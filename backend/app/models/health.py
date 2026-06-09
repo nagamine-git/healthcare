@@ -268,6 +268,10 @@ class SubjectiveCheckin(Base):
     stress: Mapped[int | None] = mapped_column(Integer, nullable=True)
     soreness: Mapped[int | None] = mapped_column(Integer, nullable=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 各フィールドがサジェスト(推定値)のタップ採用か能動入力かの記録
+    # 例: {"mood": true, "energy": false}。採用値は機器推定にアンカーされる
+    # ため、客観↔主観の乖離分析では能動入力と区別して扱う
+    from_suggested: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime)
 
 
