@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def app_client(temp_data_dir, monkeypatch):
+    monkeypatch.setenv("APP_DATA_DIR", str(temp_data_dir))
+    monkeypatch.setenv("HAE_INGEST_TOKEN", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    from app import main as main_module
+    from app.config import Settings, reset_settings_cache
+
+    reset_settings_cache()
+    settings = Settings(scheduler_enabled=False, app_data_dir=temp_data_dir)
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    app = main_module.create_app()
+    with TestClient(app) as client:
+        yield client
+
+
+def test_post_then_get_checkin(app_client):
+    resp = app_client.post("/api/checkin", json={"mood": 4, "energy": 3, "stress": 2, "soreness": 1})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["today"]["mood"] == 4
+    assert body["today"]["stress"] == 2
+
+    got = app_client.get("/api/checkin").json()
+    assert got["today"]["energy"] == 3
+    assert len(got["items"]) == 1
+
+
+def test_partial_update_keeps_other_fields(app_client):
+    app_client.post("/api/checkin", json={"mood": 5, "energy": 4})
+    # mood だけ更新 → energy は保持
+    resp = app_client.post("/api/checkin", json={"mood": 3})
+    body = resp.json()
+    assert body["today"]["mood"] == 3
+    assert body["today"]["energy"] == 4
+
+
+def test_out_of_range_rejected(app_client):
+    assert app_client.post("/api/checkin", json={"mood": 0}).status_code == 422
+    assert app_client.post("/api/checkin", json={"stress": 6}).status_code == 422
+
+
+def test_get_empty_when_no_data(app_client):
+    got = app_client.get("/api/checkin").json()
+    assert got["today"] is None
+    assert got["items"] == []

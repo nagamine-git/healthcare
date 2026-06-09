@@ -235,6 +235,24 @@ class UserProfile(Base):
     ffmi_normalized: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class SubjectiveCheckin(Base):
+    """日次の主観チェックイン (JST 日付ごと、1 日 1 行)。
+
+    客観データ (HRV/睡眠 等) が代理する「実際どう感じるか」の結果変数。
+    全項目 optional。mood/energy は高いほど良い、stress/soreness は高いほど悪い。
+    """
+
+    __tablename__ = "subjective_checkin"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    mood: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    energy: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stress: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    soreness: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class SpeechSession(Base):
     """speech-coach から取り込む日次の発話練習サマリ (JST 日付ごと)。"""
 

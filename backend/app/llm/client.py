@@ -689,6 +689,26 @@ def _gather_recent_trends(target: date_type, days: int = 28) -> dict[str, Any]:
     return out
 
 
+def _gather_subjective(target: date_type) -> dict[str, Any]:
+    """主観チェックイン (当日 + 7日平均)。客観↔主観の乖離を LLM が見るため。"""
+    from app.models import SubjectiveCheckin
+
+    since = target - timedelta(days=7)
+    with session_scope() as session:
+        today_row = session.get(SubjectiveCheckin, target)
+        rows = session.execute(
+            select(SubjectiveCheckin).where(SubjectiveCheckin.date >= since)
+        ).scalars().all()
+
+    def _avg(field: str) -> float | None:
+        vals = [getattr(r, field) for r in rows if getattr(r, field) is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    fields = ("mood", "energy", "stress", "soreness")
+    today = {f: getattr(today_row, f) for f in fields} if today_row else None
+    return {"today": today, "avg_7d": {f: _avg(f) for f in fields}}
+
+
 def _gather_physio(target: date_type) -> dict[str, Any]:
     """生理指標 (sleep raw_json / Training Readiness 由来) を LLM に渡す。
 
@@ -892,6 +912,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["recent_trends"] = _gather_recent_trends(target)
     today_payload["life_domains"] = _gather_life_domains(target)
     today_payload["physio"] = _gather_physio(target)
+    today_payload["subjective"] = _gather_subjective(target)
     # 今夜のスリープリズム
     from app.scoring.sleep_plan import compute_tonight_plan
 

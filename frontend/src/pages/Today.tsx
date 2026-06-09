@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { AdviceCard } from "../components/AdviceCard";
+import { CheckinCard } from "../components/CheckinCard";
 import { TrendsSection } from "../components/TrendsSection";
 import { NutritionPanel } from "../components/NutritionPanel";
 import { TonightPlanPanel } from "../components/TonightPlanPanel";
@@ -249,7 +250,8 @@ export function TodayPage({ onOpenDebug }: Props) {
       />
 
       {/* ===== 📊 今の状態 ===== */}
-      <SectionHeader label="いまの状態" hint="リアルタイムの集中力 + 環境" />
+      <SectionHeader label="いまの状態" hint="主観の調子 + 集中力 + 環境" />
+      <CheckinCard />
       <FocusPanel focus={data.focus} />
       <EnvironmentPanel
         pressure={data.pressure}

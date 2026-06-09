@@ -282,6 +282,23 @@ export type MigraineList = {
   count_30d: number;
 };
 
+export type Checkin = {
+  date: string;
+  mood: number | null;
+  energy: number | null;
+  stress: number | null;
+  soreness: number | null;
+  note: string | null;
+};
+export type CheckinResponse = { today: Checkin | null; items: Checkin[] };
+export type CheckinUpdate = {
+  mood?: number;
+  energy?: number;
+  stress?: number;
+  soreness?: number;
+  note?: string;
+};
+
 export type UserProfileDto = {
   height_cm: number;
   sex: "male" | "female";
@@ -600,6 +617,9 @@ export const api = {
   migraineList: (days = 30) =>
     request<MigraineList>(`/api/migraine?days=${days}`),
   migraineTriggers: () => request<MigraineTriggers>("/api/migraine/triggers"),
+  getCheckin: () => request<CheckinResponse>("/api/checkin"),
+  postCheckin: (body: CheckinUpdate) =>
+    request<CheckinResponse>("/api/checkin", { method: "POST", body: JSON.stringify(body) }),
   getProfile: () => request<UserProfileDto>("/api/profile"),
   putProfile: (body: ProfileUpdate) =>
     request<UserProfileDto & { assessment: ProfileAssessment }>("/api/profile", {
