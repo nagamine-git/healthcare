@@ -55,7 +55,7 @@ def store_pressure_samples(
 
 
 def store_pressure_points(points: list[dict[str, Any]]) -> int:
-    """ライブスナップショットの series ({time_jst, pressure_hpa}) のうち
+    """ライブスナップショットの series ({time, hpa} = weather.to_dict 形式) のうち
     **過去〜現在** の点を UTC naive に変換して保存。書いた件数を返す。
 
     アーカイブ API には数日の遅延があるため、毎回の /api/today でこのライブ系列を
@@ -65,8 +65,8 @@ def store_pressure_points(points: list[dict[str, Any]]) -> int:
     times: list[str] = []
     values: list[float | None] = []
     for p in points:
-        t = p.get("time_jst")
-        v = p.get("pressure_hpa")
+        t = p.get("time") if "time" in p else p.get("time_jst")
+        v = p.get("hpa") if "hpa" in p else p.get("pressure_hpa")
         if t is None or v is None:
             continue
         dt = datetime.fromisoformat(t)

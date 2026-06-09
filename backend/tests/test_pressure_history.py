@@ -84,3 +84,19 @@ def test_store_pressure_points_converts_jst_to_utc_and_skips_future(db_engine):
     # JST→UTC naive で保存され、過去点のみ
     assert rows[0][1] == 1011.0
     assert rows[0][0].tzinfo is None
+
+
+def test_store_pressure_points_accepts_to_dict_format(db_engine):
+    """weather.to_dict の series 形式 ({time, hpa}) を受け付ける。"""
+    from datetime import UTC, datetime, timedelta
+
+    from app.ingest.pressure_history import store_pressure_points
+
+    past = (datetime.now(UTC) - timedelta(hours=2)).astimezone().isoformat()
+    n = store_pressure_points([{"time": past, "hpa": 1007.5}])
+    assert n == 1
+    with session_scope() as s:
+        rows = s.execute(
+            select(MetricSample.value).where(MetricSample.metric_key == "surface_pressure_hpa")
+        ).all()
+    assert rows[0][0] == 1007.5
