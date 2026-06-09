@@ -61,6 +61,22 @@ def test_normalise_body_battery_picks_morning_value():
     assert n["morning"] == 88
 
 
+def test_normalise_body_battery_early_sync_uses_wakeup_not_midnight():
+    """6時台のサンプルがまだ無い早朝同期で、深夜0時の充電前最低値を
+    「朝の値」にしない (実例: 0時=18 → 起床5時=82 なのに朝18と表示された)。"""
+    raw = [
+        {
+            "bodyBatteryValuesArray": [
+                [int(datetime(2026, 6, 10, 0, 3, tzinfo=UTC).timestamp() * 1000), "MEASURED", 18],
+                [int(datetime(2026, 6, 10, 3, 0, tzinfo=UTC).timestamp() * 1000), "MEASURED", 55],
+                [int(datetime(2026, 6, 10, 5, 3, tzinfo=UTC).timestamp() * 1000), "MEASURED", 82],
+            ]
+        }
+    ]
+    n = _normalise_body_battery(raw)
+    assert n["morning"] == 82
+
+
 def test_normalise_workout_extracts_fields():
     activity = {
         "activityId": 12345,

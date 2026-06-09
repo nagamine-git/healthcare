@@ -256,7 +256,17 @@ def _normalise_body_battery(raw: list | dict) -> dict[str, Any]:
             morning = point["value"]
             break
 
-    if not morning and series:
+    if morning is None:
+        # 6時台のサンプルがまだ無い早朝同期では series[0] (= 深夜0時直後、
+        # 夜間充電「前」の最低値) を朝の値にしない。08時までの最後の
+        # サンプル = 起床時点の近似を使う
+        for point in series:
+            local = point["ts"].astimezone() if point["ts"].tzinfo else point["ts"]
+            if local.hour >= 8:
+                break
+            morning = point["value"]
+
+    if morning is None and series:
         morning = series[0]["value"]
 
     values = [p["value"] for p in series]
