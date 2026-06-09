@@ -81,10 +81,50 @@ async def get_checkin(days: int = 14) -> dict[str, Any]:
         items = [_to_dict(r) for r in rows]
         today_row = next((it for it in items if it["date"] == today.isoformat()), None)
 
-    # サジェスト (淡色表示用): 当日を除く直近の自己平均 = 「普段の典型」
+    # サジェスト (淡色表示用): まず客観指標からの推定、欠けたら自己平均で補完。
+    objective = _objective_suggestions(today)
     prior = [it for it in items if it["date"] != today.isoformat()]
     suggested: dict[str, int | None] = {}
     for f in _FIELDS:
+        if objective.get(f) is not None:
+            suggested[f] = objective[f]
+            continue
         vals = [it[f] for it in prior if it[f] is not None]
         suggested[f] = round(sum(vals) / len(vals)) if vals else None
     return {"today": today_row, "items": items, "suggested": suggested}
+
+
+def _objective_suggestions(target: Any) -> dict[str, int | None]:
+    """当日の客観指標 (BB / ストレス / 睡眠 / トレ負荷) から主観の目安を推定。"""
+    from sqlalchemy import func
+
+    from app.models import BodyBattery, MetricSample, SleepSession, Workout
+    from app.scoring.checkin_suggest import estimate_subjective
+    from app.scoring.timewindow import jst_day_bounds
+
+    start, end = jst_day_bounds(target)
+    with session_scope() as session:
+        bb = session.execute(
+            select(BodyBattery.value).order_by(BodyBattery.ts.desc()).limit(1)
+        ).scalar()
+        stress_avg = session.execute(
+            select(func.avg(MetricSample.value)).where(
+                MetricSample.metric_key == "stress",
+                MetricSample.value >= 0,
+                MetricSample.ts >= start,
+                MetricSample.ts < end,
+            )
+        ).scalar()
+        sleep = session.get(SleepSession, target)
+        load_48h = session.execute(
+            select(func.sum(Workout.training_load)).where(
+                Workout.start >= start - timedelta(hours=24),
+                Workout.start < end,
+            )
+        ).scalar()
+    return estimate_subjective(
+        body_battery=float(bb) if bb is not None else None,
+        stress_avg=float(stress_avg) if stress_avg is not None else None,
+        sleep_score=float(sleep.sleep_score) if sleep and sleep.sleep_score is not None else None,
+        training_load_48h=float(load_48h) if load_48h is not None else None,
+    )

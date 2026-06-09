@@ -8,7 +8,8 @@ import type { CheckinSuggested, CheckinUpdate } from "../lib/api";
  * 主観は時間変動するため「直近2〜3時間の体感」= 瞬間の記録として扱う
  * (右の集中力＝リアルタイムと揃える)。客観データが代理する結果変数。
  *
- * - サジェスト(直近の自己平均=普段の典型)は淡色のゴースト表示、ユーザー入力は濃色。
+ * - サジェスト(客観指標 BB/ストレス/睡眠/トレ負荷 からの推定。無ければ自己平均)は
+ *   淡色のゴースト表示、ユーザー入力は濃色。
  * - 選択中の値を再タップ、または「クリア」で取り消し。
  */
 
@@ -96,14 +97,14 @@ export function CheckinCard() {
               {value != null ? (
                 <span className="text-[10px] tabular-nums text-slate-400">{value}</span>
               ) : hint != null ? (
-                <span className="text-[10px] tabular-nums text-slate-600">目安 {hint}</span>
+                <span className="text-[10px] tabular-nums text-slate-600">推定 {hint}</span>
               ) : null}
             </div>
           );
         })}
       </div>
       <div className="text-[9px] text-slate-600">
-        ● 濃色＝あなたの入力 / ○ 淡色＝普段の目安（タップで確定・再タップで取消）
+        ● 濃色＝あなたの入力 / ○ 淡色＝関連指標からの推定（タップで確定・再タップで取消）
       </div>
     </section>
   );
