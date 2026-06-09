@@ -20,7 +20,7 @@ from app.models import (
     WeightSample,
     Workout,
 )
-from app.scoring.timewindow import app_today
+from app.scoring.timewindow import app_today, jst_day_bounds
 
 
 def _utc_iso(dt: datetime | None) -> str | None:
@@ -56,8 +56,13 @@ async def today(
         weight_row = session.execute(
             select(WeightSample).order_by(WeightSample.ts.desc()).limit(1)
         ).scalar_one_or_none()
+        # 当日分に限定 (前日夜の高い値を「現在値」と誤表示しない)
+        _bb_start, _bb_end = jst_day_bounds(d)
         bb_latest = session.execute(
-            select(BodyBattery).order_by(BodyBattery.ts.desc()).limit(1)
+            select(BodyBattery)
+            .where(BodyBattery.ts >= _bb_start, BodyBattery.ts < _bb_end)
+            .order_by(BodyBattery.ts.desc())
+            .limit(1)
         ).scalar_one_or_none()
         comment = session.execute(
             select(LlmComment)
@@ -157,8 +162,6 @@ async def today(
         # ここでは Workout テーブルではなく、Calendar から取りに行きたいが
         # gcal は LLM 側で読んでいるので、まず Workout で完了済みのものから判定する
         # (簡易実装: 当日のワークアウトの end の最大値)
-        from app.scoring.timewindow import jst_day_bounds
-
         _today_start, _today_end = jst_day_bounds(d)
         last_training_end = session.execute(
             select(func.max(Workout.end)).where(

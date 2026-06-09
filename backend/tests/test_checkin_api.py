@@ -96,3 +96,39 @@ def test_suggested_from_objective_signals(app_client):
     got = app_client.get("/api/checkin").json()
     # 活力 <- BB 85 -> 5
     assert got["suggested"]["energy"] == 5
+
+
+def test_suggested_ignores_stale_bb_and_readiness(app_client):
+    """前日の BB / readiness を「いまの調子」の推定に使わない (stale 回帰)。"""
+    from datetime import timedelta
+
+    from app.db import session_scope
+    from app.models import BodyBattery, MetricSample
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = app_today()
+    start, _ = jst_day_bounds(today)
+    yesterday_ts = start - timedelta(hours=5)  # 前日夜
+    with session_scope() as s:
+        s.add(BodyBattery(ts=yesterday_ts, value=85.0))
+        s.add(MetricSample(source="garmin", metric_key="training_readiness", ts=yesterday_ts,
+                           value=76.0, unit="score"))
+
+    got = app_client.get("/api/checkin").json()
+    # 当日データが無いので客観推定は出ない (自己履歴も無い → None)
+    assert got["suggested"]["energy"] is None
+
+
+def test_from_suggested_provenance_saved(app_client):
+    """サジェスト採用と能動入力を区別して保存・返却する。"""
+    r = app_client.post("/api/checkin",
+                        json={"mood": 4, "energy": 3, "from_suggested": ["mood"]})
+    today = r.json()["today"]
+    assert today["from_suggested"]["mood"] is True
+    assert today["from_suggested"]["energy"] is False
+    # 能動的に上書きしたら false に更新される
+    r2 = app_client.post("/api/checkin", json={"mood": 2})
+    assert r2.json()["today"]["from_suggested"]["mood"] is False
+    # クリアで出所記録も消える
+    r3 = app_client.post("/api/checkin", json={"clear": ["mood"]})
+    assert "mood" not in r3.json()["today"]["from_suggested"]

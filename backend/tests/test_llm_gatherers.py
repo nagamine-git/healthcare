@@ -103,3 +103,31 @@ def test_gather_migraine_summary_no_detached(app_ctx):
 
     out = _gather_migraine_summary(app_today())
     assert "count_30d" in out
+
+
+def test_gather_physio_excludes_stale_readiness(app_ctx):
+    """前日の Training Readiness を当日 payload に入れない (stale 回帰)。
+
+    前日値 76 が「高負荷許容」の根拠として LLM に渡り、実際の朝 (BB 低) と
+    矛盾した助言を生んだ実例があるため、当日分のみ採用する。
+    """
+    from app.db import session_scope
+    from app.llm.client import _gather_physio
+    from app.models import MetricSample
+    from app.scoring.timewindow import jst_day_bounds
+
+    target = app_today()
+    start, _ = jst_day_bounds(target)
+    with session_scope() as session:
+        session.add(MetricSample(source="garmin", metric_key="training_readiness",
+                                 ts=start - timedelta(hours=5), value=76.0, unit="score"))
+
+    out = _gather_physio(target)
+    assert "training_readiness" not in out
+
+    # 当日分があれば採用される
+    with session_scope() as session:
+        session.add(MetricSample(source="garmin", metric_key="training_readiness",
+                                 ts=start + timedelta(hours=7), value=42.0, unit="score"))
+    out2 = _gather_physio(target)
+    assert out2["training_readiness"]["score"] == 42.0

@@ -29,6 +29,7 @@ def _to_dict(row: SubjectiveCheckin) -> dict[str, Any]:
         "stress": row.stress,
         "soreness": row.soreness,
         "note": row.note,
+        "from_suggested": row.from_suggested or {},
     }
 
 
@@ -42,6 +43,9 @@ class CheckinIn(BaseModel):
     soreness: int | None = Field(default=None, ge=1, le=5)
     note: str | None = Field(default=None, max_length=500)
     clear: list[str] = Field(default_factory=list)  # null に戻すフィールド名
+    # 今回送った値のうち「サジェスト(推定値)をタップ採用した」フィールド名。
+    # 採用値は機器推定にアンカーされるため、能動入力と区別して保存する
+    from_suggested: list[str] = Field(default_factory=list)
     date: str | None = None
 
 
@@ -56,14 +60,19 @@ async def post_checkin(body: CheckinIn) -> dict[str, Any]:
             row = SubjectiveCheckin(date=target)
             session.add(row)
         # 指定されたフィールドだけ更新 (部分更新)
+        provenance = dict(row.from_suggested or {})
         for field in (*_FIELDS, "note"):
             val = getattr(body, field)
             if val is not None:
                 setattr(row, field, val)
-        # クリア指定は None に戻す
+                if field in _FIELDS:
+                    provenance[field] = field in body.from_suggested
+        # クリア指定は None に戻す (出所記録も消す)
         for field in body.clear:
             if field in (*_FIELDS, "note"):
                 setattr(row, field, None)
+                provenance.pop(field, None)
+        row.from_suggested = provenance or None
         row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     return await get_checkin()
 
@@ -104,9 +113,19 @@ def _objective_suggestions(target: Any) -> dict[str, int | None]:
 
     start, end = jst_day_bounds(target)
     with session_scope() as session:
+        # 当日分に限定 (前日の値を「いまの調子」の推定に使わない)
         bb = session.execute(
-            select(BodyBattery.value).order_by(BodyBattery.ts.desc()).limit(1)
+            select(BodyBattery.value)
+            .where(BodyBattery.ts >= start, BodyBattery.ts < end)
+            .order_by(BodyBattery.ts.desc())
+            .limit(1)
         ).scalar()
+        if bb is None:
+            from app.models import BodyBatteryDaily
+
+            bb = session.execute(
+                select(BodyBatteryDaily.morning_value).where(BodyBatteryDaily.date == target)
+            ).scalar()
         stress_avg = session.execute(
             select(func.avg(MetricSample.value)).where(
                 MetricSample.metric_key == "stress",
@@ -127,7 +146,11 @@ def _objective_suggestions(target: Any) -> dict[str, int | None]:
         ).scalar()
         readiness = session.execute(
             select(MetricSample.value)
-            .where(MetricSample.metric_key == "training_readiness")
+            .where(
+                MetricSample.metric_key == "training_readiness",
+                MetricSample.ts >= start,
+                MetricSample.ts < end,
+            )
             .order_by(MetricSample.ts.desc())
             .limit(1)
         ).scalar()

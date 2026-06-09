@@ -572,7 +572,9 @@ def _gather_wellbeing_alerts(
 
 def _gather_today_payload(target: date_type) -> dict[str, Any]:
     from app.models import BodyBattery
+    from app.scoring.timewindow import jst_day_bounds
 
+    day_start, day_end = jst_day_bounds(target)
     with session_scope() as session:
         score = session.get(DailyScore, target)
         sleep = session.get(SleepSession, target)
@@ -581,8 +583,13 @@ def _gather_today_payload(target: date_type) -> dict[str, Any]:
         latest_weight = session.execute(
             select(WeightSample).order_by(WeightSample.ts.desc()).limit(1)
         ).scalar_one_or_none()
+        # 当日分に限定。前日夜の値を「現在値」として LLM に渡すと
+        # 「BB 高い→通常実施」の判定が誤る (実際の朝は低い場合がある)
         bb_latest = session.execute(
-            select(BodyBattery).order_by(BodyBattery.ts.desc()).limit(1)
+            select(BodyBattery)
+            .where(BodyBattery.ts >= day_start, BodyBattery.ts < day_end)
+            .order_by(BodyBattery.ts.desc())
+            .limit(1)
         ).scalar_one_or_none()
 
         return {
@@ -739,7 +746,15 @@ def _gather_subjective(target: date_type) -> dict[str, Any]:
     # セッション内で素の dict 化しておく (DetachedInstanceError 回避)
     with session_scope() as session:
         today_row = session.get(SubjectiveCheckin, target)
-        today = {f: getattr(today_row, f) for f in fields} if today_row else None
+        today = (
+            {
+                **{f: getattr(today_row, f) for f in fields},
+                # サジェスト採用 (true) は機器推定の追認なので乖離の根拠にしない
+                "from_suggested": today_row.from_suggested or {},
+            }
+            if today_row
+            else None
+        )
         recent = [
             {f: getattr(r, f) for f in fields}
             for r in session.execute(
@@ -785,11 +800,19 @@ def _gather_physio(target: date_type) -> dict[str, Any]:
         sd = circular_sd_hours(values)
         out["sleep_midpoint_sd_14d_hour"] = round(sd, 2) if sd is not None else None
 
-    # Training Readiness: スコア + 要因分解 (raw_json)
+    # Training Readiness: スコア + 要因分解 (raw_json)。当日分のみ
+    # (前日の値で「高負荷許容」と誤判定させない。未同期なら出さない)
+    from app.scoring.timewindow import jst_day_bounds
+
+    day_start, day_end = jst_day_bounds(target)
     with session_scope() as session:
         row = session.execute(
             select(MetricSample.value, MetricSample.raw_json)
-            .where(MetricSample.metric_key == "training_readiness")
+            .where(
+                MetricSample.metric_key == "training_readiness",
+                MetricSample.ts >= day_start,
+                MetricSample.ts < day_end,
+            )
             .order_by(MetricSample.ts.desc())
             .limit(1)
         ).first()
