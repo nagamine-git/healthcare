@@ -76,3 +76,22 @@ def test_suggested_from_prior_days(app_client):
     assert got["suggested"]["mood"] == 4
     assert got["suggested"]["energy"] == 2
     assert got["suggested"]["stress"] is None
+
+
+def test_suggested_from_objective_signals(app_client):
+    """BB/睡眠/ストレス/トレ負荷から推定 (ORM detached を踏まない回帰)。"""
+    from datetime import date
+
+    from app.db import session_scope
+    from app.models import BodyBattery, SleepSession
+    from app.scoring.timewindow import jst_day_bounds
+
+    today = date.today()
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(BodyBattery(ts=start.replace(tzinfo=None) if start.tzinfo else start, value=85.0))
+        s.add(SleepSession(date=today, source="garmin", total_min=450, sleep_score=82))
+
+    got = app_client.get("/api/checkin").json()
+    # 活力 <- BB 85 -> 5
+    assert got["suggested"]["energy"] == 5

@@ -115,7 +115,10 @@ def _objective_suggestions(target: Any) -> dict[str, int | None]:
                 MetricSample.ts < end,
             )
         ).scalar()
-        sleep = session.get(SleepSession, target)
+        # スカラーで取得 (セッション外参照による DetachedInstanceError を避ける)
+        sleep_score = session.execute(
+            select(SleepSession.sleep_score).where(SleepSession.date == target)
+        ).scalar()
         load_48h = session.execute(
             select(func.sum(Workout.training_load)).where(
                 Workout.start >= start - timedelta(hours=24),
@@ -125,6 +128,6 @@ def _objective_suggestions(target: Any) -> dict[str, int | None]:
     return estimate_subjective(
         body_battery=float(bb) if bb is not None else None,
         stress_avg=float(stress_avg) if stress_avg is not None else None,
-        sleep_score=float(sleep.sleep_score) if sleep and sleep.sleep_score is not None else None,
+        sleep_score=float(sleep_score) if sleep_score is not None else None,
         training_load_48h=float(load_48h) if load_48h is not None else None,
     )
