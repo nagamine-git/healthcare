@@ -117,17 +117,22 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
           {payload && payload.actions.length > 0 && (
             <ul className="mt-3 space-y-2">
               {(() => {
+                const nowMin = nowMinutes();
                 const sorted = [...payload.actions].sort(
                   (a, b) =>
                     (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) ||
                     a.time_jst.localeCompare(b.time_jst),
                 );
-                const visible = expanded ? sorted : sorted.slice(0, 1);
-                return visible;
-              })().map((a, i) => (
+                const tagged = sorted.map((a) => ({ a, past: timeToMin(a.time_jst) < nowMin }));
+                // 未来を上、過ぎたものは末尾に
+                const ordered = [...tagged.filter((x) => !x.past), ...tagged.filter((x) => x.past)];
+                return expanded ? ordered : ordered.slice(0, 1);
+              })().map(({ a, past }, i) => (
                   <li
                     key={`${a.time_jst}-${i}`}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2"
+                    className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 ${
+                      past ? "opacity-45" : ""
+                    }`}
                   >
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] tracking-wider ${
@@ -136,9 +141,18 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     >
                       {PRIORITY_LABEL[a.priority] ?? a.priority}
                     </span>
-                    <span className="font-mono text-base tabular-nums text-slate-200">
+                    <span
+                      className={`font-mono text-base tabular-nums ${
+                        past ? "text-slate-500 line-through" : "text-slate-200"
+                      }`}
+                    >
                       {a.time_jst}
                     </span>
+                    {past && (
+                      <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-400">
+                        過ぎた
+                      </span>
+                    )}
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] tracking-wider ${CATEGORY_BADGE}`}
                     >
@@ -346,6 +360,18 @@ function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exer
       </p>
     </div>
   );
+}
+
+/** "HH:MM" → 分。パース不能は大きい値 (未来扱い)。 */
+function timeToMin(hhmm: string): number {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 24 * 60;
+}
+
+/** 現在時刻 (ブラウザのローカル時刻 = ユーザーの JST) を分で返す。 */
+function nowMinutes(): number {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
 }
 
 function formatTs(ts: string | null): string {
