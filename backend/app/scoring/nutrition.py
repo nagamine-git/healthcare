@@ -290,10 +290,11 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
             "kind": "range",
         },
         "sodium_mg": {
-            # 日本人男性目標 (DG): 7.5g/日 = 7500mg 未満。WHO 2000mg 推奨
+            # 値はナトリウム (mg)。日本人男性目標 (DG) は食塩相当量 7.5g/日
+            # ≒ ナトリウム 2950mg (食塩g × 393)。ideal は WHO 推奨 2000mg
             "min": None,
             "ideal": 2000.0,
-            "max": 7500.0,
+            "max": 2950.0,
             "unit": "mg",
             "kind": "range",
         },
