@@ -699,23 +699,27 @@ def _gather_advice_feedback(target: date_type, days: int = 14) -> dict[str, Any]
     from app.models import AdviceFeedback
 
     since = target - timedelta(days=days)
+    # セッション内で素の tuple 化しておく (DetachedInstanceError 回避)
     with session_scope() as session:
-        rows = session.execute(
-            select(AdviceFeedback).where(AdviceFeedback.date >= since)
-        ).scalars().all()
+        rows = [
+            (r.done, r.category, r.rating, r.action_key)
+            for r in session.execute(
+                select(AdviceFeedback).where(AdviceFeedback.date >= since)
+            ).scalars().all()
+        ]
     if not rows:
         return {"n": 0}
-    done = sum(1 for r in rows if r.done)
+    done = sum(1 for d, _, _, _ in rows if d)
     by_cat: dict[str, list[int]] = defaultdict(list)
     liked: list[str] = []
     disliked: list[str] = []
-    for r in rows:
-        if r.category:
-            by_cat[r.category].append(r.rating)
-        if r.rating > 0:
-            liked.append(r.action_key)
-        elif r.rating < 0:
-            disliked.append(r.action_key)
+    for _, category, rating, action_key in rows:
+        if category:
+            by_cat[category].append(rating)
+        if rating > 0:
+            liked.append(action_key)
+        elif rating < 0:
+            disliked.append(action_key)
     cat_avg = {c: round(sum(v) / len(v), 2) for c, v in by_cat.items() if v}
     return {
         "n": len(rows),
@@ -730,19 +734,23 @@ def _gather_subjective(target: date_type) -> dict[str, Any]:
     """主観チェックイン (当日 + 7日平均)。客観↔主観の乖離を LLM が見るため。"""
     from app.models import SubjectiveCheckin
 
+    fields = ("mood", "energy", "stress", "soreness")
     since = target - timedelta(days=7)
+    # セッション内で素の dict 化しておく (DetachedInstanceError 回避)
     with session_scope() as session:
         today_row = session.get(SubjectiveCheckin, target)
-        rows = session.execute(
-            select(SubjectiveCheckin).where(SubjectiveCheckin.date >= since)
-        ).scalars().all()
+        today = {f: getattr(today_row, f) for f in fields} if today_row else None
+        recent = [
+            {f: getattr(r, f) for f in fields}
+            for r in session.execute(
+                select(SubjectiveCheckin).where(SubjectiveCheckin.date >= since)
+            ).scalars().all()
+        ]
 
     def _avg(field: str) -> float | None:
-        vals = [getattr(r, field) for r in rows if getattr(r, field) is not None]
+        vals = [d[field] for d in recent if d[field] is not None]
         return round(sum(vals) / len(vals), 1) if vals else None
 
-    fields = ("mood", "energy", "stress", "soreness")
-    today = {f: getattr(today_row, f) for f in fields} if today_row else None
     return {"today": today, "avg_7d": {f: _avg(f) for f in fields}}
 
 

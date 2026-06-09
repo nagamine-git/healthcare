@@ -194,3 +194,24 @@ def test_gather_life_domains(db_engine):
     out = _gather_life_domains(date.today())
     assert "life_score" in out
     assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}
+
+
+def test_gather_subjective_and_feedback_no_detached_error(db_engine):
+    """主観/フィードバックがあっても DetachedInstanceError を踏まない回帰。"""
+    from datetime import date, datetime
+
+    from app.db import session_scope
+    from app.llm.client import _gather_advice_feedback, _gather_subjective
+    from app.models import AdviceFeedback, SubjectiveCheckin
+
+    today = date.today()
+    with session_scope() as s:
+        s.add(SubjectiveCheckin(date=today, mood=1, energy=1, stress=5, soreness=5,
+                                updated_at=datetime.now()))
+        s.add(AdviceFeedback(date=today, action_key="散歩", done=True, rating=1,
+                             category="cardio", updated_at=datetime.now()))
+
+    sub = _gather_subjective(today)
+    assert sub["today"]["stress"] == 5
+    fb = _gather_advice_feedback(today)
+    assert fb["n"] == 1 and fb["completion_rate"] == 1.0
