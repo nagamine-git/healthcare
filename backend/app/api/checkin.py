@@ -125,9 +125,18 @@ def _objective_suggestions(target: Any) -> dict[str, int | None]:
                 Workout.start < end,
             )
         ).scalar()
+        readiness = session.execute(
+            select(MetricSample.value)
+            .where(MetricSample.metric_key == "training_readiness")
+            .order_by(MetricSample.ts.desc())
+            .limit(1)
+        ).scalar()
+    # 直近48hにトレ負荷の記録が無ければ DOMS 刺激なし → 0 (= soreness 1)
+    load_value = float(load_48h) if load_48h is not None else 0.0
     return estimate_subjective(
         body_battery=float(bb) if bb is not None else None,
         stress_avg=float(stress_avg) if stress_avg is not None else None,
         sleep_score=float(sleep_score) if sleep_score is not None else None,
-        training_load_48h=float(load_48h) if load_48h is not None else None,
+        training_load_48h=load_value,
+        training_readiness=float(readiness) if readiness is not None else None,
     )

@@ -11,17 +11,15 @@ def _clamp5(v: float) -> int:
     return max(1, min(5, round(v)))
 
 
-def _energy_from_bb(body_battery: float | None) -> int | None:
-    """Body Battery (0-100) → 活力 1-5。Garmin の帯域 (80+ 高 / 50+ 良好) に沿う。"""
-    if body_battery is None:
-        return None
-    if body_battery >= 80:
+def _band_0_100_to_5(v: float) -> int:
+    """0-100 を 1-5 に区分 (80+ →5, 60+ →4, 40+ →3, 20+ →2, 他 →1)。"""
+    if v >= 80:
         return 5
-    if body_battery >= 60:
+    if v >= 60:
         return 4
-    if body_battery >= 40:
+    if v >= 40:
         return 3
-    if body_battery >= 20:
+    if v >= 20:
         return 2
     return 1
 
@@ -66,9 +64,12 @@ def estimate_subjective(
     stress_avg: float | None,
     sleep_score: float | None,
     training_load_48h: float | None,
+    training_readiness: float | None = None,
 ) -> dict[str, int | None]:
     """各次元の目安 (1-5) を返す。proxy が無い次元は None。"""
-    energy = _energy_from_bb(body_battery)
+    # 活力: Body Battery と Training Readiness (どちらも回復/エネルギー proxy) の平均
+    energy_parts = [_band_0_100_to_5(v) for v in (body_battery, training_readiness) if v is not None]
+    energy = _clamp5(sum(energy_parts) / len(energy_parts)) if energy_parts else None
     stress = _stress_from_garmin(stress_avg)
     soreness = _soreness_from_load(training_load_48h)
 

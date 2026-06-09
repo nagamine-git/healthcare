@@ -33,6 +33,19 @@ def test_soreness_from_training_load():
     assert high_load["soreness"] == 5
 
 
+def test_energy_blends_body_battery_and_readiness():
+    from app.scoring.checkin_suggest import estimate_subjective
+
+    # BB 85 -> 5、readiness 50 -> 3 → 平均 4
+    s = estimate_subjective(body_battery=85, stress_avg=None, sleep_score=None,
+                            training_load_48h=None, training_readiness=50)
+    assert s["energy"] == 4
+    # BB が無く readiness のみでも活力を出せる
+    s2 = estimate_subjective(body_battery=None, stress_avg=None, sleep_score=None,
+                             training_load_48h=None, training_readiness=90)
+    assert s2["energy"] == 5
+
+
 def test_mood_is_composite_and_none_without_inputs():
     from app.scoring.checkin_suggest import estimate_subjective
 
