@@ -197,7 +197,12 @@ export function StatusLamps({
     const ach = m.achievement;
     const rows = [`現在値 ${fmtValue(key, m)}`];
     const wow = m.achievement_week_over_week;
-    const dirPart = m.direction ? DIR_LABEL[m.direction] : null;
+    // 28日回帰の傾向と前週比の符号が矛盾するときは傾向ラベルを出さない
+    const dirConsistent =
+      m.direction &&
+      !(wow && ((m.direction === "improving" && wow.delta < 0) ||
+                (m.direction === "declining" && wow.delta > 0)));
+    const dirPart = dirConsistent && m.direction ? DIR_LABEL[m.direction] : null;
     const wowPart = wow ? `前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(0)}` : null;
     if (dirPart || wowPart) rows.push([dirPart, wowPart].filter(Boolean).join(" · "));
     if (m.subtitle) rows.push(m.subtitle);

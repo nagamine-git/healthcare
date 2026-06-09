@@ -59,6 +59,19 @@ function fmtDate(d: string): string {
   return parts.length === 3 ? `${+parts[1]}/${+parts[2]}` : d;
 }
 
+/** 28日回帰の傾向と前週比の符号が食い違うとき、傾向ラベルは出さない
+ * (「改善傾向・前週比 -20」のような矛盾表示を避ける。数字に語らせる) */
+export function resolveDirection(
+  dir: TrendDirection | null | undefined,
+  wowDelta: number | null | undefined,
+): TrendDirection | null {
+  if (!dir) return null;
+  if (wowDelta == null) return dir;
+  if (dir === "improving" && wowDelta < 0) return null;
+  if (dir === "declining" && wowDelta > 0) return null;
+  return dir;
+}
+
 function TrendCard({ metricKey, metric, granularity, hint }: {
   metricKey: TrendMetricKey;
   metric: TrendMetric;
@@ -66,9 +79,11 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
   hint?: string;
 }) {
   const data = metric.raw_series;
-  const dir = metric.direction;
   const wow = metric.achievement_week_over_week;
+  const dir = resolveDirection(metric.direction, wow?.delta);
   const ideal = metric.ideal;
+  // 達成度が十分高い間は「低下傾向」を警告色にしない (理想圏内のゆらぎは騒がない)
+  const calm = metric.achievement != null && metric.achievement >= 90;
 
   const reg =
     metric.regression && metric.regression.start.value != null && metric.regression.end.value != null
@@ -140,8 +155,8 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
       </div>
       {hint ? <div className="mb-1 text-xs text-slate-500">{hint}</div> : null}
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className={dir ? DIR_COLOR[dir] : "text-slate-600"}>
-          {dir ? DIR_LABEL[dir] : "データ不足"}
+        <span className={dir ? (calm ? "text-slate-400" : DIR_COLOR[dir]) : "text-slate-600"}>
+          {dir ? DIR_LABEL[dir] : metric.direction ? "横ばい圏" : "データ不足"}
           {metric.achievement != null ? ` · 達成度 ${Math.round(metric.achievement)}` : ""}
         </span>
         <span className="text-slate-500">

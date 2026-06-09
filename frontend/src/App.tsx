@@ -17,15 +17,20 @@ export default function App() {
     return () => window.removeEventListener("hashchange", handler);
   }, []);
 
-  if (view === "debug") {
-    return (
-      <DebugPage
-        onBack={() => {
-          window.location.hash = "";
-        }}
-      />
-    );
-  }
-
-  return <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />;
+  return (
+    <>
+      {/* スクロール時にコンテンツが iOS ステータスバーの文字と重ならないよう、
+          safe-area 上端を背景色で覆う固定スクリム */}
+      <div aria-hidden className="status-bar-scrim" />
+      {view === "debug" ? (
+        <DebugPage
+          onBack={() => {
+            window.location.hash = "";
+          }}
+        />
+      ) : (
+        <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
+      )}
+    </>
+  );
 }

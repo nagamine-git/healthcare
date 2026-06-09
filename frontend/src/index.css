@@ -25,6 +25,20 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+/* スクロール時にコンテンツがステータスバーの時計等と重ならないよう、
+   safe-area 上端を背景色で覆う固定スクリム (viewport-fit=cover 対策) */
+.status-bar-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background: rgba(2, 6, 23, 0.85); /* slate-950 */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 50;
+  pointer-events: none;
+}
 
 /* ===== 計器盤ランプ (StatusLamps) ===== */
 /* イグニッションチェック: 起動時に全ランプが白く一閃 → 実状態へ */
