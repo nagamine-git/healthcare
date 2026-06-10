@@ -30,6 +30,10 @@ def _to_dict(row: SubjectiveCheckin) -> dict[str, Any]:
         "soreness": row.soreness,
         "note": row.note,
         "from_suggested": row.from_suggested or {},
+        # 瞬間の体感の記録なので「いつ記録したか」を UI/LLM が参照する
+        "updated_at": (
+            row.updated_at.replace(tzinfo=UTC).isoformat() if row.updated_at else None
+        ),
     }
 
 

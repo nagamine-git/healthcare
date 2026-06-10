@@ -31,6 +31,10 @@ function filledColor(value: number, goodHigh: boolean): string {
   return "bg-amber-500";
 }
 
+/** 「直近2〜3時間の体感」の建付けなので、3時間経過した入力は現在の状態
+ * として扱わず淡色化する (データは日次記録として残り、LLM の7日平均には使う) */
+const STALE_MS = 3 * 60 * 60 * 1000;
+
 export function CheckinCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["checkin"], queryFn: api.getCheckin });
@@ -46,6 +50,11 @@ export function CheckinCard() {
   const suggested: CheckinSuggested =
     q.data?.suggested ?? { mood: null, energy: null, stress: null, soreness: null };
   const hasAny = today && DIMS.some((d) => today[d.key] != null);
+  const updatedAt = today?.updated_at ? new Date(today.updated_at) : null;
+  const stale = !!(updatedAt && Date.now() - updatedAt.getTime() > STALE_MS);
+  const recordedLabel = updatedAt
+    ? `${updatedAt.getHours()}:${updatedAt.getMinutes().toString().padStart(2, "0")} 時点`
+    : null;
 
   return (
     <section className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
@@ -61,7 +70,9 @@ export function CheckinCard() {
               クリア
             </button>
           )}
-          <span className="text-[10px] text-slate-500">直近2〜3時間の体感</span>
+          <span className="text-[10px] text-slate-500">
+            {stale && recordedLabel ? `${recordedLabel}の記録` : "直近2〜3時間の体感"}
+          </span>
         </span>
       </div>
 
@@ -77,17 +88,22 @@ export function CheckinCard() {
                   const isFilled = value != null && lvl <= value;
                   const isHint = value == null && hint != null && lvl === hint;
                   let cls = "bg-slate-800 ring-1 ring-slate-700"; // 空
-                  if (isFilled) cls = filledColor(value, d.goodHigh); // ユーザー入力=濃色
-                  else if (isHint) cls = "bg-slate-600/40 ring-1 ring-slate-500"; // サジェスト=淡色
+                  if (isFilled) {
+                    // 3時間経過した入力は「いま」ではないので淡色化
+                    cls = `${filledColor(value, d.goodHigh)}${stale ? " opacity-35" : ""}`;
+                  } else if (isHint) {
+                    cls = "bg-slate-600/40 ring-1 ring-slate-500"; // サジェスト=淡色
+                  }
                   return (
                     <button
                       key={lvl}
                       aria-label={`${d.label} ${lvl}`}
-                      // 選択中の値を再タップ → クリア (トグルオフ)。
+                      // 選択中の値を再タップ → クリア (トグルオフ)。ただし stale な
+                      // 記録の再タップは「いまも同じ」の再確認として上書き保存。
                       // 未入力でゴースト位置をタップ = サジェスト採用として記録
                       // (機器推定の追認か能動入力かを乖離分析で区別するため)
                       onClick={() =>
-                        value === lvl
+                        value === lvl && !stale
                           ? save.mutate({ clear: [d.key] })
                           : save.mutate({
                               [d.key]: lvl,
@@ -110,6 +126,7 @@ export function CheckinCard() {
       </div>
       <div className="text-[9px] text-slate-600">
         ● 濃色＝あなたの入力 / ○ 淡色＝関連指標からの推定（タップで確定・再タップで取消）
+        {stale ? " ／ 3時間以上前の記録は淡色（タップで「いまも同じ」と再確認）" : ""}
       </div>
     </section>
   );

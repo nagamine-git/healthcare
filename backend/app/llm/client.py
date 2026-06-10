@@ -744,6 +744,8 @@ def _gather_subjective(target: date_type) -> dict[str, Any]:
     fields = ("mood", "energy", "stress", "soreness")
     since = target - timedelta(days=7)
     # セッション内で素の dict 化しておく (DetachedInstanceError 回避)
+    from zoneinfo import ZoneInfo
+
     with session_scope() as session:
         today_row = session.get(SubjectiveCheckin, target)
         today = (
@@ -751,6 +753,15 @@ def _gather_subjective(target: date_type) -> dict[str, Any]:
                 **{f: getattr(today_row, f) for f in fields},
                 # サジェスト採用 (true) は機器推定の追認なので乖離の根拠にしない
                 "from_suggested": today_row.from_suggested or {},
+                # 瞬間の体感なので記録時刻 (JST) を渡す。数時間前の記録を
+                # 「いまの状態」として扱わせない
+                "reported_at_jst": (
+                    today_row.updated_at.replace(tzinfo=UTC)
+                    .astimezone(ZoneInfo("Asia/Tokyo"))
+                    .strftime("%H:%M")
+                    if today_row.updated_at
+                    else None
+                ),
             }
             if today_row
             else None

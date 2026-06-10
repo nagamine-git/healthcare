@@ -293,6 +293,8 @@ export type Checkin = {
   note: string | null;
   /** 各フィールドがサジェスト採用 (true) か能動入力 (false) か */
   from_suggested?: Record<string, boolean>;
+  /** 最終記録時刻 (ISO, UTC)。瞬間の体感なので経過時間で stale 判定に使う */
+  updated_at?: string | null;
 };
 export type CheckinSuggested = {
   mood: number | null;
