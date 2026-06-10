@@ -381,10 +381,15 @@ def _check_pressure_migraine(
 def _daily_metric_values(
     session: Session, key: str, target: date, days: int
 ) -> list[float]:
-    """直近 days 日の MetricSample 値 (日次 1 サンプル想定) を新しい順で返す。"""
+    """直近 days 日 (target 含む) の MetricSample 値を新しい順で返す。
+
+    日次 1 サンプル想定。窓は target-(days-1) 日の 00:00 から。
+    `target - days` にすると days+1 夜分が入り、「直近 3 夜中 2 夜」の
+    判定に 4 夜目の古い値が混入して誤発火する (SpO2 で実例あり)。
+    """
     from app.models import MetricSample
 
-    start = datetime.combine(target - timedelta(days=days), datetime.min.time())
+    start = datetime.combine(target - timedelta(days=days - 1), datetime.min.time())
     rows = session.execute(
         select(MetricSample.value)
         .where(MetricSample.metric_key == key, MetricSample.ts >= start)

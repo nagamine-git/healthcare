@@ -308,6 +308,24 @@ def test_sleep_spo2_single_low_night_does_not_trigger(session):
     assert all(a.code != "sleep_spo2_low" for a in alerts)
 
 
+def test_sleep_spo2_window_is_exactly_3_nights(session):
+    """4 夜前の古い低値が「直近 3 夜」判定に混入しない (off-by-one 回帰)。
+
+    実例: 直近 3 夜の最低値 86/84/78 (該当 1 夜のみ) なのに、4 夜前の 72 が
+    窓に入って「2 夜以上 <80%」と誤発火し、表示値とアラートが食い違った。
+    """
+    today = date(2026, 5, 23)
+    for i in range(3):
+        _add_metric(session, "sleep_spo2_avg", today, 96.0, i)
+    _add_metric(session, "sleep_spo2_lowest", today, 86.0, 0)
+    _add_metric(session, "sleep_spo2_lowest", today, 84.0, 1)
+    _add_metric(session, "sleep_spo2_lowest", today, 78.0, 2)  # <80 はこの 1 夜だけ
+    _add_metric(session, "sleep_spo2_lowest", today, 72.0, 3)  # 4 夜前 → 窓外
+    session.flush()
+    alerts = evaluate_alerts(session, today)
+    assert all(a.code != "sleep_spo2_low" for a in alerts)
+
+
 def test_sleep_spo2_low_via_lowest_desaturation(session):
     """平均は正常でも最低値が複数夜 80% 未満なら無呼吸スクリーニングで発火。"""
     today = date(2026, 5, 23)
