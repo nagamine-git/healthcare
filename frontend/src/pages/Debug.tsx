@@ -14,8 +14,8 @@ export function DebugPage({ onBack }: Props) {
   });
 
   return (
-    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-4 px-5 pb-8 sm:px-8">
-      <header className="safe-area-top flex items-center justify-between pb-2 pt-3">
+    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-4">
+      <header className="safe-area-top flex items-center justify-between pb-2">
         <button
           onClick={onBack}
           className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"

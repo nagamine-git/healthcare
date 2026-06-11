@@ -14,16 +14,29 @@ body {
   text-size-adjust: 100%;
 }
 
-/* iOS の safe-area (notch / Dynamic Island / status bar) を確保 */
+/* iOS の safe-area (notch / Dynamic Island / status bar) を確保。
+   注意: これらは Tailwind ユーティリティ (px-5 等) より後に出力されるため
+   同居させると上書きしてしまう。safe-area と通常余白を「合成」した値を
+   ここで完結させ、利用側では px-* / pb-* / pt-* を併用しないこと。
+   (実害例: safe-area-x が env()=0 で px-5 を潰し、外側余白ゼロになった) */
 .safe-area-top {
-  padding-top: max(env(safe-area-inset-top), 12px);
+  /* status bar の下に 12px の空き */
+  padding-top: calc(env(safe-area-inset-top) + 12px);
 }
 .safe-area-bottom {
-  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  /* ホームインジケータの上に 32px の空き */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32px);
 }
 .safe-area-x {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  /* 横 insets は横持ち時のみ非ゼロ。通常時はコンテンツ余白 20px を確保 */
+  padding-left: max(env(safe-area-inset-left), 20px);
+  padding-right: max(env(safe-area-inset-right), 20px);
+}
+@media (min-width: 640px) {
+  .safe-area-x {
+    padding-left: max(env(safe-area-inset-left), 32px);
+    padding-right: max(env(safe-area-inset-right), 32px);
+  }
 }
 /* スクロール時にコンテンツがステータスバーの時計等と重ならないよう、
    safe-area 上端を背景色で覆う固定スクリム (viewport-fit=cover 対策) */
