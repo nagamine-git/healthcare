@@ -16,6 +16,7 @@ const SOURCE_LABEL: Record<CaffeineSource, string> = {
   instant_coffee: "インスタント",
   canned_coffee: "缶コーヒー",
   nespresso: "ネスプレッソ",
+  green_tea: "緑茶",
   ibuquick: "イブクイック",
   bufferin_premium: "バファリンPremium",
   manual: "mg 直接",
@@ -137,6 +138,7 @@ export function CaffeinePanel({ caffeine }: Props) {
                 "instant_coffee",
                 "canned_coffee",
                 "nespresso",
+                "green_tea",
                 "ibuquick",
                 "bufferin_premium",
               ] as CaffeineSource[]
@@ -615,6 +617,7 @@ function EditModal({
                   "instant_coffee",
                   "canned_coffee",
                   "nespresso",
+                  "green_tea",
                   "ibuquick",
                   "bufferin_premium",
                   "manual",

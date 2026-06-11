@@ -26,6 +26,7 @@ Source = Literal[
     "instant_coffee",
     "canned_coffee",
     "nespresso",
+    "green_tea",
     "ibuquick",
     "bufferin_premium",
     "manual",
@@ -44,6 +45,8 @@ PRESET_DEFAULTS: dict[str, dict[str, Any]] = {
     "instant_coffee": {"unit": "g", "default_amount": 2.0, "mg_per_unit": 60.0},
     "canned_coffee": {"unit": "本", "default_amount": 1.0, "mg_per_unit": 100.0},
     "nespresso": {"unit": "カプセル", "default_amount": 1.0, "mg_per_unit": 70.0},
+    # 緑茶 (煎茶): 浸出液 20mg/100ml (日本食品標準成分表)、湯呑み 1 杯 150ml ≈ 30mg
+    "green_tea": {"unit": "杯", "default_amount": 1.0, "mg_per_unit": 30.0},
     "ibuquick": {"unit": "錠", "default_amount": 2.0, "mg_per_unit": 40.0},
     "bufferin_premium": {"unit": "錠", "default_amount": 2.0, "mg_per_unit": 40.0},
     "manual": {"unit": "mg", "default_amount": 0.0, "mg_per_unit": 1.0},

@@ -238,6 +238,7 @@ export type CaffeineSource =
   | "instant_coffee"
   | "canned_coffee"
   | "nespresso"
+  | "green_tea"
   | "ibuquick"
   | "bufferin_premium"
   | "manual";
