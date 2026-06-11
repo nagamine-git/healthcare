@@ -66,6 +66,7 @@ export type ExercisePrescription = {
 export type AdviceAction = {
   time_jst: string; // HH:MM (推奨開始時刻)
   until_jst?: string | null; // HH:MM この時刻までに始めれば OK (最終開始期限)
+  carryover?: boolean | null; // 期限を過ぎても実行価値が残るか (水分・回復など)
   title: string;
   duration_min: number;
   category:

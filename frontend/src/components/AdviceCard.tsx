@@ -124,21 +124,32 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     a.time_jst.localeCompare(b.time_jst),
                 );
                 // 時間窓モデル: time_jst は「推奨開始」、until_jst (無ければ
-                // 開始+所要+60分の猶予) までに始めれば OK。窓内は「いまからOK」、
-                // 窓を過ぎて初めて「過ぎた」扱いにする。
+                // 開始+所要+60分の猶予) までに始めれば OK。窓内は「いまからOK」。
+                // 期限超過でも carryover (水分・栄養・回復などの不足解消系) は
+                // 「過ぎたからしなくていい」にはならないので、遅れ表示のまま
+                // 優先度順の位置に残す。沈める (過ぎた) のは時間依存の行動だけ。
                 const tagged = sorted.map((a) => {
                   const start = timeToMin(a.time_jst);
                   const deadline = a.until_jst
                     ? timeToMin(a.until_jst)
                     : start + Math.max(a.duration_min ?? 0, 0) + 60;
-                  const past = nowMin > deadline;
-                  const open = !past && nowMin >= start;
-                  return { a, past, open, deadline };
+                  const carryover =
+                    a.carryover ??
+                    (a.category === "nutrition" ||
+                      a.category === "recovery" ||
+                      a.category === "rest" ||
+                      a.priority === "critical");
+                  const expired = nowMin > deadline;
+                  const past = expired && !carryover;
+                  const late = expired && carryover;
+                  const open = !expired && nowMin >= start;
+                  return { a, past, open, late };
                 });
-                // 未来・実行可能を上、過ぎたものは末尾に
+                // 実行可能 (未来・窓内・遅れても推奨) を優先度順で上に、
+                // 本当に過ぎたものだけ末尾へ
                 const ordered = [...tagged.filter((x) => !x.past), ...tagged.filter((x) => x.past)];
                 return expanded ? ordered : ordered.slice(0, 1);
-              })().map(({ a, past, open }, i) => (
+              })().map(({ a, past, open, late }, i) => (
                   <li
                     key={`${a.time_jst}-${i}`}
                     className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 ${
@@ -167,6 +178,11 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     {open && (
                       <span className="rounded-full border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-[9px] text-emerald-300">
                         いまからOK{a.until_jst ? ` 〜${a.until_jst}` : ""}
+                      </span>
+                    )}
+                    {late && (
+                      <span className="rounded-full border border-amber-600/60 bg-amber-900/30 px-1.5 py-0.5 text-[9px] text-amber-300">
+                        遅れても推奨・いまから
                       </span>
                     )}
                     <span
