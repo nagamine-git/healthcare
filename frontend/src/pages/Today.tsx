@@ -244,7 +244,7 @@ export function TodayPage({ onOpenDebug }: Props) {
 
       {/* ===== 🕐 今日の流れ (1日のマルチトラックタイムライン) ===== */}
       <div id="timeline-section">
-        <SectionHeader label="今日の流れ" hint="行動・身体反応・イベントを同一時間軸で" />
+        <SectionHeader label="今日の流れ" hint="直近24h / 今日を切替・同一時間軸" />
         <DayStory />
       </div>
 

@@ -54,7 +54,7 @@ def test_timeline_aggregates_day_in_jst_hours(app_client):
     assert body["body_battery"][0]["h"] == 9.0
     assert body["stress"][0]["v"] == 42.0
     # 睡眠: 中点 3.5h ± 3.5h (420分) = 0.0-7.0
-    assert body["sleep"] == {"start_h": 0.0, "end_h": 7.0}
+    assert body["sleep_blocks"] == [{"start_h": 0.0, "end_h": 7.0}]
     assert body["workouts"][0]["start_h"] == 20.0
     assert body["caffeine"][0]["mg"] == 30.0
     assert body["migraine"] == []
@@ -63,8 +63,18 @@ def test_timeline_aggregates_day_in_jst_hours(app_client):
 def test_timeline_empty_day(app_client):
     body = app_client.get("/api/timeline").json()
     assert body["body_battery"] == []
-    assert body["sleep"] is None
+    assert body["sleep_blocks"] == []
     assert body["checkin"] is None
+
+
+def test_timeline_24h_window(app_client):
+    """直近24時間ウィンドウは date を持たず origin/span/now を返す。"""
+    body = app_client.get("/api/timeline?window=24h").json()
+    assert body["window"] == "24h"
+    assert body["date"] is None
+    assert body["span_h"] == 24.0
+    assert body["now_h"] == 24.0  # 右端が現在
+    assert "origin_jst" in body
 
 
 def test_day_story_infers_segments(app_client):

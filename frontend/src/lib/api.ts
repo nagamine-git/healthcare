@@ -319,7 +319,10 @@ export type DayStoryInsight = {
   action: string;
 };
 export type DayStory = {
-  date: string;
+  window: "day" | "24h";
+  date: string | null;
+  origin_jst: string;
+  span_h: number;
   now_h: number | null;
   summary: string;
   segments: DayStorySegment[];
@@ -328,11 +331,14 @@ export type DayStory = {
 
 export type TimelinePoint = { h: number; v: number };
 export type DayTimelineData = {
-  date: string;
+  window: "day" | "24h";
+  date: string | null;
+  origin_jst: string;
+  span_h: number;
   now_h: number | null;
   body_battery: TimelinePoint[];
   stress: TimelinePoint[];
-  sleep: { start_h: number; end_h: number } | null;
+  sleep_blocks: { start_h: number; end_h: number }[];
   workouts: { start_h: number; end_h: number; type: string | null }[];
   caffeine: { h: number; mg: number; source: string }[];
   migraine: { start_h: number; end_h: number | null; severity: number | null }[];
@@ -682,10 +688,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
-  timeline: (date?: string) =>
-    request<DayTimelineData>(`/api/timeline${date ? `?date=${date}` : ""}`),
-  dayStory: (date?: string) =>
-    request<DayStory>(`/api/day-story${date ? `?date=${date}` : ""}`),
+  timeline: (opts?: { date?: string; window?: "day" | "24h" }) =>
+    request<DayTimelineData>(`/api/timeline?${new URLSearchParams({ ...(opts?.date ? { date: opts.date } : {}), window: opts?.window ?? "day" }).toString()}`),
+  dayStory: (opts?: { date?: string; window?: "day" | "24h" }) =>
+    request<DayStory>(`/api/day-story?${new URLSearchParams({ ...(opts?.date ? { date: opts.date } : {}), window: opts?.window ?? "day" }).toString()}`),
   postCheckin: (body: CheckinUpdate) =>
     request<CheckinResponse>("/api/checkin", { method: "POST", body: JSON.stringify(body) }),
   getProfile: () => request<UserProfileDto>("/api/profile"),

@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Armchair, Check, Footprints, Activity } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
+
+type Win = "day" | "24h";
 
 /**
  * 今日のあらすじ: 取れる全データを「同一時間軸の縦スタック」で見せる統合パネル。
@@ -64,11 +67,37 @@ function shortLabel(seg: DayStorySegment): string {
 }
 
 export function DayStory() {
-  const story = useQuery({ queryKey: ["day-story"], queryFn: () => api.dayStory(), refetchInterval: 5 * 60_000 });
-  const tl = useQuery({ queryKey: ["timeline"], queryFn: () => api.timeline(), refetchInterval: 5 * 60_000 });
+  const [win, setWin] = useState<Win>("24h");
+  const story = useQuery({ queryKey: ["day-story", win], queryFn: () => api.dayStory({ window: win }), refetchInterval: 5 * 60_000 });
+  const tl = useQuery({ queryKey: ["timeline", win], queryFn: () => api.timeline({ window: win }), refetchInterval: 5 * 60_000 });
   const d = story.data;
-  if (story.isLoading || !d || d.segments.length === 0) return null;
   const t = tl.data;
+
+  // 軸ラベル: origin からの offset を実時刻に変換 (24hビューは日付をまたぐため)
+  const originHour = d ? new Date(d.origin_jst).getHours() : 0;
+  const axisLabel = (offset: number) => `${(originHour + offset) % 24}時`;
+
+  const toggle = (
+    <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[11px]">
+      {(["24h", "day"] as Win[]).map((w) => (
+        <button key={w} onClick={() => setWin(w)}
+          className={`rounded-md px-2.5 py-0.5 ${win === w ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
+          {w === "24h" ? "直近24h" : "今日"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (story.isLoading || !d || d.segments.length === 0) {
+    return (
+      <div className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-400">{story.isLoading ? "読み込み中..." : "まだデータがありません"}</span>
+          {toggle}
+        </div>
+      </div>
+    );
+  }
 
   const nowH = d.now_h;
   const bb = t?.body_battery ?? [];
@@ -81,7 +110,10 @@ export function DayStory() {
 
   return (
     <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
-      <p className="text-base font-medium leading-snug text-slate-100">{d.summary}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-base font-medium leading-snug text-slate-100">{d.summary}</p>
+        {toggle}
+      </div>
 
       <svg viewBox={`0 0 ${W} ${TOTAL_H}`} className="w-full" role="img" aria-label="今日のタイムライン">
         {/* 3hグリッド (全トラック貫通) */}
@@ -144,10 +176,10 @@ export function DayStory() {
           </g>
         )}
 
-        {/* 時刻軸 (低不透明度) */}
+        {/* 時刻軸 (低不透明度)。24hビューは origin からの実時刻 */}
         {[0, 6, 12, 18, 24].map((h) => (
           <text key={h} x={X(h)} y={AXIS_Y} fontSize={11} fill="#64748b"
-                textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{h}時</text>
+                textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{axisLabel(h)}</text>
         ))}
       </svg>
 
