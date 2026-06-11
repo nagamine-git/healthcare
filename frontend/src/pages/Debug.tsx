@@ -14,7 +14,7 @@ export function DebugPage({ onBack }: Props) {
   });
 
   return (
-    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-4 px-4 pb-8 sm:px-8">
+    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-4 px-5 pb-8 sm:px-8">
       <header className="safe-area-top flex items-center justify-between pb-2 pt-3">
         <button
           onClick={onBack}
