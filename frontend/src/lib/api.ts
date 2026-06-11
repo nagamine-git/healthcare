@@ -64,7 +64,8 @@ export type ExercisePrescription = {
 };
 
 export type AdviceAction = {
-  time_jst: string; // HH:MM
+  time_jst: string; // HH:MM (推奨開始時刻)
+  until_jst?: string | null; // HH:MM この時刻までに始めれば OK (最終開始期限)
   title: string;
   duration_min: number;
   category:
