@@ -72,6 +72,66 @@ function fmtValue(key: TrendMetricKey, m: TrendMetric): string {
   return `${m.current_raw}${m.unit}`;
 }
 
+// 各ランプの「意味」と「状態に応じた次の一手」。
+// desc = この指標が何か。good/attn = 状態別の具体行動 (じゃあ何すれば？に答える)。
+const LAMP_META: Partial<Record<TrendMetricKey, { desc: string; good: string; attn: string }>> = {
+  readiness: {
+    desc: "Garminが睡眠・HRV・回復から出す『今日どれだけ追い込めるか』。高い=高強度OK",
+    good: "高強度トレ(筋トレ/HIIT)を入れる好機",
+    attn: "今日は軽め(有酸素・散歩)か休息に。高強度は見送り",
+  },
+  sleep: {
+    desc: "前夜の睡眠時間と質。7〜9時間が目標",
+    good: "この睡眠を維持。就寝時刻を一定に",
+    attn: "今夜は30分早く就寝。眠ければ15〜17時に20分ナップ",
+  },
+  hrv: {
+    desc: "心拍のゆらぎ＝自律神経の回復度。高い=回復、低い=疲労/ストレス",
+    good: "回復良好。通常通り活動してOK",
+    attn: "負荷を落とす。ボックスブレシング5分+早めの就寝",
+  },
+  energy: {
+    desc: "Garminの体力残量(0-100)。活動・ストレスで減り、休息・睡眠で回復",
+    good: "エネルギー十分。重いタスクや運動に充てる",
+    attn: "消耗気味。休憩を挟む。カフェインより短い仮眠が効く",
+  },
+  load: {
+    desc: "急性(7日)÷慢性(28日)の運動負荷比。0.8〜1.3が安全帯",
+    good: "ちょうど良い負荷。今のペースを維持",
+    attn: "理想帯から外れ気味。急増なら1〜2日回復、不足なら軽い運動を1本",
+  },
+  spo2: {
+    desc: "睡眠中の血中酸素。95%以上が正常。低下が続くと無呼吸の疑い",
+    good: "正常域",
+    attn: "装着位置を確認。複数夜続くなら睡眠外来を検討",
+  },
+  respiration: {
+    desc: "睡眠中の呼吸数。普段比+2以上は体調変化の先行サイン",
+    good: "普段どおり",
+    attn: "負荷控えめ＋水分＋睡眠優先(感染・過労の早期サイン)",
+  },
+  rhr_night: {
+    desc: "睡眠中の安静時心拍。低い=回復良好。普段比+5以上は疲労/病気の兆候",
+    good: "回復良好",
+    attn: "疲労気味。今日は強度を落とす",
+  },
+  sleep_midpoint: {
+    desc: "就寝リズムの規則性。ばらつき小=概日リズム安定(死亡リスク低)",
+    good: "リズム安定。この就寝時刻を維持",
+    attn: "就寝時刻を±30分以内に揃える",
+  },
+  weight: {
+    desc: "目標体重との差。範囲内が良い",
+    good: "目標圏内。維持",
+    attn: "範囲外。タンパク質と運動量を調整",
+  },
+  body_fat: {
+    desc: "体脂肪率。目標±許容内が良い",
+    good: "目標圏内",
+    attn: "範囲外。栄養と運動のバランスを調整",
+  },
+};
+
 // トレンド指標 → ランプ (表示順 = 重要度順)
 const METRIC_LAMPS: { key: TrendMetricKey; icon: LucideIcon; label: string }[] = [
   { key: "readiness", icon: Target, label: "攻め時" },
@@ -195,7 +255,12 @@ export function StatusLamps({
       };
     }
     const ach = m.achievement;
-    const rows = [`現在値 ${fmtValue(key, m)}`];
+    const st = achState(ach);
+    const meta = LAMP_META[key];
+    // 意味 → 現在値/トレンド → 次の一手 の順 (何か→今どう→どうする)
+    const rows: string[] = [];
+    if (meta) rows.push(meta.desc);
+    rows.push(`現在値 ${fmtValue(key, m)}`);
     const wow = m.achievement_week_over_week;
     // 28日回帰の傾向と前週比の符号が矛盾するときは傾向ラベルを出さない
     const dirConsistent =
@@ -206,9 +271,10 @@ export function StatusLamps({
     const wowPart = wow ? `前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(0)}` : null;
     if (dirPart || wowPart) rows.push([dirPart, wowPart].filter(Boolean).join(" · "));
     if (m.subtitle) rows.push(m.subtitle);
+    if (meta && st !== "off") rows.push(`→ ${st === "good" ? meta.good : meta.attn}`);
     return {
       id: key, icon, label,
-      state: achState(ach),
+      state: st,
       heading: `${label} ${ach != null ? `${Math.round(ach)}点` : "--"}`,
       rows,
     };
@@ -302,11 +368,18 @@ export function StatusLamps({
             </button>
           </div>
           <div className="mt-0.5 space-y-0.5">
-            {open.rows.map((row, i) => (
-              <div key={i} className="text-[11px] leading-snug text-slate-400">
-                {row}
-              </div>
-            ))}
+            {open.rows.map((row, i) => {
+              const isAction = row.startsWith("→");
+              const tone = open.state === "good" ? "text-emerald-300" : "text-amber-300";
+              return (
+                <div
+                  key={i}
+                  className={`text-[11px] leading-snug ${isAction ? `font-medium ${tone}` : "text-slate-400"}`}
+                >
+                  {row}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
