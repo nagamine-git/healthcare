@@ -312,6 +312,38 @@ def _gather_recent_training_prescriptions(
     return out[:30]
 
 
+def _gather_previous_advice_today(target: date_type) -> dict[str, Any] | None:
+    """当日の前回助言のアクション一覧 (再生成の継続性のため)。
+
+    再生成時に前回計画した training/cardio を LLM が見えないと、
+    枠の都合で黙って消える (実例: 20:00 シャドーボクシングが再生成で消失)。
+    """
+    from app.models import LlmComment
+
+    with session_scope() as session:
+        payload = session.execute(
+            select(LlmComment.payload)
+            .where(LlmComment.date == target)
+            .order_by(LlmComment.generated_at.desc())
+            .limit(1)
+        ).scalar()
+    if not payload or not payload.get("actions"):
+        return None
+    return {
+        "actions": [
+            {
+                "time_jst": a.get("time_jst"),
+                "until_jst": a.get("until_jst"),
+                "title": a.get("title"),
+                "category": a.get("category"),
+                "priority": a.get("priority"),
+                "duration_min": a.get("duration_min"),
+            }
+            for a in payload["actions"]
+        ]
+    }
+
+
 def _gather_focus(target: date_type) -> dict[str, Any]:
     """LLM に渡す focus サマリ (現在値 + ピーク窓)。"""
     from zoneinfo import ZoneInfo
@@ -987,6 +1019,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
+    today_payload["previous_advice_today"] = _gather_previous_advice_today(target)
     today_payload.update(_gather_today_activity(target))
     today_payload["recent_trends"] = _gather_recent_trends(target)
     today_payload["life_domains"] = _gather_life_domains(target)
