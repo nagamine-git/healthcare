@@ -305,6 +305,20 @@ export type CheckinSuggested = {
   stress: number | null;
   soreness: number | null;
 };
+export type DayStorySegment = {
+  start_h: number;
+  end_h: number;
+  label: string;
+  confidence: number;
+  source: "sleep" | "workout" | "calendar" | "inferred";
+};
+export type DayStory = {
+  date: string;
+  now_h: number | null;
+  summary: string;
+  segments: DayStorySegment[];
+};
+
 export type TimelinePoint = { h: number; v: number };
 export type DayTimelineData = {
   date: string;
@@ -663,6 +677,8 @@ export const api = {
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
   timeline: (date?: string) =>
     request<DayTimelineData>(`/api/timeline${date ? `?date=${date}` : ""}`),
+  dayStory: (date?: string) =>
+    request<DayStory>(`/api/day-story${date ? `?date=${date}` : ""}`),
   postCheckin: (body: CheckinUpdate) =>
     request<CheckinResponse>("/api/checkin", { method: "POST", body: JSON.stringify(body) }),
   getProfile: () => request<UserProfileDto>("/api/profile"),

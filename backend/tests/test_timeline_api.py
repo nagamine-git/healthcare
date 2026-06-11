@@ -65,3 +65,33 @@ def test_timeline_empty_day(app_client):
     assert body["body_battery"] == []
     assert body["sleep"] is None
     assert body["checkin"] is None
+
+
+def test_day_story_infers_segments(app_client):
+    from app.db import session_scope
+    from app.models import MetricSample, SleepSession, Workout
+
+    today = app_today()
+    start, _ = jst_day_bounds(today)
+    with session_scope() as s:
+        s.add(SleepSession(date=today, source="garmin", total_min=420))
+        s.add(MetricSample(source="garmin", metric_key="sleep_midpoint_hour",
+                           ts=start + timedelta(hours=7), value=3.5))
+        s.add(MetricSample(source="garmin", metric_key="resting_heart_rate",
+                           ts=start + timedelta(hours=15), value=50.0))
+        # 10時台に活発な歩行 (外出)
+        for m in range(0, 60, 5):
+            s.add(MetricSample(source="hae", metric_key="step_count",
+                               ts=start + timedelta(hours=10, minutes=m), value=120.0))
+        # 14時台は座位・低ストレス (休息)
+        s.add(MetricSample(source="garmin", metric_key="stress",
+                           ts=start + timedelta(hours=14, minutes=30), value=20.0))
+        s.add(Workout(id="w1", source="garmin", start=start + timedelta(hours=20),
+                      end=start + timedelta(hours=20, minutes=30), type="boxing"))
+
+    body = app_client.get("/api/day-story").json()
+    labels = {seg["label"] for seg in body["segments"]}
+    assert "睡眠" in labels
+    assert "ボクシング" in labels
+    assert any("外出" in lab or "移動" in lab for lab in labels)
+    assert "の1日" in body["summary"]

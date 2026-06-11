@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
+import { DayStory } from "../components/DayStory";
 import { DayTimeline } from "../components/DayTimeline";
 import { AdviceCard } from "../components/AdviceCard";
 import { CheckinCard } from "../components/CheckinCard";
@@ -244,8 +245,11 @@ export function TodayPage({ onOpenDebug }: Props) {
 
       {/* ===== 🕐 今日の流れ (1日のマルチトラックタイムライン) ===== */}
       <div id="timeline-section">
-        <SectionHeader label="今日の流れ" hint="睡眠・Body Battery・ストレス・行動を1本の帯で" />
-        <DayTimeline />
+        <SectionHeader label="今日の流れ" hint="行動推定 + 睡眠・Body Battery・ストレスを1本の帯で" />
+        <div className="space-y-3">
+          <DayStory />
+          <DayTimeline />
+        </div>
       </div>
 
       {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}
