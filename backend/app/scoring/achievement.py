@@ -45,12 +45,6 @@ RHR_NIGHT_BAND_SOFTNESS = 8.0
 REGULARITY_SD_GOOD = 0.5
 REGULARITY_SD_BAD = 2.0
 
-# スマホ使用時間 (分/日)。≤2h で満点、6h で 0 の線形。
-# 成人では小児ほど強いエビデンスではないが、余暇スクリーンタイム 2h 超で
-# 気分・睡眠への悪影響の報告が一貫している (実用的な目安として採用)。
-SCREEN_TIME_GOOD_MIN = 120.0
-SCREEN_TIME_BAD_MIN = 360.0
-
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
@@ -180,18 +174,4 @@ def sleep_regularity_achievement(sd_hour: float | None) -> float | None:
         return 0.0
     return _clamp(
         (REGULARITY_SD_BAD - sd) / (REGULARITY_SD_BAD - REGULARITY_SD_GOOD) * 100.0
-    )
-
-
-def screen_time_achievement(minutes: float | None) -> float | None:
-    """スマホ使用時間 (分/日)。少ないほど良い。≤2h 満点、6h で 0。"""
-    if minutes is None:
-        return None
-    m = float(minutes)
-    if m <= SCREEN_TIME_GOOD_MIN:
-        return 100.0
-    if m >= SCREEN_TIME_BAD_MIN:
-        return 0.0
-    return _clamp(
-        (SCREEN_TIME_BAD_MIN - m) / (SCREEN_TIME_BAD_MIN - SCREEN_TIME_GOOD_MIN) * 100.0
     )

@@ -10,7 +10,6 @@ import {
   Moon,
   Percent,
   Scale,
-  Smartphone,
   Sprout,
   Target,
   TriangleAlert,
@@ -84,7 +83,6 @@ const METRIC_LAMPS: { key: TrendMetricKey; icon: LucideIcon; label: string }[] =
   { key: "respiration", icon: Wind, label: "呼吸数" },
   { key: "rhr_night", icon: HeartPulse, label: "夜間心拍" },
   { key: "sleep_midpoint", icon: Clock3, label: "睡眠リズム" },
-  { key: "screen_time", icon: Smartphone, label: "スマホ時間" },
   { key: "weight", icon: Scale, label: "体重" },
   { key: "body_fat", icon: Percent, label: "体脂肪" },
 ];
