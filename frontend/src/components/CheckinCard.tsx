@@ -103,7 +103,7 @@ export function CheckinCard() {
           return (
             <div key={d.key} className="flex items-center gap-2">
               <span className="w-14 text-[11px] text-slate-300">{d.label}</span>
-              <div className="flex gap-1.5">
+              <div className="flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((lvl) => {
                   const isFilled = value != null && lvl <= value;
                   const isHint = value == null && hint != null && lvl === hint;
@@ -130,15 +130,21 @@ export function CheckinCard() {
                               ...(isHint ? { from_suggested: [d.key] } : {}),
                             } as CheckinUpdate)
                       }
-                      className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
-                    />
+                      // 視覚は 20px ドットのまま、ヒット領域を 28×32 に拡大
+                      // (-my で行の高さは変えない)
+                      className="-my-1.5 grid h-8 w-7 shrink-0 place-items-center"
+                    >
+                      <span
+                        className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
+                      />
+                    </button>
                   );
                 })}
               </div>
               {value != null ? (
                 <span className="text-[10px] tabular-nums text-slate-400">{value}</span>
               ) : hint != null ? (
-                <span className="text-[10px] tabular-nums text-slate-600">推定 {hint}</span>
+                <span className="text-[10px] tabular-nums text-slate-500">推定 {hint}</span>
               ) : null}
             </div>
           );
@@ -153,7 +159,7 @@ export function CheckinCard() {
           return (
             <div className="flex items-center gap-2">
               <span className="w-14 text-[11px] text-slate-300">頭痛</span>
-              <div className="flex gap-1.5">
+              <div className="flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((lvl) => {
                   const isFilled = headache != null && lvl <= headache;
                   const cls = isFilled
@@ -168,8 +174,12 @@ export function CheckinCard() {
                         else if (lvl === headache) migEnd.mutate();
                         else migPatch.mutate({ id: active.id, severity: lvl * 2 });
                       }}
-                      className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
-                    />
+                      className="-my-1.5 grid h-8 w-7 shrink-0 place-items-center"
+                    >
+                      <span
+                        className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
+                      />
+                    </button>
                   );
                 })}
               </div>
@@ -178,13 +188,13 @@ export function CheckinCard() {
                   発作中 {active.started_at_jst?.slice(11, 16)}〜（同じ強度を再タップで「治った」）
                 </span>
               ) : (
-                <span className="text-[10px] text-slate-600">なし</span>
+                <span className="text-[10px] text-slate-500">なし</span>
               )}
             </div>
           );
         })()}
       </div>
-      <div className="text-[9px] text-slate-600">
+      <div className="text-[10px] text-slate-500">
         ● 濃色＝あなたの入力 / ○ 淡色＝関連指標からの推定（タップで確定・再タップで取消）
         {stale ? " ／ 3時間以上前の記録は淡色（タップで「いまも同じ」と再確認）" : ""}
       </div>

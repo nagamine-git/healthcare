@@ -155,7 +155,7 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
       </div>
       {hint ? <div className="mb-1 text-xs text-slate-500">{hint}</div> : null}
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className={dir ? (calm ? "text-slate-400" : DIR_COLOR[dir]) : "text-slate-600"}>
+        <span className={dir ? (calm ? "text-slate-400" : DIR_COLOR[dir]) : "text-slate-500"}>
           {dir ? DIR_LABEL[dir] : metric.direction ? "横ばい圏" : "データ不足"}
           {metric.achievement != null ? ` · 達成度 ${Math.round(metric.achievement)}` : ""}
         </span>

@@ -171,17 +171,17 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                       {a.time_jst}
                     </span>
                     {past && (
-                      <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-400">
+                      <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
                         過ぎた
                       </span>
                     )}
                     {open && (
-                      <span className="rounded-full border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-[9px] text-emerald-300">
+                      <span className="rounded-full border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
                         いまからOK{a.until_jst ? ` 〜${a.until_jst}` : ""}
                       </span>
                     )}
                     {late && (
-                      <span className="rounded-full border border-amber-600/60 bg-amber-900/30 px-1.5 py-0.5 text-[9px] text-amber-300">
+                      <span className="rounded-full border border-amber-600/60 bg-amber-900/30 px-1.5 py-0.5 text-[10px] text-amber-300">
                         遅れても推奨・いまから
                       </span>
                     )}
@@ -310,7 +310,7 @@ function ActionFeedback({
         <button
           onClick={() => onRate(rating === 1 ? 0 : 1)}
           aria-label="役に立った"
-          className={`grid h-6 w-6 place-items-center rounded-full transition active:scale-90 ${
+          className={`grid h-9 w-9 place-items-center rounded-full transition active:scale-90 ${
             rating === 1 ? "bg-emerald-600/30 text-emerald-300" : "text-slate-500 hover:text-slate-300"
           }`}
         >
@@ -319,7 +319,7 @@ function ActionFeedback({
         <button
           onClick={() => onRate(rating === -1 ? 0 : -1)}
           aria-label="役に立たなかった"
-          className={`grid h-6 w-6 place-items-center rounded-full transition active:scale-90 ${
+          className={`grid h-9 w-9 place-items-center rounded-full transition active:scale-90 ${
             rating === -1 ? "bg-rose-600/30 text-rose-300" : "text-slate-500 hover:text-slate-300"
           }`}
         >
