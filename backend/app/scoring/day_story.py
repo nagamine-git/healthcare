@@ -314,19 +314,35 @@ def _summarize(segments: list[dict], sleep: dict | None) -> str:
     """セグメントの合計時間から 1-2 文のサマリを組む (rule-based、決定的)。"""
     from collections import defaultdict
 
+    # 似たラベルは大分類にまとめてサマリを読みやすく (例: 仕事・集中(負荷高め)→仕事)
+    def _bucket(label: str) -> str | None:
+        if label == "記録の谷間":
+            return None
+        if "仕事" in label or "集中" in label or "ストレス" in label or "負荷" in label:
+            return "仕事・集中"
+        if "休息" in label or "リラックス" in label or "ゆったり" in label:
+            return "休息"
+        if "外出" in label or "移動" in label or "運動" in label:
+            return "活動・運動"
+        if "ボクシング" in label or "筋トレ" in label:
+            return "運動"
+        return label
+
     totals: dict[str, float] = defaultdict(float)
     for s in segments:
-        if s["source"] in ("inferred", "workout") and s["label"] != "記録の谷間":
-            totals[s["label"]] += s["end_h"] - s["start_h"]
+        if s["source"] not in ("inferred", "workout"):
+            continue
+        b = _bucket(s["label"])
+        if b:
+            totals[b] += s["end_h"] - s["start_h"]
 
     parts: list[str] = []
     if sleep:
         sh = sleep["end_h"] - max(0.0, sleep["start_h"])
         parts.append(f"睡眠{sh:.1f}h")
 
-    # 起きている時間の最大カテゴリ
     ranked = sorted(totals.items(), key=lambda kv: -kv[1])
-    main = [f"{lab}{dur:.1f}h" for lab, dur in ranked[:3] if dur >= 0.3]
+    main = [f"{lab}{dur:.1f}h" for lab, dur in ranked[:3] if dur >= 0.4]
     if main:
         parts.append("・".join(main) + "が中心")
 
