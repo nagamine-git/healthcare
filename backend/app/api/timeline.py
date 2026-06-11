@@ -195,6 +195,26 @@ async def day_story(date: str | None = Query(default=None)) -> dict[str, Any]:
     active_energy = _series("active_energy")
 
     with session_scope() as session:
+        bb_rows = session.execute(
+            select(BodyBattery.ts, BodyBattery.value)
+            .where(BodyBattery.ts >= start, BodyBattery.ts < end)
+            .order_by(BodyBattery.ts)
+        ).all()
+        body_battery = [(_hour(t), float(v)) for t, v in bb_rows if v is not None]
+
+        def _daily(key: str) -> float:
+            v = session.execute(
+                select(MetricSample.value).where(
+                    MetricSample.metric_key == key,
+                    MetricSample.ts >= start,
+                    MetricSample.ts < end,
+                ).order_by(MetricSample.ts.desc()).limit(1)
+            ).scalar()
+            return float(v) if v is not None else 0.0
+
+        intensity_min = (_daily("intensity_minutes_moderate"), _daily("intensity_minutes_vigorous"))
+
+    with session_scope() as session:
         resting_hr = session.execute(
             select(MetricSample.value)
             .where(MetricSample.metric_key == "resting_heart_rate")
@@ -259,7 +279,9 @@ async def day_story(date: str | None = Query(default=None)) -> dict[str, Any]:
         steps=steps,
         heart_rate=heart_rate,
         stress=stress,
+        body_battery=body_battery,
         active_energy=active_energy,
+        intensity_min=intensity_min,
         resting_hr=float(resting_hr) if resting_hr is not None else None,
     )
     story["date"] = target.isoformat()

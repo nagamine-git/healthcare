@@ -30,32 +30,50 @@ class Bin:
         return self.stress_sum / self.stress_n if self.stress_n else None
 
 
-def _classify(
-    b: Bin, resting_hr: float
-) -> tuple[str, float]:
-    """1 ビンを (ラベル, 確度 0-1) に分類。生理データのみのフォールバック判定。"""
+def _classify(b: Bin, resting_hr: float, bb_slope: float | None) -> tuple[str, float]:
+    """1 ビンを (ラベル, 確度) に分類。
+
+    Garmin の生理状態を主信号にする (歩数では遠隔デスクワーク中の精神的活動を
+    捉えられないため):
+    - stress = 自律神経の負荷帯 (安息<26 / 低<51 / 中<76 / 高)。心理ストレスでなく
+      交感/副交感のバランス。デスクワークでも上がる。
+    - bb_slope = Body Battery の増減 (負=消耗→活動/負荷、正=回復→休息)。
+    - steps/energy = 身体的な動き。
+    """
     steps = b.steps  # 15分あたりの歩数
     hr = b.hr
     stress = b.stress
-    hr_active = resting_hr + 18  # 明確に活動的とみなす心拍
+    energy = b.energy
 
-    # 移動・運動レベルの歩行
-    if steps >= 600:
+    # まず身体的な動き (歩数/消費カロリー) が大きければ移動・運動
+    if steps >= 600 or (hr is not None and hr >= resting_hr + 25):
         return ("外出・運動", 0.7)
     if steps >= 200:
-        return ("移動・家事", 0.6)
+        return ("移動・歩き回り", 0.6)
 
-    # 低歩数帯 (座位中心) は心拍とストレスで分ける
-    if hr is not None and hr >= hr_active and steps < 100:
-        # 動いていないのに心拍が高い = 集中負荷 or 緊張
-        return ("集中・負荷高め", 0.4)
-    if stress is not None and stress >= 55:
-        return ("デスクワーク・集中", 0.5)
-    if stress is not None and stress < 30 and (hr is None or hr <= resting_hr + 6):
-        return ("休息・リラックス", 0.5)
-    if steps < 30 and (hr is None or hr <= resting_hr + 8):
-        return ("安静・座位", 0.5)
-    return ("デスクワーク・軽活動", 0.4)
+    # 以降は座位中心。Garmin の自律神経状態で分ける
+    draining = bb_slope is not None and bb_slope <= -1.0  # BB がはっきり減っている
+    charging = bb_slope is not None and bb_slope >= 0.5
+
+    if stress is not None:
+        if stress >= 76:
+            return ("高ストレス・負荷", 0.55)
+        if stress >= 51:
+            return ("仕事・集中 (負荷高め)", 0.55)
+        if stress >= 26:
+            # 中程度の自律神経活動 = 多くは集中作業
+            return ("仕事・集中", 0.5 if draining else 0.45)
+        # 安息帯: BB が回復なら休息、消耗なら軽い作業
+        if charging or steps < 20:
+            return ("休息・リラックス", 0.55)
+        return ("軽作業・ゆったり", 0.4)
+
+    # stress が無い時間帯は HR/BB で粗く
+    if draining and (hr is None or hr >= resting_hr + 8):
+        return ("活動中", 0.35)
+    if energy > 5:
+        return ("軽い活動", 0.35)
+    return ("安静・座位", 0.4)
 
 
 def build_day_story(
@@ -67,7 +85,9 @@ def build_day_story(
     steps: list[tuple[float, float]],  # (hour, steps)
     heart_rate: list[tuple[float, float]],
     stress: list[tuple[float, float]],
+    body_battery: list[tuple[float, float]] | None = None,
     active_energy: list[tuple[float, float]] | None = None,
+    intensity_min: tuple[float, float] | None = None,  # (moderate, vigorous)
     resting_hr: float | None,
 ) -> dict:
     """セグメント一覧 + 自然言語サマリを返す。"""
@@ -94,6 +114,24 @@ def build_day_story(
         b.stress_sum += v
         b.stress_n += 1
 
+    # Body Battery を各ビンの代表値に変換 (carry-forward) して傾きを出す
+    bb_at: list[float | None] = [None] * n_bins
+    for h, v in sorted(body_battery or []):
+        bb_at[_idx(h)] = v
+    last: float | None = None
+    for i in range(n_bins):
+        if bb_at[i] is None:
+            bb_at[i] = last
+        else:
+            last = bb_at[i]
+    bb_slope: list[float | None] = [None] * n_bins
+    prev: float | None = None
+    for i in range(n_bins):
+        if bb_at[i] is not None and prev is not None:
+            bb_slope[i] = bb_at[i] - prev  # type: ignore[operator]
+        if bb_at[i] is not None:
+            prev = bb_at[i]
+
     def _in_any(h: float, ranges: list[tuple[float, float]]) -> bool:
         return any(s <= h < e for s, e in ranges)
 
@@ -119,7 +157,7 @@ def build_day_story(
             title = next(t for s, e, t in event_ranges if s <= h < e)
             labels.append((title or "予定", 0.85, "calendar"))
         else:
-            lab, conf = _classify(bins[i], rhr)
+            lab, conf = _classify(bins[i], rhr, bb_slope[i])
             labels.append((lab, conf, "inferred"))
 
     # 連続する同ラベルをセグメントに結合 (短すぎる断片は隣に吸収)
@@ -143,10 +181,18 @@ def build_day_story(
         segments=segments,
         steps_total=sum(v for _, v in steps),
         workouts=workouts,
+        intensity_min=intensity_min,
         now_h=end_h,
         awake_from=sleep["end_h"] if sleep else 7.0,
     )
     return {"segments": segments, "summary": summary, "insights": insights}
+
+
+# 座位中心とみなすラベル (立ち上がり提案の対象)
+_SEDENTARY = {
+    "安静・座位", "軽作業・ゆったり", "軽い活動",
+    "仕事・集中", "仕事・集中 (負荷高め)", "高ストレス・負荷",
+}
 
 
 def _insights(
@@ -154,12 +200,13 @@ def _insights(
     segments: list[dict],
     steps_total: float,
     workouts: list[dict],
+    intensity_min: tuple[float, float] | None,
     now_h: float,
     awake_from: float,
 ) -> list[dict]:
     """1日の集計から「次にやること」付きの気づきを最大 3 件。データ事実ベース。"""
     out: list[dict] = []
-    sedentary_labels = {"安静・座位", "デスクワーク・軽活動", "デスクワーク・集中", "集中・負荷高め"}
+    sedentary_labels = _SEDENTARY
 
     # 1) 連続して座っている最長ブロック (起床後・現在まで)
     longest = 0.0
@@ -178,13 +225,15 @@ def _insights(
             "action": "立ち上がって5分歩く / その場で50回足踏み (血流・集中リセット)",
         })
 
-    # 2) 運動の有無 (確定情報)
+    # 2) 運動の有無 (確定情報 + Garmin の強度分)
     did_workout = any(w for w in workouts)
-    if did_workout:
+    mod, vig = intensity_min or (0.0, 0.0)
+    if did_workout or vig + mod >= 10:
+        detail = f"高強度{int(vig)}分・中強度{int(mod)}分" if (vig + mod) > 0 else "運動を記録"
         out.append({
             "icon": "ok",
             "tone": "good",
-            "text": "今日は体を動かせている",
+            "text": f"今日は体を動かせている ({detail})",
             "action": "回復のため水分とタンパク質を忘れずに",
         })
     elif now_h >= 16:
@@ -234,11 +283,13 @@ def _smooth(segments: list[dict]) -> list[dict]:
     out: list[dict] = [segments[0]]
     for seg in segments[1:]:
         dur = seg["end_h"] - seg["start_h"]
-        # 30分未満の推定の断片は前のセグメントに吸収 (読みやすさ優先)
-        if seg["source"] == "inferred" and dur < 0.5 and out:
-            out[-1]["end_h"] = seg["end_h"]
-        elif out and out[-1]["label"] == seg["label"]:
-            out[-1]["end_h"] = seg["end_h"]
+        prev = out[-1]
+        # 30分未満の推定の断片は前のセグメントに吸収 (読みやすさ優先)。
+        # ただし確定情報 (睡眠/運動/予定) は推定で延ばさない (睡眠が朝まで伸びるバグ防止)
+        if seg["source"] == "inferred" and dur < 0.5 and prev["source"] == "inferred":
+            prev["end_h"] = seg["end_h"]
+        elif prev["label"] == seg["label"] and prev["source"] == seg["source"]:
+            prev["end_h"] = seg["end_h"]
         else:
             out.append(seg)
     # 2 周目: 隣接で同ラベルになったものを再結合
