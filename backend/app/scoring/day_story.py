@@ -45,15 +45,20 @@ def _classify(b: Bin, resting_hr: float, bb_slope: float | None) -> tuple[str, f
     stress = b.stress
     energy = b.energy
 
+    # 信号がほぼ無いビンは「推定」ではなく「記録の谷間」(時計を外した等)。
+    # 確度を低くして UI で薄く出す (データ不足を確度0.4の安静に偽装しない)。
+    if b.hr_n == 0 and b.stress_n == 0 and steps < 1 and energy < 0.5:
+        return ("記録の谷間", 0.12)
+
     # まず身体的な動き (歩数/消費カロリー) が大きければ移動・運動
     if steps >= 600 or (hr is not None and hr >= resting_hr + 25):
         return ("外出・運動", 0.7)
     if steps >= 200:
         return ("移動・歩き回り", 0.6)
 
-    # 以降は座位中心。Garmin の自律神経状態で分ける
-    draining = bb_slope is not None and bb_slope <= -1.0  # BB がはっきり減っている
-    charging = bb_slope is not None and bb_slope >= 0.5
+    # 以降は座位中心。Garmin の自律神経状態で分ける (45分スパンの傾き)
+    draining = bb_slope is not None and bb_slope <= -3.0  # BB がはっきり減っている
+    charging = bb_slope is not None and bb_slope >= 1.5
 
     if stress is not None:
         if stress >= 76:
@@ -124,13 +129,14 @@ def build_day_story(
             bb_at[i] = last
         else:
             last = bb_at[i]
+    # 傾きは 45分 (3ビン) のスパンで取る。瞬時値はノイズが大きく信頼できない
+    # (Firstbeat 合成スコアの独立検証は薄く、トレンドで使うべき: 2024-2025 review)。
     bb_slope: list[float | None] = [None] * n_bins
-    prev: float | None = None
     for i in range(n_bins):
-        if bb_at[i] is not None and prev is not None:
-            bb_slope[i] = bb_at[i] - prev  # type: ignore[operator]
-        if bb_at[i] is not None:
-            prev = bb_at[i]
+        cur = bb_at[i]
+        past = bb_at[i - 3] if i >= 3 else None
+        if cur is not None and past is not None:
+            bb_slope[i] = cur - past
 
     def _in_any(h: float, ranges: list[tuple[float, float]]) -> bool:
         return any(s <= h < e for s, e in ranges)
@@ -217,12 +223,14 @@ def _insights(
             longest = max(longest, cur)
         else:
             cur = 0.0
-    if longest >= 2.0:
+    # 連続座位の閾値は Diaz 2023 RCT (30分ごと5分歩行で血糖 iAUC 有意低下) に基づく。
+    # 1時間超の連続座位は中断推奨ラインとして提示。
+    if longest >= 1.0:
         out.append({
             "icon": "sit",
             "tone": "warn",
             "text": f"{longest:.1f}時間ほぼ座りっぱなし",
-            "action": "立ち上がって5分歩く / その場で50回足踏み (血流・集中リセット)",
+            "action": "30分ごとに5分歩く (血糖・血圧に効く)。今すぐ立って一周",
         })
 
     # 2) 運動の有無 (確定情報 + Garmin の強度分)
@@ -308,7 +316,7 @@ def _summarize(segments: list[dict], sleep: dict | None) -> str:
 
     totals: dict[str, float] = defaultdict(float)
     for s in segments:
-        if s["source"] in ("inferred", "workout"):
+        if s["source"] in ("inferred", "workout") and s["label"] != "記録の谷間":
             totals[s["label"]] += s["end_h"] - s["start_h"]
 
     parts: list[str] = []

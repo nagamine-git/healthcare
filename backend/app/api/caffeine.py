@@ -17,7 +17,6 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db import session_scope
 from app.models import CaffeineIntake
-from app.scoring.timewindow import jst_day_bounds
 
 router = APIRouter()
 
@@ -213,14 +212,16 @@ async def caffeine_presets() -> dict[str, Any]:
 
 
 def current_residual_mg(now_jst: datetime, half_life_h: float) -> float:
-    """本日の摂取記録から現時点での体内残量を計算する。
+    """摂取記録から現時点での体内残量を計算する。
 
-    今日 (JST 暦) の 00:00 以降の摂取を対象に、半減期で減衰した残量を合計。
+    過去 18 時間 (≒半減期5hで3.5回 = 残量 ~9%) の摂取を対象に半減期で減衰合計。
+    「今日のJST 0時以降」だと深夜に飲んだカフェインが日付をまたいだ瞬間に
+    残量から消えてしまうため、ローリング窓で見る。
     """
     from app.scoring.caffeine import half_life_decay
 
-    target_date = now_jst.date()
-    start_utc, _end_utc = jst_day_bounds(target_date)
+    now_utc = now_jst.astimezone(UTC)
+    start_utc = (now_utc - timedelta(hours=18)).replace(tzinfo=None)
 
     total = 0.0
     with session_scope() as session:

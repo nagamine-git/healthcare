@@ -68,10 +68,14 @@ def test_timeline_empty_day(app_client):
 
 
 def test_day_story_infers_segments(app_client):
+    from datetime import date as date_type
+
     from app.db import session_scope
     from app.models import MetricSample, SleepSession, Workout
 
-    today = app_today()
+    # 固定の過去日付で検証 (今日だと now_h より後ろの seed が未来扱いで除外され、
+    # 実行時刻に依存してしまう)
+    today = date_type(2026, 5, 20)
     start, _ = jst_day_bounds(today)
     with session_scope() as s:
         s.add(SleepSession(date=today, source="garmin", total_min=420))
@@ -89,7 +93,7 @@ def test_day_story_infers_segments(app_client):
         s.add(Workout(id="w1", source="garmin", start=start + timedelta(hours=20),
                       end=start + timedelta(hours=20, minutes=30), type="boxing"))
 
-    body = app_client.get("/api/day-story").json()
+    body = app_client.get("/api/day-story?date=2026-05-20").json()
     labels = {seg["label"] for seg in body["segments"]}
     assert "睡眠" in labels
     assert "ボクシング" in labels
