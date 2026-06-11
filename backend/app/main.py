@@ -16,6 +16,7 @@ from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.api import profile as profile_api
 from app.api import speech as speech_api
+from app.api import timeline as timeline_api
 from app.config import get_settings
 from app.db import create_all, init_engine
 from app.logging import configure_logging, get_logger
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(migraine_api.router)
     app.include_router(profile_api.router)
     app.include_router(alcohol_api.router)
+    app.include_router(timeline_api.router)
     app.include_router(debug.router)
     return app
 

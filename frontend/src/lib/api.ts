@@ -305,6 +305,26 @@ export type CheckinSuggested = {
   stress: number | null;
   soreness: number | null;
 };
+export type TimelinePoint = { h: number; v: number };
+export type DayTimelineData = {
+  date: string;
+  now_h: number | null;
+  body_battery: TimelinePoint[];
+  stress: TimelinePoint[];
+  sleep: { start_h: number; end_h: number } | null;
+  workouts: { start_h: number; end_h: number; type: string | null }[];
+  caffeine: { h: number; mg: number; source: string }[];
+  migraine: { start_h: number; end_h: number | null; severity: number | null }[];
+  checkin: {
+    h: number;
+    mood: number | null;
+    energy: number | null;
+    stress: number | null;
+    soreness: number | null;
+  } | null;
+  events: { start_h: number; end_h: number; title: string }[];
+};
+
 export type CheckinResponse = { today: Checkin | null; items: Checkin[]; suggested: CheckinSuggested };
 export type CheckinUpdate = {
   mood?: number;
@@ -641,6 +661,8 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
+  timeline: (date?: string) =>
+    request<DayTimelineData>(`/api/timeline${date ? `?date=${date}` : ""}`),
   postCheckin: (body: CheckinUpdate) =>
     request<CheckinResponse>("/api/checkin", { method: "POST", body: JSON.stringify(body) }),
   getProfile: () => request<UserProfileDto>("/api/profile"),

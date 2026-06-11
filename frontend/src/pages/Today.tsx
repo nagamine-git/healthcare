@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
+import { DayTimeline } from "../components/DayTimeline";
 import { AdviceCard } from "../components/AdviceCard";
 import { CheckinCard } from "../components/CheckinCard";
 import { TrendsSection } from "../components/TrendsSection";
@@ -239,6 +240,12 @@ export function TodayPage({ onOpenDebug }: Props) {
             pending={regenerate.isPending}
           />
         </div>
+      </div>
+
+      {/* ===== 🕐 今日の流れ (1日のマルチトラックタイムライン) ===== */}
+      <div id="timeline-section">
+        <SectionHeader label="今日の流れ" hint="睡眠・Body Battery・ストレス・行動を1本の帯で" />
+        <DayTimeline />
       </div>
 
       {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}
