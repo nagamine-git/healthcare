@@ -538,7 +538,7 @@ export type TrendMetric = {
 
 export type TrendMetricKey =
   | "sleep" | "hrv" | "energy" | "load" | "weight" | "body_fat"
-  | "readiness" | "spo2" | "respiration" | "rhr_night" | "sleep_midpoint";
+  | "readiness" | "spo2" | "respiration" | "rhr_night" | "sleep_midpoint" | "screen_time";
 
 export type TrendsResponse = {
   granularity: "daily" | "weekly";

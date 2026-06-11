@@ -65,3 +65,19 @@ def test_timeline_empty_day(app_client):
     assert body["body_battery"] == []
     assert body["sleep"] is None
     assert body["checkin"] is None
+
+
+def test_screen_time_post_and_trend(app_client):
+    """スクリーンタイム手動入力 → upsert → トレンド指標に反映。"""
+    r = app_client.post("/api/screen-time", json={"minutes": 150})
+    assert r.status_code == 200
+    # 同日再送は上書き (1日1値)
+    r2 = app_client.post("/api/screen-time", json={"minutes": 180})
+    assert r2.json()["minutes"] == 180
+
+    trends = app_client.get("/api/trends?granularity=daily").json()
+    st = trends["metrics"].get("screen_time")
+    assert st is not None
+    assert st["current_raw"] == 180.0
+    # 達成度: 180分 → (360-180)/240*100 = 75
+    assert st["achievement"] == 75.0

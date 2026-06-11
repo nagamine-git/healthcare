@@ -10,7 +10,7 @@ import { MetricTile } from "./MetricTile";
 
 const ORDER: TrendMetricKey[] = [
   "sleep", "hrv", "energy", "readiness", "load",
-  "spo2", "respiration", "rhr_night", "sleep_midpoint",
+  "spo2", "respiration", "rhr_night", "sleep_midpoint", "screen_time",
   "weight", "body_fat",
 ];
 

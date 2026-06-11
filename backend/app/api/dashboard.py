@@ -836,6 +836,15 @@ async def trends(
             subtitle=f"ばらつき ±{sd14:.1f}h (14日)" if sd14 is not None else None,
         )
 
+    st_pairs = _physio("screen_time_min")
+    if st_pairs:
+        metrics["screen_time"] = _metric(
+            "スマホ使用", "分",
+            {"type": "lower", "good_line": ach.SCREEN_TIME_GOOD_MIN},
+            st_pairs, _ach_map(st_pairs, ach.screen_time_achievement),
+            subtitle="2時間以下が目標 (手入力: ショートカット)",
+        )
+
     return {
         "granularity": granularity,
         "generated_at": _utc_iso(datetime.now(UTC).replace(tzinfo=None)),
