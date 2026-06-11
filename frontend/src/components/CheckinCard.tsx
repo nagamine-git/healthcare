@@ -38,6 +38,26 @@ const STALE_MS = 3 * 60 * 60 * 1000;
 export function CheckinCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["checkin"], queryFn: api.getCheckin });
+  // 頭痛はエピソード型 (開始/終了時刻がトリガー分析に必要) なので、
+  // 表示は同じ 5 段ドットでも裏は MigraineEpisode の開始/強度更新/終了に対応させる
+  const migraine = useQuery({ queryKey: ["migraine"], queryFn: () => api.migraineList(7) });
+  const invalidateMigraine = () => {
+    qc.invalidateQueries({ queryKey: ["migraine"] });
+    qc.invalidateQueries({ queryKey: ["today"] });
+  };
+  const migStart = useMutation({
+    mutationFn: (severity: number) => api.migraineStart({ severity }),
+    onSuccess: invalidateMigraine,
+  });
+  const migPatch = useMutation({
+    mutationFn: ({ id, severity }: { id: number; severity: number }) =>
+      api.migrainePatch(id, { severity }),
+    onSuccess: invalidateMigraine,
+  });
+  const migEnd = useMutation({
+    mutationFn: () => api.migraineEnd(),
+    onSuccess: invalidateMigraine,
+  });
   const save = useMutation({
     mutationFn: (body: CheckinUpdate) => api.postCheckin(body),
     onSuccess: (data) => {
@@ -123,6 +143,46 @@ export function CheckinCard() {
             </div>
           );
         })}
+        {(() => {
+          // 頭痛: 表示は同じ 5 段ドットだが、裏はエピソード (開始/終了時刻が
+          // トリガー分析に必要)。タップで開始、強度変更、同じ強度の再タップで「治った」
+          const active = migraine.data?.active ?? null;
+          const headache = active
+            ? Math.min(5, Math.max(1, Math.ceil((active.severity ?? 6) / 2)))
+            : null;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="w-14 text-[11px] text-slate-300">頭痛</span>
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((lvl) => {
+                  const isFilled = headache != null && lvl <= headache;
+                  const cls = isFilled
+                    ? filledColor(headache, false)
+                    : "bg-slate-800 ring-1 ring-slate-700";
+                  return (
+                    <button
+                      key={lvl}
+                      aria-label={`頭痛 ${lvl}`}
+                      onClick={() => {
+                        if (!active) migStart.mutate(lvl * 2);
+                        else if (lvl === headache) migEnd.mutate();
+                        else migPatch.mutate({ id: active.id, severity: lvl * 2 });
+                      }}
+                      className={`h-5 w-5 rounded-full transition active:scale-90 hover:brightness-125 ${cls}`}
+                    />
+                  );
+                })}
+              </div>
+              {active ? (
+                <span className="text-[10px] text-rose-400">
+                  発作中 {active.started_at_jst?.slice(11, 16)}〜（同じ強度を再タップで「治った」）
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-600">なし</span>
+              )}
+            </div>
+          );
+        })()}
       </div>
       <div className="text-[9px] text-slate-600">
         ● 濃色＝あなたの入力 / ○ 淡色＝関連指標からの推定（タップで確定・再タップで取消）
