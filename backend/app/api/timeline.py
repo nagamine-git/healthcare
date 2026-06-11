@@ -192,6 +192,7 @@ async def day_story(date: str | None = Query(default=None)) -> dict[str, Any]:
     steps = _series("step_count")
     heart_rate = _series("heart_rate_avg")
     stress = _series("stress")
+    active_energy = _series("active_energy")
 
     with session_scope() as session:
         resting_hr = session.execute(
@@ -258,6 +259,7 @@ async def day_story(date: str | None = Query(default=None)) -> dict[str, Any]:
         steps=steps,
         heart_rate=heart_rate,
         stress=stress,
+        active_energy=active_energy,
         resting_hr=float(resting_hr) if resting_hr is not None else None,
     )
     story["date"] = target.isoformat()

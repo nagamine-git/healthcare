@@ -15,6 +15,7 @@ BIN_MIN = 15  # 推定の時間解像度 (分)
 @dataclass
 class Bin:
     steps: float = 0.0
+    energy: float = 0.0  # active_energy 合計 (活動強度の proxy)
     hr_sum: float = 0.0
     hr_n: int = 0
     stress_sum: float = 0.0
@@ -66,6 +67,7 @@ def build_day_story(
     steps: list[tuple[float, float]],  # (hour, steps)
     heart_rate: list[tuple[float, float]],
     stress: list[tuple[float, float]],
+    active_energy: list[tuple[float, float]] | None = None,
     resting_hr: float | None,
 ) -> dict:
     """セグメント一覧 + 自然言語サマリを返す。"""
@@ -81,6 +83,8 @@ def build_day_story(
 
     for h, v in steps:
         bins[_idx(h)].steps += v
+    for h, v in active_energy or []:
+        bins[_idx(h)].energy += v
     for h, v in heart_rate:
         b = bins[_idx(h)]
         b.hr_sum += v
@@ -135,7 +139,81 @@ def build_day_story(
 
     segments = _smooth(segments)
     summary = _summarize(segments, sleep)
-    return {"segments": segments, "summary": summary}
+    insights = _insights(
+        segments=segments,
+        steps_total=sum(v for _, v in steps),
+        workouts=workouts,
+        now_h=end_h,
+        awake_from=sleep["end_h"] if sleep else 7.0,
+    )
+    return {"segments": segments, "summary": summary, "insights": insights}
+
+
+def _insights(
+    *,
+    segments: list[dict],
+    steps_total: float,
+    workouts: list[dict],
+    now_h: float,
+    awake_from: float,
+) -> list[dict]:
+    """1日の集計から「次にやること」付きの気づきを最大 3 件。データ事実ベース。"""
+    out: list[dict] = []
+    sedentary_labels = {"安静・座位", "デスクワーク・軽活動", "デスクワーク・集中", "集中・負荷高め"}
+
+    # 1) 連続して座っている最長ブロック (起床後・現在まで)
+    longest = 0.0
+    cur = 0.0
+    for s in segments:
+        if s["source"] == "inferred" and s["label"] in sedentary_labels:
+            cur += s["end_h"] - s["start_h"]
+            longest = max(longest, cur)
+        else:
+            cur = 0.0
+    if longest >= 2.0:
+        out.append({
+            "icon": "sit",
+            "tone": "warn",
+            "text": f"{longest:.1f}時間ほぼ座りっぱなし",
+            "action": "立ち上がって5分歩く / その場で50回足踏み (血流・集中リセット)",
+        })
+
+    # 2) 運動の有無 (確定情報)
+    did_workout = any(w for w in workouts)
+    if did_workout:
+        out.append({
+            "icon": "ok",
+            "tone": "good",
+            "text": "今日は体を動かせている",
+            "action": "回復のため水分とタンパク質を忘れずに",
+        })
+    elif now_h >= 16:
+        out.append({
+            "icon": "run",
+            "tone": "warn",
+            "text": "まだ運動の記録がない",
+            "action": "10分でいいので有酸素 (シャドーボクシング/加重足踏み) を1本",
+        })
+
+    # 3) 歩数 (活動量)。日中をどれだけ過ぎたかで基準を按分
+    day_frac = max(0.2, min(1.0, (now_h - awake_from) / (22.0 - awake_from)))
+    target_now = 7000 * day_frac
+    if steps_total < target_now * 0.6 and now_h >= 12:
+        out.append({
+            "icon": "walk",
+            "tone": "warn",
+            "text": f"歩数 {int(steps_total):,} 歩 (この時間帯にしては少なめ)",
+            "action": "買い物や休憩を散歩に変えて +1000 歩",
+        })
+    elif steps_total >= 7000:
+        out.append({
+            "icon": "ok",
+            "tone": "good",
+            "text": f"歩数 {int(steps_total):,} 歩 (十分動けている)",
+            "action": "この調子。夜は座位を増やしてリラックスに",
+        })
+
+    return out[:3]
 
 
 def _workout_label(wtype: str | None) -> str:
@@ -156,13 +234,21 @@ def _smooth(segments: list[dict]) -> list[dict]:
     out: list[dict] = [segments[0]]
     for seg in segments[1:]:
         dur = seg["end_h"] - seg["start_h"]
-        if seg["source"] == "inferred" and dur <= 0.25 and out:
-            out[-1]["end_h"] = seg["end_h"]  # 前に吸収
+        # 30分未満の推定の断片は前のセグメントに吸収 (読みやすさ優先)
+        if seg["source"] == "inferred" and dur < 0.5 and out:
+            out[-1]["end_h"] = seg["end_h"]
         elif out and out[-1]["label"] == seg["label"]:
             out[-1]["end_h"] = seg["end_h"]
         else:
             out.append(seg)
-    return out
+    # 2 周目: 隣接で同ラベルになったものを再結合
+    merged: list[dict] = [out[0]]
+    for seg in out[1:]:
+        if merged[-1]["label"] == seg["label"] and merged[-1]["source"] == seg["source"]:
+            merged[-1]["end_h"] = seg["end_h"]
+        else:
+            merged.append(seg)
+    return merged
 
 
 def _summarize(segments: list[dict], sleep: dict | None) -> str:

@@ -312,11 +312,18 @@ export type DayStorySegment = {
   confidence: number;
   source: "sleep" | "workout" | "calendar" | "inferred";
 };
+export type DayStoryInsight = {
+  icon: "sit" | "run" | "walk" | "ok";
+  tone: "good" | "warn";
+  text: string;
+  action: string;
+};
 export type DayStory = {
   date: string;
   now_h: number | null;
   summary: string;
   segments: DayStorySegment[];
+  insights: DayStoryInsight[];
 };
 
 export type TimelinePoint = { h: number; v: number };

@@ -95,3 +95,4 @@ def test_day_story_infers_segments(app_client):
     assert "ボクシング" in labels
     assert any("外出" in lab or "移動" in lab for lab in labels)
     assert "の1日" in body["summary"]
+    assert "insights" in body and isinstance(body["insights"], list)
