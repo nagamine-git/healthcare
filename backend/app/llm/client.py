@@ -329,6 +329,15 @@ def _gather_previous_advice_today(target: date_type) -> dict[str, Any] | None:
         ).scalar()
     if not payload or not payload.get("actions"):
         return None
+    actions = payload["actions"]
+    # 直近 48h に筋トレ実績があるのに前回助言に training が残っていると、
+    # 継続性ルールがそれをアンカーにして 48h ルール違反の筋トレを再提案し
+    # 続ける (実例あり)。アンカー源を決定的に断つ。
+    days_since = _days_since_last_strength_training(target)
+    if days_since is not None and days_since <= 1:
+        actions = [a for a in actions if a.get("category") != "training"]
+    if not actions:
+        return None
     return {
         "actions": [
             {
@@ -339,7 +348,7 @@ def _gather_previous_advice_today(target: date_type) -> dict[str, Any] | None:
                 "priority": a.get("priority"),
                 "duration_min": a.get("duration_min"),
             }
-            for a in payload["actions"]
+            for a in actions
         ]
     }
 

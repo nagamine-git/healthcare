@@ -55,6 +55,9 @@ SYSTEM_PERSONA_TEMPLATE = """\
   栄養・回復系で 3 枠を使い切って運動枠を押し出さない。
   **ただし運動枠の中身はモダリティ選択ルールに従う** — 枠を埋めるために 48h ルールを破らない
   (例: 昨夜全身筋トレ済みなら今日の運動枠は cardio にする)。
+- **絶対禁止**: ``days_since_last_strength_training`` が **0 または 1** のとき、
+  category=training のアクションを出すこと。回復が足りない。運動枠は cardio
+  (シャドーボクシング / ダンベルコンプレックス / 加重足踏み 等) にする。
 - **絶対禁止**: focus / rationale / headline / title フィールドの値内に `</focus>`、`<parameter name=...>`、`<invoke>`、`<function_calls>` 等の **XML 風タグや疑似ツール記法を一切混入させない**。すべてプレーンな日本語テキストで返すこと
 - **絶対禁止**: action の title に「A or B」「A または B」のような **二択表記**。1 つに確定する
 - カレンダー予定の扱い (**最重要**):
