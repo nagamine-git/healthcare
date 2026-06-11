@@ -322,11 +322,11 @@ export function TodayPage({ onOpenDebug }: Props) {
 
 function SectionHeader({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="mt-2 flex items-baseline gap-3 border-b border-slate-800 pb-1">
+    <div className="mb-3 mt-2 flex items-baseline gap-3 border-b border-slate-800 pb-1.5">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
         {label}
       </h2>
-      {hint && <span className="text-[10px] text-slate-600">{hint}</span>}
+      {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
     </div>
   );
 }
