@@ -187,6 +187,46 @@ def _gather(start_utc, end_utc, off) -> dict[str, Any]:
     return out
 
 
+def _caffeine_curve(origin_utc, start_utc, end_utc, off):
+    """体内カフェイン残量 (mg) の推移を 15分刻みで返す。1コンパートメント PK。
+
+    ウィンドウ開始前 (最大18h) の摂取も残存するので遡って取得する。
+    閾値 = 就寝時に血中濃度 0.5mg/L を超えない残量 (mg) = threshold * Vd * 体重。
+    """
+    from app.config import get_settings
+    from app.scoring.caffeine import half_life_decay
+    from app.scoring.profile import resolve_profile
+
+    s = get_settings()
+    half_life = s.caffeine_half_life_h
+    lookback = (start_utc - timedelta(hours=18))
+    with session_scope() as session:
+        intakes = session.execute(
+            select(CaffeineIntake.ts, CaffeineIntake.mg)
+            .where(CaffeineIntake.ts >= lookback, CaffeineIntake.ts < end_utc, CaffeineIntake.mg > 0)
+        ).all()
+    if not intakes:
+        return [], None
+
+    points: list[dict[str, float]] = []
+    step = timedelta(minutes=15)
+    cur = start_utc
+    while cur <= end_utc:
+        total = 0.0
+        for ts, mg in intakes:
+            elapsed_h = (cur - ts).total_seconds() / 3600
+            if elapsed_h >= 0:
+                total += half_life_decay(float(mg), elapsed_h, half_life_h=half_life)
+        points.append({"h": off(cur), "mg": round(total, 1)})
+        cur += step
+
+    # 就寝安全閾値 (体重から mg 換算)
+    prof = resolve_profile()
+    weight = prof.target_weight_kg or 60.0
+    threshold_mg = round(s.caffeine_bedtime_threshold_mg_per_l * s.caffeine_vd_l_per_kg * weight, 1)
+    return points, threshold_mg
+
+
 def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     """カレンダー予定 (gcal 未設定なら空)。ウィンドウが触れる JST 日付を走査。終日除外。"""
     start_jst_d = start_utc.replace(tzinfo=UTC).astimezone(JST).date()
@@ -231,6 +271,8 @@ async def day_timeline(
     except Exception:
         checkin_estimated = None
 
+    caffeine_curve, caf_threshold = _caffeine_curve(origin_utc, start_utc, end_utc, off)
+
     return {
         "window": window,
         "date": date_label,
@@ -246,6 +288,8 @@ async def day_timeline(
         "migraine": g["migraine"],
         "checkin": g["checkin"],
         "checkin_estimated": checkin_estimated,
+        "caffeine_curve": caffeine_curve,
+        "caffeine_bedtime_safe_mg": caf_threshold,
         "events": _gather_events(start_utc, end_utc, off),
     }
 

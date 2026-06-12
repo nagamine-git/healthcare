@@ -140,6 +140,19 @@ export function DayStory() {
     return mm === 0 ? `${hh}時` : `${hh}:${mm.toString().padStart(2, "0")}`;
   };
 
+  // 連続「座りっぱなし」区間 (Diaz 2023: 30分超で要中断)。推定の座位系ラベルを連結
+  const SEDENTARY = ["安静・座位", "在席", "軽い活動", "集中・活動", "高負荷", "緊張"];
+  const isSed = (lbl: string) => SEDENTARY.some((s) => lbl.includes(s));
+  const sedRuns: { start_h: number; end_h: number }[] = [];
+  for (const seg of d.segments) {
+    if (seg.source === "inferred" && isSed(seg.label)) {
+      const last = sedRuns[sedRuns.length - 1];
+      if (last && Math.abs(last.end_h - seg.start_h) < 0.01) last.end_h = seg.end_h;
+      else sedRuns.push({ start_h: seg.start_h, end_h: seg.end_h });
+    }
+  }
+  const longSed = sedRuns.filter((r) => r.end_h - r.start_h >= 0.5);
+
   return (
     <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
       <div className="flex items-start justify-between gap-2">
@@ -191,6 +204,14 @@ export function DayStory() {
             </g>
           );
         })}
+
+        {/* ── 座りっぱなし区間 (30分超) を活動バー下端に赤帯で警告 ── */}
+        {longSed.map((r, i) => (
+          <rect key={`sed${i}`} x={X(r.start_h)} y={ACT_Y + ACT_H - 2}
+                width={Math.max(2, X(r.end_h) - X(r.start_h))} height={2.5} fill="#f87171" opacity={0.9}>
+            <title>{`座りっぱなし ${(r.end_h - r.start_h).toFixed(1)}h (30分ごとに立つと良い)`}</title>
+          </rect>
+        ))}
 
         {/* ── カレンダー予定 = 参考のみ (破線オーバーレイ。実際の行動とは別物) ── */}
         {(t?.events ?? []).map((e, i) => {
@@ -290,6 +311,7 @@ export function DayStory() {
           <span><span className="text-rose-400">━</span> 心拍</span>
           <span><span className="text-violet-400">●</span> カフェイン</span>
           <span><span className="text-rose-400">▮</span> 頭痛</span>
+          <span><span className="text-red-400">▁</span> 座りっぱなし(30分超)</span>
           <span><span className="text-slate-200">◆</span> 体調記録 / <span className="text-slate-400">◇</span> 推定</span>
           <span className="text-slate-600">帯: 濃=記録 / 淡=推定</span>
         </div>
@@ -304,6 +326,17 @@ export function DayStory() {
       </div>
       {zoom !== "fit" && (
         <p className="text-[10px] text-slate-600">← 横にスクロールできます →</p>
+      )}
+
+      {/* 体内カフェイン量の推移 (1コンパートメント薬物動態。就寝安全域も表示) */}
+      {t && t.caffeine_curve.length > 1 && (
+        <CaffeineTrack
+          curve={t.caffeine_curve}
+          threshold={t.caffeine_bedtime_safe_mg}
+          nowH={nowH}
+          X={X}
+          zoomPx={ZOOM_PX[zoom]}
+        />
       )}
 
       {/* 気づき + 次の一手 */}
@@ -335,6 +368,45 @@ function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
       <div className="min-w-0 leading-tight">
         <div className="truncate text-[9px] text-slate-500">{label}</div>
         <div className="truncate text-xs font-medium tabular-nums text-slate-200">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function CaffeineTrack({ curve, threshold, nowH, X, zoomPx }: {
+  curve: { h: number; mg: number }[];
+  threshold: number | null;
+  nowH: number | null;
+  X: (h: number) => number;
+  zoomPx: number | null;
+}) {
+  const W = 960;
+  const H = 46;
+  const peak = Math.max(50, ...curve.map((p) => p.mg));
+  const y = (mg: number) => H - 12 - (Math.max(0, mg) / peak) * (H - 18);
+  const area = `M ${X(curve[0].h)},${H - 12} L ${curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" L ")} L ${X(curve[curve.length - 1].h)},${H - 12} Z`;
+  const nowMg = nowH != null ? curve.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).mg : curve[curve.length - 1].mg;
+  const over = threshold != null && nowMg > threshold;
+  return (
+    <div>
+      <div className="mb-0.5 flex items-baseline justify-between text-[10px]">
+        <span className="text-slate-400">体内カフェイン量(推定)</span>
+        <span className={over ? "text-amber-300" : "text-slate-500"}>
+          現在 約{Math.round(nowMg)}mg{threshold != null ? ` / 就寝安全 ${threshold}mg以下` : ""}
+        </span>
+      </div>
+      <div className={zoomPx != null ? "-mx-1 overflow-x-auto px-1" : ""}>
+        <svg viewBox={`0 0 ${W} ${H}`} className={zoomPx == null ? "w-full" : ""}
+             style={zoomPx != null ? { width: `${zoomPx}px` } : undefined} role="img" aria-label="体内カフェイン量">
+          {threshold != null && (
+            <line x1={0} y1={y(threshold)} x2={W} y2={y(threshold)}
+                  stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+          )}
+          <path d={area} fill="#a78bfa" opacity={0.18} />
+          <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")}
+                    fill="none" stroke="#a78bfa" strokeWidth={1.5} />
+          {nowH != null && <line x1={X(nowH)} y1={2} x2={X(nowH)} y2={H - 12} stroke="#f43f5e" strokeWidth={1} />}
+        </svg>
       </div>
     </div>
   );
