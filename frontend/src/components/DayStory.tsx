@@ -66,8 +66,12 @@ function shortLabel(seg: DayStorySegment): string {
     .replace("・歩き回り", "").replace("・ゆったり", "").replace("・負荷", "");
 }
 
+type Zoom = "fit" | "wide" | "max";
+const ZOOM_PX: Record<Zoom, number | null> = { fit: null, wide: 1100, max: 1900 };
+
 export function DayStory() {
   const [win, setWin] = useState<Win>("24h");
+  const [zoom, setZoom] = useState<Zoom>("fit");
   const story = useQuery({ queryKey: ["day-story", win], queryFn: () => api.dayStory({ window: win }), refetchInterval: 5 * 60_000 });
   const tl = useQuery({ queryKey: ["timeline", win], queryFn: () => api.timeline({ window: win }), refetchInterval: 5 * 60_000 });
   const d = story.data;
@@ -107,6 +111,8 @@ export function DayStory() {
       ? `M ${X(bb[0].h)},${BODY_Y1} L ${bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" L ")} L ${X(bb[bb.length - 1].h)},${BODY_Y1} Z`
       : null;
   const stressPts = stress.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ");
+  // 拡大するほど狭い帯にもラベルを出せる (viewBox幅基準の閾値を下げる)
+  const labelMinW = zoom === "fit" ? 52 : zoom === "wide" ? 34 : 20;
 
   return (
     <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
@@ -115,7 +121,15 @@ export function DayStory() {
         {toggle}
       </div>
 
-      <svg viewBox={`0 0 ${W} ${TOTAL_H}`} className="w-full" role="img" aria-label="今日のタイムライン">
+      {/* 拡大すると横スクロールで各時間に幅が割かれ、帯内ラベル・軸が読める */}
+      <div className={ZOOM_PX[zoom] != null ? "-mx-1 overflow-x-auto px-1" : ""}>
+        <svg
+          viewBox={`0 0 ${W} ${TOTAL_H}`}
+          className={ZOOM_PX[zoom] == null ? "w-full" : ""}
+          style={ZOOM_PX[zoom] != null ? { width: `${ZOOM_PX[zoom]}px` } : undefined}
+          role="img"
+          aria-label="今日のタイムライン"
+        >
         {/* 3hグリッド (全トラック貫通) */}
         {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => (
           <line key={h} x1={X(h)} y1={ACT_Y} x2={X(h)} y2={BODY_Y1}
@@ -133,7 +147,7 @@ export function DayStory() {
               <rect x={x} y={ACT_Y} width={w} height={ACT_H} rx={3} fill={colorFor(seg)} opacity={op}>
                 <title>{`${fmtH(seg.start_h)}–${fmtH(seg.end_h)} ${seg.label} (${SOURCE_NOTE[seg.source]})`}</title>
               </rect>
-              {w >= 52 && seg.label !== "記録の谷間" && (
+              {w >= labelMinW && seg.label !== "記録の谷間" && (
                 <text x={x + w / 2} y={ACT_Y + ACT_H / 2 + 4} fontSize={12} fontWeight={600}
                       fill="#0f172a" textAnchor="middle" pointerEvents="none">{label}</text>
               )}
@@ -181,15 +195,29 @@ export function DayStory() {
           <text key={h} x={X(h)} y={AXIS_Y} fontSize={11} fill="#64748b"
                 textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{axisLabel(h)}</text>
         ))}
-      </svg>
-
-      {/* 凡例 */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
-        <span><span className="text-emerald-400">━</span> Body Battery</span>
-        <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
-        <span><span className="text-violet-400">●</span> カフェイン</span>
-        <span className="text-slate-600">濃=記録 / 淡=推定</span>
+        </svg>
       </div>
+
+      {/* 凡例 + 拡大コントロール */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+          <span><span className="text-emerald-400">━</span> Body Battery</span>
+          <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
+          <span><span className="text-violet-400">●</span> カフェイン</span>
+          <span className="text-slate-600">濃=記録 / 淡=推定</span>
+        </div>
+        <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[10px]">
+          {(["fit", "wide", "max"] as Zoom[]).map((z) => (
+            <button key={z} onClick={() => setZoom(z)}
+              className={`rounded-md px-2 py-0.5 ${zoom === z ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
+              {z === "fit" ? "フィット" : z === "wide" ? "拡大" : "最大"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {zoom !== "fit" && (
+        <p className="text-[10px] text-slate-600">← 横にスクロールできます →</p>
+      )}
 
       {/* 気づき + 次の一手 */}
       {d.insights.length > 0 && (
