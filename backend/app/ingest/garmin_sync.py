@@ -381,6 +381,19 @@ def _upsert_hydration(session: Session, hydration: dict[str, Any]) -> int:
         set_={"value": stmt.excluded.value, "raw_json": stmt.excluded.raw_json},
     )
     session.execute(stmt)
+
+    # 同期時刻に「累積水分量スナップショット」を残す。Garmin/HAE とも個別飲水の
+    # 時刻ログは取れないので、同期ごとの累積総量を時系列化して摂取カーブを近似する。
+    snap_ts = datetime.now(UTC).replace(tzinfo=None, second=0, microsecond=0)
+    snap = sqlite_insert(MetricSample).values([{
+        "source": "garmin", "metric_key": "hydration_cumulative_ml",
+        "ts": snap_ts, "value": float(value), "unit": "mL", "raw_json": None,
+    }])
+    snap = snap.on_conflict_do_update(
+        index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
+        set_={"value": snap.excluded.value},
+    )
+    session.execute(snap)
     return 1
 
 

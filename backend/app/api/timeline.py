@@ -14,7 +14,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import session_scope
 from app.models import (
@@ -321,6 +321,85 @@ def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
     return out
 
 
+def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
+    """水分の累積摂取カーブ (実測スナップショット) + 目標・発汗・収支。
+
+    個別飲水の時刻ログは Garmin/HAE とも取れないため、同期ごとの累積総量
+    (hydration_cumulative_ml) を時系列化して摂取カーブを近似する。発汗は
+    Garmin の sweatLossInML (実測) を活動量で時間配分し、収支を出す。
+    """
+    import json as _json
+
+    from app.scoring.profile import resolve_profile
+
+    with session_scope() as session:
+        snaps = session.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.metric_key == "hydration_cumulative_ml",
+                MetricSample.ts >= start_utc, MetricSample.ts < end_utc,
+                MetricSample.value.isnot(None),
+            ).order_by(MetricSample.ts)
+        ).all()
+        # 目標・発汗 (当日の Garmin hydration raw_json)
+        d_start, d_end = jst_day_bounds(target)
+        hyd = session.execute(
+            select(MetricSample.value, MetricSample.raw_json).where(
+                MetricSample.metric_key == "garmin_hydration_ml",
+                MetricSample.ts >= d_start, MetricSample.ts < d_end,
+            ).order_by(MetricSample.ts.desc()).limit(1)
+        ).first()
+        # HAE フォールバック (Garmin が無い日)
+        hae = None
+        if not hyd:
+            hae = session.execute(
+                select(func.sum(MetricSample.value)).where(
+                    MetricSample.metric_key == "dietary_water",
+                    MetricSample.ts >= d_start, MetricSample.ts < d_end,
+                )
+            ).scalar()
+
+    intake_total = None
+    goal_ml = None
+    sweat_ml = 0.0
+    if hyd:
+        intake_total = float(hyd[0]) if hyd[0] is not None else None
+        raw = hyd[1]
+        if isinstance(raw, str):
+            try:
+                raw = _json.loads(raw)
+            except Exception:
+                raw = {}
+        if isinstance(raw, dict):
+            goal_ml = float(raw.get("goalInML")) if raw.get("goalInML") else None
+            sweat_ml = float(raw.get("sweatLossInML") or 0.0)
+    elif hae is not None:
+        intake_total = float(hae)
+
+    if intake_total is None and not snaps:
+        return None, None
+
+    prof = resolve_profile()
+    weight = prof.target_weight_kg or 60.0
+    # ベースライン水分損失 (発汗以外: 尿・不感蒸泄) ≈ 1.5L/日 を 24h に配分
+    baseline_per_h = 1500.0 / 24.0
+    if goal_ml is None and weight:
+        goal_ml = round(weight * 35.0)  # 35ml/kg/日 の目安
+
+    # 摂取カーブ: スナップショット (実測累積) を段階線に。なければ末尾に総量1点
+    intake_pts = [{"h": off(t), "ml": float(v)} for t, v in snaps]
+    if not intake_pts and intake_total is not None:
+        intake_pts = [{"h": off(end_utc - timedelta(minutes=1)), "ml": intake_total}]
+
+    out = {
+        "intake_curve": intake_pts,
+        "intake_total_ml": round(intake_total) if intake_total is not None else None,
+        "goal_ml": round(goal_ml) if goal_ml else None,
+        "sweat_ml": round(sweat_ml),
+        "source": "garmin" if hyd else ("hae" if hae is not None else None),
+    }
+    return out, baseline_per_h
+
+
 def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     """カレンダー予定 (gcal 未設定なら空)。ウィンドウが触れる JST 日付を走査。終日除外。"""
     start_jst_d = start_utc.replace(tzinfo=UTC).astimezone(JST).date()
@@ -367,6 +446,7 @@ async def day_timeline(
 
     caffeine_curve, caf_threshold = _caffeine_curve(origin_utc, start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
+    water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
 
     return {
         "window": window,
@@ -388,6 +468,7 @@ async def day_timeline(
         "focus_windows": ctx["focus_windows"],
         "sleep_window": ctx["sleep_window"],
         "recovery_bands": ctx["recovery_bands"],
+        "water": water,
         "events": _gather_events(start_utc, end_utc, off),
     }
 

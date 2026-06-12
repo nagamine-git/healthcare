@@ -364,6 +364,13 @@ export type DayTimelineData = {
   focus_windows: { start_h: number; end_h: number; score: number }[];
   sleep_window: { melatonin_h: number; bedtime_h: number } | null;
   recovery_bands: { start_h: number; end_h: number }[];
+  water: {
+    intake_curve: { h: number; ml: number }[];
+    intake_total_ml: number | null;
+    goal_ml: number | null;
+    sweat_ml: number;
+    source: string | null;
+  } | null;
   events: { start_h: number; end_h: number; title: string }[];
 };
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Armchair, Check, Footprints, Activity, Moon, Flame, Brain, Coffee } from "lucide-react";
+import { Armchair, Check, Footprints, Activity, Moon, Flame, Coffee, Droplet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
@@ -166,8 +166,8 @@ export function DayStory() {
         <Stat icon={Flame} label="消費" value={`${d.stats.active_kcal}kcal`} />
         <Stat icon={Moon} label="睡眠" value={d.stats.sleep_h != null ? `${d.stats.sleep_h}h` : "--"} />
         <Stat icon={Activity} label="運動強度" value={`${d.stats.intensity_min}分`} />
-        <Stat icon={Brain} label="平均覚醒" value={d.stats.stress_avg != null ? `${d.stats.stress_avg}` : "--"} />
         <Stat icon={Coffee} label="カフェイン" value={`${d.stats.caffeine_mg}mg`} />
+        <Stat icon={Droplet} label="水分" value={t?.water?.intake_total_ml != null ? `${(t.water.intake_total_ml / 1000).toFixed(1)}L` : "--"} />
       </div>
 
       {/* 拡大すると横スクロールで各時間に幅が割かれ、帯内ラベル・軸が読める */}
@@ -368,6 +368,11 @@ export function DayStory() {
         />
       )}
 
+      {/* 水分摂取の累積 (Garmin/HAE。同期ごとの累積総量を時系列化) */}
+      {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
+        <WaterTrack water={t.water} nowH={nowH} X={X} zoomPx={ZOOM_PX[zoom]} />
+      )}
+
       {/* 気づき + 次の一手 */}
       {d.insights.length > 0 && (
         <div className="space-y-1.5 pt-1">
@@ -434,6 +439,54 @@ function CaffeineTrack({ curve, threshold, nowH, X, zoomPx }: {
           <path d={area} fill="#a78bfa" opacity={0.18} />
           <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")}
                     fill="none" stroke="#a78bfa" strokeWidth={1.5} />
+          {nowH != null && <line x1={X(nowH)} y1={2} x2={X(nowH)} y2={H - 12} stroke="#f43f5e" strokeWidth={1} />}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function WaterTrack({ water, nowH, X, zoomPx }: {
+  water: NonNullable<NonNullable<import("../lib/api").DayTimelineData["water"]>>;
+  nowH: number | null;
+  X: (h: number) => number;
+  zoomPx: number | null;
+}) {
+  const W = 960;
+  const H = 46;
+  const goal = water.goal_ml ?? 2000;
+  const total = water.intake_total_ml ?? 0;
+  const peak = Math.max(goal, total, 500);
+  const y = (ml: number) => H - 12 - (Math.max(0, ml) / peak) * (H - 18);
+  // 累積スナップショットを段階線に。末尾は現在/末端まで平坦に延ばす
+  const pts = water.intake_curve.length
+    ? water.intake_curve.map((p) => ({ h: p.h, ml: p.ml }))
+    : [{ h: nowH ?? 24, ml: total }];
+  const lastH = nowH ?? pts[pts.length - 1].h;
+  const stepPath = pts.length
+    ? `M ${X(pts[0].h)},${y(0)} ` +
+      pts.map((p, i) => `L ${X(p.h)},${y(i === 0 ? p.ml : pts[i - 1].ml)} L ${X(p.h)},${y(p.ml)}`).join(" ") +
+      ` L ${X(lastH)},${y(pts[pts.length - 1].ml)}`
+    : "";
+  const deficit = goal - total;
+  return (
+    <div>
+      <div className="mb-0.5 flex items-baseline justify-between text-[10px]">
+        <span className="text-slate-400">水分 摂取(累積) {water.source === "garmin" ? "· Garmin" : water.source === "hae" ? "· Health" : ""}</span>
+        <span className={deficit > 500 ? "text-amber-300" : "text-slate-500"}>
+          {total}/{goal}mL{water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}{deficit > 0 ? ` · あと${(deficit / 1000).toFixed(1)}L` : " · 達成"}
+        </span>
+      </div>
+      <div className={zoomPx != null ? "-mx-1 overflow-x-auto px-1" : ""}>
+        <svg viewBox={`0 0 ${W} ${H}`} className={zoomPx == null ? "w-full" : ""}
+             style={zoomPx != null ? { width: `${zoomPx}px` } : undefined} role="img" aria-label="水分摂取の累積">
+          {/* 目標ライン */}
+          <line x1={0} y1={y(goal)} x2={W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
+          {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
+          {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
+          {water.intake_curve.map((p, i) => (
+            <circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />
+          ))}
           {nowH != null && <line x1={X(nowH)} y1={2} x2={X(nowH)} y2={H - 12} stroke="#f43f5e" strokeWidth={1} />}
         </svg>
       </div>
