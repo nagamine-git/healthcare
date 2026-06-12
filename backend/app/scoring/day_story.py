@@ -55,23 +55,27 @@ def _classify(b: Bin, resting_hr: float, bb_slope: float | None) -> tuple[str, f
         return ("外出・運動", 0.7)
     if steps >= 200:
         return ("移動・歩き回り", 0.6)
+    # 少しの動き = 家事・育児・対人など (歩数は少ないが座りっぱなしではない)
+    if steps >= 70:
+        return ("活動・家事など", 0.45)
 
-    # 以降は座位中心。Garmin の自律神経状態で分ける (45分スパンの傾き)
+    # 以降は座位中心。Garmin の自律神経 (覚醒度) で「関わっている/休んでいる」を分ける。
+    # 注意: 覚醒度は仕事でも育児でも来客でも上がる → 活動の "種類" は断定しない。
     draining = bb_slope is not None and bb_slope <= -3.0  # BB がはっきり減っている
     charging = bb_slope is not None and bb_slope >= 1.5
 
     if stress is not None:
         if stress >= 76:
-            return ("高ストレス・負荷", 0.55)
+            return ("高負荷・緊張", 0.5)
         if stress >= 51:
-            return ("仕事・集中 (負荷高め)", 0.55)
+            return ("集中・活動 (高め)", 0.5)
         if stress >= 26:
-            # 中程度の自律神経活動 = 多くは集中作業
-            return ("仕事・集中", 0.5 if draining else 0.45)
-        # 安息帯: BB が回復なら休息、消耗なら軽い作業
+            # 中程度の覚醒 = 何かに関わっている (作業・対人・育児など)
+            return ("集中・活動", 0.45 if draining else 0.4)
+        # 安息帯: BB が回復なら休息、消耗なら軽い在席
         if charging or steps < 20:
             return ("休息・リラックス", 0.55)
-        return ("軽作業・ゆったり", 0.4)
+        return ("在席・ゆったり", 0.4)
 
     # stress が無い時間帯は HR/BB で粗く
     if draining and (hr is None or hr >= resting_hr + 8):
@@ -194,10 +198,10 @@ def build_day_story(
     return {"segments": segments, "summary": summary, "insights": insights}
 
 
-# 座位中心とみなすラベル (立ち上がり提案の対象)
+# 座位中心とみなすラベル (立ち上がり提案の対象)。動きを伴う「活動・家事など」は除く
 _SEDENTARY = {
-    "安静・座位", "軽作業・ゆったり", "軽い活動",
-    "仕事・集中", "仕事・集中 (負荷高め)", "高ストレス・負荷",
+    "安静・座位", "在席・ゆったり", "軽い活動",
+    "集中・活動", "集中・活動 (高め)", "高負荷・緊張",
 }
 
 
@@ -318,10 +322,12 @@ def _summarize(segments: list[dict], sleep: dict | None) -> str:
     def _bucket(label: str) -> str | None:
         if label == "記録の谷間":
             return None
-        if "仕事" in label or "集中" in label or "ストレス" in label or "負荷" in label:
-            return "仕事・集中"
-        if "休息" in label or "リラックス" in label or "ゆったり" in label:
-            return "休息"
+        if "集中" in label or "負荷" in label or "緊張" in label:
+            return "集中・活動"
+        if "家事" in label:
+            return "家事・育児など"
+        if "休息" in label or "リラックス" in label or "ゆったり" in label or "在席" in label:
+            return "休息・在席"
         if "外出" in label or "移動" in label or "運動" in label:
             return "活動・運動"
         if "ボクシング" in label or "筋トレ" in label:

@@ -41,8 +41,9 @@ function colorFor(seg: DayStorySegment): string {
   const l = seg.label;
   if (l.includes("記録の谷間")) return "#334155";
   if (l.includes("外出") || l.includes("移動")) return "#38bdf8";
-  if (l.includes("集中") || l.includes("仕事") || l.includes("ストレス") || l.includes("負荷")) return "#f59e0b";
-  if (l.includes("休息") || l.includes("リラックス") || l.includes("ゆったり")) return "#2dd4bf";
+  if (l.includes("家事")) return "#22d3ee"; // 家事・育児など = シアン
+  if (l.includes("集中") || l.includes("負荷") || l.includes("緊張")) return "#f59e0b";
+  if (l.includes("休息") || l.includes("リラックス") || l.includes("ゆったり") || l.includes("在席")) return "#2dd4bf";
   return "#64748b";
 }
 
@@ -63,18 +64,27 @@ function fmtH(h: number): string {
 function shortLabel(seg: DayStorySegment): string {
   if (seg.source === "calendar") return seg.label.length > 7 ? seg.label.slice(0, 6) + "…" : seg.label;
   return seg.label
-    .replace("・座位", "").replace("・軽活動", "").replace("・集中", "")
-    .replace("・リラックス", "").replace("・負荷高め", "").replace(" (負荷高め)", "")
-    .replace("・歩き回り", "").replace("・ゆったり", "").replace("・負荷", "");
+    .replace("・座位", "").replace(" (高め)", "").replace("・活動", "")
+    .replace("・リラックス", "").replace("・歩き回り", "").replace("・ゆったり", "")
+    .replace("・緊張", "").replace("など", "");
 }
 
 type Zoom = "fit" | "wide" | "max";
 // fit=画面幅, wide≈1.5倍, max≈2倍 (画面幅 ~390px 基準)
 const ZOOM_PX: Record<Zoom, number | null> = { fit: null, wide: 580, max: 760 };
 
+// 表示設定は端末に記憶 (リロードしても前回の選択を維持)
+function usePersisted<T extends string>(key: string, fallback: T): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(() => {
+    try { return (localStorage.getItem(key) as T) || fallback; } catch { return fallback; }
+  });
+  const set = (nv: T) => { setV(nv); try { localStorage.setItem(key, nv); } catch { /* noop */ } };
+  return [v, set];
+}
+
 export function DayStory() {
-  const [win, setWin] = useState<Win>("24h");
-  const [zoom, setZoom] = useState<Zoom>("fit");
+  const [win, setWin] = usePersisted<Win>("daystory.win", "24h");
+  const [zoom, setZoom] = usePersisted<Zoom>("daystory.zoom", "fit");
   const story = useQuery({ queryKey: ["day-story", win], queryFn: () => api.dayStory({ window: win }), refetchInterval: 5 * 60_000 });
   const tl = useQuery({ queryKey: ["timeline", win], queryFn: () => api.timeline({ window: win }), refetchInterval: 5 * 60_000 });
   const d = story.data;
@@ -170,6 +180,15 @@ export function DayStory() {
           );
         })}
 
+        {/* ── 頭痛バンド (全トラック貫通、ロゼ) ── */}
+        {(t?.migraine ?? []).map((m, i) => (
+          <rect key={`mig${i}`} x={X(m.start_h)} y={ACT_Y}
+                width={Math.max(3, X(m.end_h ?? nowH ?? 24) - X(m.start_h))}
+                height={BODY_Y1 - ACT_Y} fill="#f43f5e" opacity={0.13}>
+            <title>{`頭痛${m.severity != null ? ` 強度${m.severity}/10` : ""}`}</title>
+          </rect>
+        ))}
+
         {/* ── イベントマーカー行 ── */}
         {(t?.caffeine ?? []).map((c, i) => (
           <g key={`c${i}`} transform={`translate(${X(c.h)},${EVT_Y})`}>
@@ -178,13 +197,21 @@ export function DayStory() {
             </circle>
           </g>
         ))}
-        {t?.checkin && (
+        {/* 体調記録: 実入力=塗り◆、無ければ推定=中空◇ を現在位置に補完 */}
+        {t?.checkin ? (
           <g transform={`translate(${X(t.checkin.h)},${EVT_Y})`}>
-            <rect x={-3.5} y={-3.5} width={7} height={7} transform="rotate(45)" fill="#e2e8f0">
-              <title>{`チェックイン 気分${t.checkin.mood ?? "-"}/活力${t.checkin.energy ?? "-"}`}</title>
+            <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)" fill="#e2e8f0">
+              <title>{`体調記録 気分${t.checkin.mood ?? "-"}/活力${t.checkin.energy ?? "-"}/ストレス${t.checkin.stress ?? "-"}/筋肉痛${t.checkin.soreness ?? "-"}`}</title>
             </rect>
           </g>
-        )}
+        ) : t?.checkin_estimated && nowH != null ? (
+          <g transform={`translate(${X(nowH)},${EVT_Y})`}>
+            <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)"
+                  fill="none" stroke="#94a3b8" strokeWidth={1.2} opacity={0.8}>
+              <title>{`体調(推定) 気分${t.checkin_estimated.mood ?? "-"}/活力${t.checkin_estimated.energy ?? "-"}/ストレス${t.checkin_estimated.stress ?? "-"}/筋肉痛${t.checkin_estimated.soreness ?? "-"}`}</title>
+            </rect>
+          </g>
+        ) : null}
 
         {/* ── 身体反応トラック (Body Battery 面 + ストレス線) ── */}
         <line x1={0} y1={BODY_Y1} x2={W} y2={BODY_Y1} stroke="#1e293b" strokeWidth={1} />
@@ -219,8 +246,9 @@ export function DayStory() {
       {/* 行動カラー凡例 (帯の色が何を意味するか) */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
         <Swatch c="#6366f1" t="睡眠" />
-        <Swatch c="#f59e0b" t="仕事・集中" />
-        <Swatch c="#2dd4bf" t="休息" />
+        <Swatch c="#f59e0b" t="集中・活動" />
+        <Swatch c="#22d3ee" t="家事・育児など" />
+        <Swatch c="#2dd4bf" t="休息・在席" />
         <Swatch c="#38bdf8" t="移動・運動" />
         <Swatch c="#34d399" t="ワークアウト" />
         <Swatch c="#64748b" t="予定" />
@@ -234,8 +262,9 @@ export function DayStory() {
           <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
           <span><span className="text-rose-400">━</span> 心拍</span>
           <span><span className="text-violet-400">●</span> カフェイン</span>
-          <span><span className="text-slate-200">◆</span> 体調記録</span>
-          <span className="text-slate-600">濃=記録 / 淡=推定</span>
+          <span><span className="text-rose-400">▮</span> 頭痛</span>
+          <span><span className="text-slate-200">◆</span> 体調記録 / <span className="text-slate-400">◇</span> 推定</span>
+          <span className="text-slate-600">帯: 濃=記録 / 淡=推定</span>
         </div>
         <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[10px]">
           {(["fit", "wide", "max"] as Zoom[]).map((z) => (

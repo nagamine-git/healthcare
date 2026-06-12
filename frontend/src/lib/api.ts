@@ -358,6 +358,7 @@ export type DayTimelineData = {
     stress: number | null;
     soreness: number | null;
   } | null;
+  checkin_estimated: { mood: number | null; energy: number | null; stress: number | null; soreness: number | null } | null;
   events: { start_h: number; end_h: number; title: string }[];
 };
 

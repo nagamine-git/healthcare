@@ -219,6 +219,18 @@ async def day_timeline(
     origin_utc, start_utc, end_utc, now_off, date_label, origin_jst = _resolve_window(window, date)
     off = _offsetter(origin_utc)
     g = _gather(start_utc, end_utc, off)
+
+    # 主観チェックインが無い時間帯用の「推定主観」(客観指標から)。補完表示用
+    from datetime import date as date_type
+
+    from app.api.checkin import _objective_suggestions
+
+    est_date = date_type.fromisoformat(date_label) if date_label else app_today()
+    try:
+        checkin_estimated = _objective_suggestions(est_date)
+    except Exception:
+        checkin_estimated = None
+
     return {
         "window": window,
         "date": date_label,
@@ -233,6 +245,7 @@ async def day_timeline(
         "caffeine": g["caffeine"],
         "migraine": g["migraine"],
         "checkin": g["checkin"],
+        "checkin_estimated": checkin_estimated,
         "events": _gather_events(start_utc, end_utc, off),
     }
 
