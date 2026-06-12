@@ -170,12 +170,13 @@ export function DayStory() {
         <Stat icon={Droplet} label="水分" value={t?.water?.intake_total_ml != null ? `${(t.water.intake_total_ml / 1000).toFixed(1)}L` : "--"} />
       </div>
 
-      {/* 拡大すると横スクロールで各時間に幅が割かれ、帯内ラベル・軸が読める */}
-      <div className={ZOOM_PX[zoom] != null ? "-mx-1 overflow-x-auto px-1" : ""}>
+      {/* 拡大すると横スクロール。メイン+カフェイン+水分を1つの容器に入れ、
+          同じ幅・同じグリッド・同じx軸でスクロールが連動する */}
+      <div className={ZOOM_PX[zoom] != null ? "-mx-1 space-y-1 overflow-x-auto px-1" : "space-y-1"}>
+        <div style={ZOOM_PX[zoom] != null ? { width: `${ZOOM_PX[zoom]}px` } : undefined} className="space-y-1">
         <svg
           viewBox={`0 0 ${W} ${TOTAL_H}`}
-          className={ZOOM_PX[zoom] == null ? "w-full" : ""}
-          style={ZOOM_PX[zoom] != null ? { width: `${ZOOM_PX[zoom]}px` } : undefined}
+          className="w-full"
           role="img"
           aria-label="今日のタイムライン"
         >
@@ -312,6 +313,25 @@ export function DayStory() {
                 textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
         ))}
         </svg>
+
+        {/* カフェイン・水分も同じ容器内 = 同幅・同グリッド・スクロール連動 */}
+        {t && t.caffeine_curve.length > 1 && (
+          <CaffeineTrack curve={t.caffeine_curve} threshold={t.caffeine_bedtime_safe_mg} nowH={nowH} X={X} gridTicks={gridTicks} />
+        )}
+        {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
+          <WaterTrack water={t.water} nowH={nowH} X={X} gridTicks={gridTicks} />
+        )}
+
+        {/* サブチャート下の共有 x 軸 */}
+        {(t?.caffeine_curve.length || t?.water) ? (
+          <svg viewBox={`0 0 ${W} 14`} className="w-full" aria-hidden>
+            {labelTicks.map((h) => (
+              <text key={h} x={X(h)} y={10} fontSize={10} fill="#64748b"
+                    textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
+            ))}
+          </svg>
+        ) : null}
+        </div>
       </div>
 
       {/* 行動カラー凡例 (帯の色が何を意味するか) */}
@@ -354,23 +374,7 @@ export function DayStory() {
         </div>
       </div>
       {zoom !== "fit" && (
-        <p className="text-[10px] text-slate-600">← 横にスクロールできます →</p>
-      )}
-
-      {/* 体内カフェイン量の推移 (1コンパートメント薬物動態。就寝安全域も表示) */}
-      {t && t.caffeine_curve.length > 1 && (
-        <CaffeineTrack
-          curve={t.caffeine_curve}
-          threshold={t.caffeine_bedtime_safe_mg}
-          nowH={nowH}
-          X={X}
-          zoomPx={ZOOM_PX[zoom]}
-        />
-      )}
-
-      {/* 水分摂取の累積 (Garmin/HAE。同期ごとの累積総量を時系列化) */}
-      {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
-        <WaterTrack water={t.water} nowH={nowH} X={X} zoomPx={ZOOM_PX[zoom]} />
+        <p className="text-[10px] text-slate-600">← 横にスクロールできます (全グラフ連動) →</p>
       )}
 
       {/* 気づき + 次の一手 */}
@@ -407,61 +411,63 @@ function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
   );
 }
 
-function CaffeineTrack({ curve, threshold, nowH, X, zoomPx }: {
+// サブチャート共通の時間グリッド (メインと同じ X・gridTicks で整列)
+function SubGrid({ gridTicks, X, y0, y1 }: { gridTicks: number[]; X: (h: number) => number; y0: number; y1: number }) {
+  return (
+    <>
+      {gridTicks.map((h) => (
+        <line key={h} x1={X(h)} y1={y0} x2={X(h)} y2={y1} stroke="#1e293b"
+              strokeWidth={Number.isInteger(h) && h % 6 === 0 ? 1 : 0.5}
+              opacity={Number.isInteger(h) ? 1 : 0.5} />
+      ))}
+    </>
+  );
+}
+
+const SUB_W = 960;
+const SUB_H = 46;
+
+function CaffeineTrack({ curve, threshold, nowH, X, gridTicks }: {
   curve: { h: number; mg: number }[];
   threshold: number | null;
   nowH: number | null;
   X: (h: number) => number;
-  zoomPx: number | null;
+  gridTicks: number[];
 }) {
-  const W = 960;
-  const H = 46;
+  const H = SUB_H;
   const peak = Math.max(50, ...curve.map((p) => p.mg));
-  const y = (mg: number) => H - 12 - (Math.max(0, mg) / peak) * (H - 18);
-  const area = `M ${X(curve[0].h)},${H - 12} L ${curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" L ")} L ${X(curve[curve.length - 1].h)},${H - 12} Z`;
+  const y = (mg: number) => H - 8 - (Math.max(0, mg) / peak) * (H - 22);
+  const area = `M ${X(curve[0].h)},${H - 8} L ${curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" L ")} L ${X(curve[curve.length - 1].h)},${H - 8} Z`;
   const nowMg = nowH != null ? curve.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).mg : curve[curve.length - 1].mg;
   const over = threshold != null && nowMg > threshold;
   return (
-    <div>
-      <div className="mb-0.5 flex items-baseline justify-between text-[10px]">
-        <span className="text-slate-400">体内カフェイン量(推定)</span>
-        <span className={over ? "text-amber-300" : "text-slate-500"}>
-          現在 約{Math.round(nowMg)}mg{threshold != null ? ` / 就寝安全 ${threshold}mg以下` : ""}
-        </span>
-      </div>
-      <div className={zoomPx != null ? "-mx-1 overflow-x-auto px-1" : ""}>
-        <svg viewBox={`0 0 ${W} ${H}`} className={zoomPx == null ? "w-full" : ""}
-             style={zoomPx != null ? { width: `${zoomPx}px` } : undefined} role="img" aria-label="体内カフェイン量">
-          {threshold != null && (
-            <line x1={0} y1={y(threshold)} x2={W} y2={y(threshold)}
-                  stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
-          )}
-          <path d={area} fill="#a78bfa" opacity={0.18} />
-          <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")}
-                    fill="none" stroke="#a78bfa" strokeWidth={1.5} />
-          {nowH != null && <line x1={X(nowH)} y1={2} x2={X(nowH)} y2={H - 12} stroke="#f43f5e" strokeWidth={1} />}
-        </svg>
-      </div>
-    </div>
+    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="体内カフェイン量">
+      <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
+      {threshold != null && (
+        <line x1={0} y1={y(threshold)} x2={SUB_W} y2={y(threshold)} stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+      )}
+      <path d={area} fill="#a78bfa" opacity={0.18} />
+      <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")} fill="none" stroke="#a78bfa" strokeWidth={1.5} />
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={over ? "#fcd34d" : "#94a3b8"}>
+        体内カフェイン 現在約{Math.round(nowMg)}mg{threshold != null ? ` / 就寝安全${threshold}mg以下` : ""}
+      </text>
+    </svg>
   );
 }
 
-function WaterTrack({ water, nowH, X, zoomPx }: {
+function WaterTrack({ water, nowH, X, gridTicks }: {
   water: NonNullable<NonNullable<import("../lib/api").DayTimelineData["water"]>>;
   nowH: number | null;
   X: (h: number) => number;
-  zoomPx: number | null;
+  gridTicks: number[];
 }) {
-  const W = 960;
-  const H = 46;
+  const H = SUB_H;
   const goal = water.goal_ml ?? 2000;
   const total = water.intake_total_ml ?? 0;
   const peak = Math.max(goal, total, 500);
-  const y = (ml: number) => H - 12 - (Math.max(0, ml) / peak) * (H - 18);
-  // 累積スナップショットを段階線に。末尾は現在/末端まで平坦に延ばす
-  const pts = water.intake_curve.length
-    ? water.intake_curve.map((p) => ({ h: p.h, ml: p.ml }))
-    : [{ h: nowH ?? 24, ml: total }];
+  const y = (ml: number) => H - 8 - (Math.max(0, ml) / peak) * (H - 22);
+  const pts = water.intake_curve.length ? water.intake_curve : [{ h: nowH ?? 24, ml: total }];
   const lastH = nowH ?? pts[pts.length - 1].h;
   const stepPath = pts.length
     ? `M ${X(pts[0].h)},${y(0)} ` +
@@ -469,28 +475,19 @@ function WaterTrack({ water, nowH, X, zoomPx }: {
       ` L ${X(lastH)},${y(pts[pts.length - 1].ml)}`
     : "";
   const deficit = goal - total;
+  const src = water.source === "garmin" ? " · Garmin" : water.source === "hae" ? " · Health" : "";
   return (
-    <div>
-      <div className="mb-0.5 flex items-baseline justify-between text-[10px]">
-        <span className="text-slate-400">水分 摂取(累積) {water.source === "garmin" ? "· Garmin" : water.source === "hae" ? "· Health" : ""}</span>
-        <span className={deficit > 500 ? "text-amber-300" : "text-slate-500"}>
-          {total}/{goal}mL{water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}{deficit > 0 ? ` · あと${(deficit / 1000).toFixed(1)}L` : " · 達成"}
-        </span>
-      </div>
-      <div className={zoomPx != null ? "-mx-1 overflow-x-auto px-1" : ""}>
-        <svg viewBox={`0 0 ${W} ${H}`} className={zoomPx == null ? "w-full" : ""}
-             style={zoomPx != null ? { width: `${zoomPx}px` } : undefined} role="img" aria-label="水分摂取の累積">
-          {/* 目標ライン */}
-          <line x1={0} y1={y(goal)} x2={W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
-          {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
-          {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
-          {water.intake_curve.map((p, i) => (
-            <circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />
-          ))}
-          {nowH != null && <line x1={X(nowH)} y1={2} x2={X(nowH)} y2={H - 12} stroke="#f43f5e" strokeWidth={1} />}
-        </svg>
-      </div>
-    </div>
+    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="水分摂取の累積">
+      <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
+      <line x1={0} y1={y(goal)} x2={SUB_W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
+      {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
+      {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
+      {water.intake_curve.map((p, i) => (<circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />))}
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={deficit > 500 ? "#fcd34d" : "#94a3b8"}>
+        水分 {total}/{goal}mL{src}{water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}{deficit > 0 ? ` · あと${(deficit / 1000).toFixed(1)}L` : " · 達成"}
+      </text>
+    </svg>
   );
 }
 
