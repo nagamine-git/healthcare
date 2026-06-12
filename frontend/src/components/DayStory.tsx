@@ -31,6 +31,8 @@ const BODY_Y1 = BODY_Y0 + BODY_H;
 const AXIS_Y = BODY_Y1 + 14;
 const TOTAL_H = AXIS_Y + 4;
 const bodyY = (v: number) => BODY_Y1 - (Math.max(0, Math.min(100, v)) / 100) * BODY_H;
+// 心拍は 45-165bpm をトラック高さにマップ (安静〜運動域)
+const hrY = (bpm: number) => BODY_Y1 - (Math.max(0, Math.min(1, (bpm - 45) / 120)) * BODY_H);
 
 function colorFor(seg: DayStorySegment): string {
   if (seg.source === "sleep") return "#6366f1";
@@ -107,6 +109,8 @@ export function DayStory() {
   const nowH = d.now_h;
   const bb = t?.body_battery ?? [];
   const stress = t?.stress ?? [];
+  const hr = t?.heart_rate ?? [];
+  const hrPts = hr.map((p) => `${X(p.h)},${hrY(p.v)}`).join(" ");
   const bbArea =
     bb.length > 1
       ? `M ${X(bb[0].h)},${BODY_Y1} L ${bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" L ")} L ${X(bb[bb.length - 1].h)},${BODY_Y1} Z`
@@ -192,6 +196,9 @@ export function DayStory() {
         {stress.length > 1 && (
           <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
         )}
+        {hr.length > 1 && (
+          <polyline points={hrPts} fill="none" stroke="#fb7185" strokeWidth={1.1} opacity={0.7} />
+        )}
 
         {/* 現在線 (全トラック貫通) */}
         {nowH != null && (
@@ -225,7 +232,9 @@ export function DayStory() {
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
           <span><span className="text-emerald-400">━</span> Body Battery</span>
           <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
+          <span><span className="text-rose-400">━</span> 心拍</span>
           <span><span className="text-violet-400">●</span> カフェイン</span>
+          <span><span className="text-slate-200">◆</span> 体調記録</span>
           <span className="text-slate-600">濃=記録 / 淡=推定</span>
         </div>
         <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[10px]">

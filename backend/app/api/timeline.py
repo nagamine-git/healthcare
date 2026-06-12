@@ -121,7 +121,9 @@ def _gather(start_utc, end_utc, off) -> dict[str, Any]:
 
         out["stress"] = [{"h": off(t), "v": float(v)} for t, v in metric("stress")]
         out["_steps"] = [(off(t), float(v)) for t, v in metric("step_count")]
-        out["_hr"] = [(off(t), float(v)) for t, v in metric("heart_rate_avg")]
+        hr_pairs = [(off(t), float(v)) for t, v in metric("heart_rate_avg")]
+        out["_hr"] = hr_pairs
+        out["heart_rate"] = [{"h": h, "v": v} for h, v in hr_pairs]
         out["_energy"] = [(off(t), float(v)) for t, v in metric("active_energy")]
 
         out["sleep_blocks"] = _sleep_blocks(session, start_utc, end_utc, off)
@@ -225,6 +227,7 @@ async def day_timeline(
         "now_h": now_off,
         "body_battery": g["body_battery"],
         "stress": g["stress"],
+        "heart_rate": g["heart_rate"],
         "sleep_blocks": g["sleep_blocks"],
         "workouts": g["workouts"],
         "caffeine": g["caffeine"],
