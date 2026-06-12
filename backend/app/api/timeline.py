@@ -400,6 +400,15 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     return out, baseline_per_h
 
 
+def _bin_steps(step_pairs, bin_h: float = 0.25):
+    """歩数を bin_h 時間ごとに集計 (運動量バー用)。"""
+    bins: dict[int, float] = {}
+    for h, v in step_pairs:
+        idx = int(h / bin_h)
+        bins[idx] = bins.get(idx, 0.0) + v
+    return [{"h": round(i * bin_h + bin_h / 2, 2), "steps": round(v)} for i, v in sorted(bins.items())]
+
+
 def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     """カレンダー予定 (gcal 未設定なら空)。ウィンドウが触れる JST 日付を走査。終日除外。"""
     start_jst_d = start_utc.replace(tzinfo=UTC).astimezone(JST).date()
@@ -457,6 +466,8 @@ async def day_timeline(
         "body_battery": g["body_battery"],
         "stress": g["stress"],
         "heart_rate": g["heart_rate"],
+        "resting_hr": g["_resting_hr"],
+        "steps_binned": _bin_steps(g["_steps"]),
         "sleep_blocks": g["sleep_blocks"],
         "workouts": g["workouts"],
         "caffeine": g["caffeine"],

@@ -31,8 +31,6 @@ const BODY_Y1 = BODY_Y0 + BODY_H;
 const AXIS_Y = BODY_Y1 + 14;
 const TOTAL_H = AXIS_Y + 4;
 const bodyY = (v: number) => BODY_Y1 - (Math.max(0, Math.min(100, v)) / 100) * BODY_H;
-// 心拍は 45-165bpm をトラック高さにマップ (安静〜運動域)
-const hrY = (bpm: number) => BODY_Y1 - (Math.max(0, Math.min(1, (bpm - 45) / 120)) * BODY_H);
 
 function colorFor(seg: DayStorySegment): string {
   if (seg.source === "sleep") return "#6366f1";
@@ -118,8 +116,6 @@ export function DayStory() {
   const nowH = d.now_h;
   const bb = t?.body_battery ?? [];
   const stress = t?.stress ?? [];
-  const hr = t?.heart_rate ?? [];
-  const hrPts = hr.map((p) => `${X(p.h)},${hrY(p.v)}`).join(" ");
   const bbArea =
     bb.length > 1
       ? `M ${X(bb[0].h)},${BODY_Y1} L ${bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" L ")} L ${X(bb[bb.length - 1].h)},${BODY_Y1} Z`
@@ -295,9 +291,6 @@ export function DayStory() {
         {stress.length > 1 && (
           <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
         )}
-        {hr.length > 1 && (
-          <polyline points={hrPts} fill="none" stroke="#fb7185" strokeWidth={1.1} opacity={0.7} />
-        )}
 
         {/* 現在線 (全トラック貫通) */}
         {nowH != null && (
@@ -313,6 +306,18 @@ export function DayStory() {
                 textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
         ))}
         </svg>
+
+        {/* 心拍・運動レーン (心臓と身体の負荷を別枠で。運動かストレスか見分けやすく) */}
+        {t && (t.heart_rate.length > 1 || (t.steps_binned?.length ?? 0) > 0) && (
+          <HeartMotionTrack
+            hr={t.heart_rate}
+            steps={t.steps_binned ?? []}
+            restingHr={t.resting_hr}
+            nowH={nowH}
+            X={X}
+            gridTicks={gridTicks}
+          />
+        )}
 
         {/* カフェイン・水分も同じ容器内 = 同幅・同グリッド・スクロール連動 */}
         {t && t.caffeine_curve.length > 1 && (
@@ -355,6 +360,7 @@ export function DayStory() {
           <span><span className="text-emerald-400">━</span> Body Battery</span>
           <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
           <span><span className="text-rose-400">━</span> 心拍</span>
+          <span><span className="text-sky-400">▮</span> 歩数(運動量)</span>
           <span><span className="text-violet-400">●</span> カフェイン</span>
           <span><span className="text-rose-400">▮</span> 頭痛</span>
           <span><span className="text-red-400">▁</span> 座りっぱなし(30分超)</span>
@@ -426,6 +432,60 @@ function SubGrid({ gridTicks, X, y0, y1 }: { gridTicks: number[]; X: (h: number)
 
 const SUB_W = 960;
 const SUB_H = 46;
+
+/** 移動平均で心拍をなだらかに (per-minute はスパイクが多い) */
+function smooth(pts: { h: number; v: number }[], win = 5): { h: number; v: number }[] {
+  if (pts.length <= win) return pts;
+  return pts.map((p, i) => {
+    const lo = Math.max(0, i - Math.floor(win / 2));
+    const hi = Math.min(pts.length, i + Math.ceil(win / 2));
+    const slice = pts.slice(lo, hi);
+    return { h: p.h, v: slice.reduce((a, q) => a + q.v, 0) / slice.length };
+  });
+}
+
+function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
+  hr: { h: number; v: number }[];
+  steps: { h: number; steps: number }[];
+  restingHr: number | null;
+  nowH: number | null;
+  X: (h: number) => number;
+  gridTicks: number[];
+}) {
+  const H = 52;
+  const hrLo = 40, hrHi = 170;
+  const y = (bpm: number) => H - 8 - (Math.max(0, Math.min(1, (bpm - hrLo) / (hrHi - hrLo))) * (H - 22));
+  const sm = smooth(hr, 7);
+  const peakSteps = Math.max(200, ...steps.map((s) => s.steps));
+  const barH = (s: number) => (s / peakSteps) * (H - 22);
+  const binW = steps.length > 1 ? Math.max(2, X(steps[1].h) - X(steps[0].h)) - 1 : 6;
+  const nowBpm = nowH != null && sm.length
+    ? sm.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).v : (sm.length ? sm[sm.length - 1].v : null);
+  return (
+    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="心拍と運動">
+      <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
+      {/* 歩数バー (運動量。心拍の背後に薄く) */}
+      {steps.map((s, i) => s.steps > 0 && (
+        <rect key={i} x={X(s.h) - binW / 2} y={H - 8 - barH(s.steps)} width={binW} height={barH(s.steps)}
+              fill="#38bdf8" opacity={0.22}>
+          <title>{`${s.steps}歩`}</title>
+        </rect>
+      ))}
+      {/* 安静時心拍の基準線 */}
+      {restingHr != null && (
+        <line x1={0} y1={y(restingHr)} x2={SUB_W} y2={y(restingHr)} stroke="#fb7185" strokeWidth={0.7} strokeDasharray="3 3" opacity={0.45} />
+      )}
+      {/* 平滑化した心拍 */}
+      {sm.length > 1 && (
+        <polyline points={sm.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.6} strokeLinejoin="round" />
+      )}
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill="#94a3b8">
+        心拍(平滑) &amp; 運動量{nowBpm != null ? ` · 現在約${Math.round(nowBpm)}bpm` : ""}{restingHr != null ? ` · 安静${Math.round(restingHr)}` : ""}
+      </text>
+    </svg>
+  );
+}
 
 function CaffeineTrack({ curve, threshold, nowH, X, gridTicks }: {
   curve: { h: number; mg: number }[];

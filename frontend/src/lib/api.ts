@@ -347,6 +347,8 @@ export type DayTimelineData = {
   body_battery: TimelinePoint[];
   stress: TimelinePoint[];
   heart_rate: TimelinePoint[];
+  resting_hr: number | null;
+  steps_binned: { h: number; steps: number }[];
   sleep_blocks: { start_h: number; end_h: number }[];
   workouts: { start_h: number; end_h: number; type: string | null }[];
   caffeine: { h: number; mg: number; source: string }[];
