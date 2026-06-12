@@ -208,6 +208,7 @@ def _upsert_hrv(session: Session, target: date_type, hrv: dict[str, Any]) -> Non
 def _upsert_body_battery(session: Session, target: date_type, bb: dict[str, Any]) -> int:
     series: list[dict[str, Any]] = bb.get("series") or []
     written = 0
+    seen: set[datetime] = set()  # バッチ内の重複 ts を弾く (Garmin payload に重複あり)
     for point in series:
         ts = point.get("ts")
         value = point.get("value")
@@ -217,8 +218,12 @@ def _upsert_body_battery(session: Session, target: date_type, bb: dict[str, Any]
         existing = session.get(BodyBattery, ts_naive)
         if existing:
             existing.value = value
+        elif ts_naive in seen:
+            # 同一バッチ内の重複 (未flush) は get で拾えず二重 INSERT → UNIQUE 違反になる
+            continue
         else:
             session.add(BodyBattery(ts=ts_naive, value=value))
+            seen.add(ts_naive)
         written += 1
 
     if "morning" in bb:

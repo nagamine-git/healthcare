@@ -310,6 +310,27 @@ def test_garmin_body_battery_series_persisted_to_metric_sample(db_engine, sessio
     assert len(rows) == 2
 
 
+def test_upsert_body_battery_dedupes_within_batch(db_engine, session):
+    """Garmin payload に重複 ts があっても UNIQUE 違反でクラッシュしない (同期全体が
+    巻き添えで失敗し、当日のワークアウト等が保存されないバグの回帰)。"""
+    from datetime import datetime
+
+    from app.ingest.garmin_sync import _upsert_body_battery
+
+    dup = datetime(2026, 5, 1, 6, 0)
+    bb = {
+        "series": [
+            {"ts": dup, "value": 17.0},
+            {"ts": dup, "value": 17.0},  # 重複
+            {"ts": datetime(2026, 5, 1, 6, 27), "value": 18.0},
+        ],
+    }
+    _upsert_body_battery(session, date(2026, 5, 1), bb)
+    session.flush()  # 以前はここで IntegrityError
+    rows = session.execute(select(BodyBattery)).scalars().all()
+    assert len(rows) == 2
+
+
 def test_sync_garmin_job_skips_when_no_token(temp_data_dir, monkeypatch):
     """credential login で Garmin に 429 を踏まないため、トークン未取得時は skip."""
     import asyncio
