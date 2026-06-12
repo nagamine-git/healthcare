@@ -149,9 +149,12 @@ def build_day_story(
     if sleep:
         sleep_ranges.append((max(0.0, sleep["start_h"]), sleep["end_h"]))
     workout_ranges = [(w["start_h"], w["end_h"]) for w in workouts]
-    event_ranges = [(e["start_h"], e["end_h"], e["title"]) for e in events]
+    # カレンダー予定は「参考」にとどめ、行動バーには転記しない (予定≠実際の行動。
+    # 来てない会議等を確定行動にしてしまうのを避ける)。実測の睡眠・運動と
+    # 生理推定だけでラベルする。events は別途マーカーとして UI で薄く出す。
+    _ = events
 
-    # 各ビンを分類 (確定情報優先)
+    # 各ビンを分類 (実測 = 睡眠/運動を優先、それ以外は生理から推定)
     labels: list[tuple[str, float, str]] = []  # (label, confidence, source)
     for i in range(n_bins):
         h = (i * BIN_MIN + BIN_MIN / 2) / 60
@@ -163,9 +166,6 @@ def build_day_story(
         elif _in_any(h, workout_ranges):
             wt = next((w.get("type") for w in workouts if w["start_h"] <= h < w["end_h"]), None)
             labels.append((_workout_label(wt), 0.95, "workout"))
-        elif any(s <= h < e for s, e, _ in event_ranges):
-            title = next(t for s, e, t in event_ranges if s <= h < e)
-            labels.append((title or "予定", 0.85, "calendar"))
         else:
             lab, conf = _classify(bins[i], rhr, bb_slope[i])
             labels.append((lab, conf, "inferred"))

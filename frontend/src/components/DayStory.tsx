@@ -180,6 +180,18 @@ export function DayStory() {
           );
         })}
 
+        {/* ── カレンダー予定 = 参考のみ (破線オーバーレイ。実際の行動とは別物) ── */}
+        {(t?.events ?? []).map((e, i) => {
+          const x = X(e.start_h);
+          const w = Math.max(3, X(e.end_h) - x);
+          return (
+            <rect key={`ev${i}`} x={x + 0.5} y={ACT_Y + 0.5} width={w - 1} height={ACT_H - 1}
+                  rx={3} fill="none" stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 2" opacity={0.55}>
+              <title>{`予定(参考): ${e.title}`}</title>
+            </rect>
+          );
+        })}
+
         {/* ── 頭痛バンド (全トラック貫通、ロゼ) ── */}
         {(t?.migraine ?? []).map((m, i) => (
           <rect key={`mig${i}`} x={X(m.start_h)} y={ACT_Y}
@@ -251,8 +263,11 @@ export function DayStory() {
         <Swatch c="#2dd4bf" t="休息・在席" />
         <Swatch c="#38bdf8" t="移動・運動" />
         <Swatch c="#34d399" t="ワークアウト" />
-        <Swatch c="#64748b" t="予定" />
         <Swatch c="#334155" t="記録なし" />
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2.5 w-3 rounded-sm border border-dashed border-slate-400" />
+          予定(参考のみ)
+        </span>
       </div>
 
       {/* 線/点の凡例 + 拡大コントロール */}
