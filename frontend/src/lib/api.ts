@@ -327,6 +327,14 @@ export type DayStory = {
   summary: string;
   segments: DayStorySegment[];
   insights: DayStoryInsight[];
+  stats: {
+    steps: number;
+    active_kcal: number;
+    sleep_h: number | null;
+    stress_avg: number | null;
+    caffeine_mg: number;
+    intensity_min: number;
+  };
 };
 
 export type TimelinePoint = { h: number; v: number };

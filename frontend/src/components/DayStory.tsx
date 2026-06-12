@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Armchair, Check, Footprints, Activity } from "lucide-react";
+import { Armchair, Check, Footprints, Activity, Moon, Flame, Brain, Coffee } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
@@ -122,6 +122,16 @@ export function DayStory() {
         {toggle}
       </div>
 
+      {/* クイック統計チップ (1日の数値サマリ) */}
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+        <Stat icon={Footprints} label="歩数" value={d.stats.steps.toLocaleString()} />
+        <Stat icon={Flame} label="消費" value={`${d.stats.active_kcal}kcal`} />
+        <Stat icon={Moon} label="睡眠" value={d.stats.sleep_h != null ? `${d.stats.sleep_h}h` : "--"} />
+        <Stat icon={Activity} label="運動強度" value={`${d.stats.intensity_min}分`} />
+        <Stat icon={Brain} label="平均覚醒" value={d.stats.stress_avg != null ? `${d.stats.stress_avg}` : "--"} />
+        <Stat icon={Coffee} label="カフェイン" value={`${d.stats.caffeine_mg}mg`} />
+      </div>
+
       {/* 拡大すると横スクロールで各時間に幅が割かれ、帯内ラベル・軸が読める */}
       <div className={ZOOM_PX[zoom] != null ? "-mx-1 overflow-x-auto px-1" : ""}>
         <svg
@@ -199,7 +209,18 @@ export function DayStory() {
         </svg>
       </div>
 
-      {/* 凡例 + 拡大コントロール */}
+      {/* 行動カラー凡例 (帯の色が何を意味するか) */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+        <Swatch c="#6366f1" t="睡眠" />
+        <Swatch c="#f59e0b" t="仕事・集中" />
+        <Swatch c="#2dd4bf" t="休息" />
+        <Swatch c="#38bdf8" t="移動・運動" />
+        <Swatch c="#34d399" t="ワークアウト" />
+        <Swatch c="#64748b" t="予定" />
+        <Swatch c="#334155" t="記録なし" />
+      </div>
+
+      {/* 線/点の凡例 + 拡大コントロール */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
           <span><span className="text-emerald-400">━</span> Body Battery</span>
@@ -239,5 +260,26 @@ export function DayStory() {
         </div>
       )}
     </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 px-2 py-1.5">
+      <Icon size={13} className="shrink-0 text-slate-500" />
+      <div className="min-w-0 leading-tight">
+        <div className="truncate text-[9px] text-slate-500">{label}</div>
+        <div className="truncate text-xs font-medium tabular-nums text-slate-200">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function Swatch({ c, t }: { c: string; t: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: c }} />
+      {t}
+    </span>
   );
 }

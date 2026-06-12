@@ -262,6 +262,17 @@ async def day_story(
         intensity_min=g["_intensity"],
         resting_hr=g["_resting_hr"],
     )
+    # クイック統計 (情報量を補う数値サマリ)
+    stress_vals = [p["v"] for p in g["stress"]]
+    mod, vig = g["_intensity"]
+    story["stats"] = {
+        "steps": int(sum(v for _, v in g["_steps"])),
+        "active_kcal": round(sum(v for _, v in g["_energy"])),
+        "sleep_h": round(sleep["end_h"] - sleep["start_h"], 1) if sleep else None,
+        "stress_avg": round(sum(stress_vals) / len(stress_vals)) if stress_vals else None,
+        "caffeine_mg": round(sum(c["mg"] for c in g["caffeine"])),
+        "intensity_min": int(mod + vig),
+    }
     story["window"] = window
     story["date"] = date_label
     story["origin_jst"] = origin_jst.isoformat()
