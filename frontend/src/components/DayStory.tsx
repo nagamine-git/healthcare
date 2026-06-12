@@ -67,7 +67,8 @@ function shortLabel(seg: DayStorySegment): string {
 }
 
 type Zoom = "fit" | "wide" | "max";
-const ZOOM_PX: Record<Zoom, number | null> = { fit: null, wide: 1100, max: 1900 };
+// fit=画面幅, wide≈1.5倍, max≈2倍 (画面幅 ~390px 基準)
+const ZOOM_PX: Record<Zoom, number | null> = { fit: null, wide: 580, max: 760 };
 
 export function DayStory() {
   const [win, setWin] = useState<Win>("24h");
@@ -112,7 +113,7 @@ export function DayStory() {
       : null;
   const stressPts = stress.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ");
   // 拡大するほど狭い帯にもラベルを出せる (viewBox幅基準の閾値を下げる)
-  const labelMinW = zoom === "fit" ? 52 : zoom === "wide" ? 34 : 20;
+  const labelMinW = zoom === "fit" ? 52 : zoom === "wide" ? 42 : 34;
 
   return (
     <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
@@ -210,7 +211,7 @@ export function DayStory() {
           {(["fit", "wide", "max"] as Zoom[]).map((z) => (
             <button key={z} onClick={() => setZoom(z)}
               className={`rounded-md px-2 py-0.5 ${zoom === z ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
-              {z === "fit" ? "フィット" : z === "wide" ? "拡大" : "最大"}
+              {z === "fit" ? "フィット" : z === "wide" ? "1.5倍" : "2倍"}
             </button>
           ))}
         </div>
