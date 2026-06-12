@@ -258,6 +258,32 @@ export function DayStory() {
           </g>
         ) : null}
 
+        {/* ── 文脈ウィンドウ (背景レイヤー) ── */}
+        {/* 回復ゾーン: 副交感優位 (Garmin安息帯) を身体トラック背景に薄緑 */}
+        {(t?.recovery_bands ?? []).map((r, i) => (
+          <rect key={`rec${i}`} x={X(r.start_h)} y={BODY_Y0}
+                width={Math.max(2, X(r.end_h) - X(r.start_h))} height={BODY_H}
+                fill="#34d399" opacity={0.07}>
+            <title>{`回復ゾーン (自律神経が休息モード)`}</title>
+          </rect>
+        ))}
+        {/* 就寝/メラトニン窓: 夜の藍バンド */}
+        {t?.sleep_window && (
+          <rect x={X(t.sleep_window.melatonin_h)} y={ACT_Y}
+                width={Math.max(2, X(t.sleep_window.bedtime_h) - X(t.sleep_window.melatonin_h))}
+                height={BODY_Y1 - ACT_Y} fill="#6366f1" opacity={0.08}>
+            <title>{`メラトニン上昇〜就寝の窓 (この時間に光を抑えると寝つきやすい)`}</title>
+          </rect>
+        )}
+        {/* 集中ピーク窓: 活動バー上端に琥珀の点線 */}
+        {(t?.focus_windows ?? []).map((f, i) => (
+          <rect key={`fw${i}`} x={X(f.start_h)} y={ACT_Y - 0.5}
+                width={Math.max(2, X(f.end_h) - X(f.start_h))} height={ACT_H + 1}
+                fill="none" stroke="#fbbf24" strokeWidth={1.2} strokeDasharray="2 2" opacity={0.7} rx={3}>
+            <title>{`集中ピーク窓 (予測スコア${f.score}) — 重い思考タスク向き`}</title>
+          </rect>
+        ))}
+
         {/* ── 身体反応トラック (Body Battery 面 + ストレス線) ── */}
         <line x1={0} y1={BODY_Y1} x2={W} y2={BODY_Y1} stroke="#1e293b" strokeWidth={1} />
         {bbArea && <path d={bbArea} fill="#34d399" opacity={0.16} />}
@@ -312,6 +338,9 @@ export function DayStory() {
           <span><span className="text-violet-400">●</span> カフェイン</span>
           <span><span className="text-rose-400">▮</span> 頭痛</span>
           <span><span className="text-red-400">▁</span> 座りっぱなし(30分超)</span>
+          <span><span className="text-amber-400">⌑</span> 集中ピーク窓</span>
+          <span><span className="text-emerald-400/60">▦</span> 回復ゾーン</span>
+          <span><span className="text-indigo-400/60">▦</span> 就寝窓</span>
           <span><span className="text-slate-200">◆</span> 体調記録 / <span className="text-slate-400">◇</span> 推定</span>
           <span className="text-slate-600">帯: 濃=記録 / 淡=推定</span>
         </div>

@@ -16,6 +16,7 @@ import { EnvironmentPanel } from "../components/EnvironmentPanel";
 import { StaleBanner } from "../components/StaleBanner";
 import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
+import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { SyncMenu } from "../components/SyncMenu";
@@ -252,6 +253,12 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div id="life-section">
         <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
         <LifeSection />
+      </div>
+
+      {/* ===== 📖 学習 (The Rust Book 完走プラン) ===== */}
+      <div id="learning-section">
+        <SectionHeader label="学習" hint="The Book 完走プラン — 読了 / Rustlings / 説明できた の3点クリア" />
+        <LearningCard />
       </div>
       <PhysiqueTargetSection
         current={

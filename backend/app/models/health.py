@@ -301,5 +301,22 @@ class ExternalDomainEntry(Base):
     detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
+class LearningChapterProgress(Base):
+    """The Rust Book 完走プランの章別進捗。
+
+    1 章のクリア条件は 3 点セット (読了 / Rustlings / 口頭説明)。
+    「読んだだけでわかったふり」を構造的に防ぐため、3 つ揃って初めて
+    completed とみなす。カリキュラム定義 (章タイトル・山場) はコードに
+    持ち、このテーブルは進捗タイムスタンプだけを永続化する。
+    """
+
+    __tablename__ = "learning_chapter_progress"
+
+    chapter: Mapped[int] = mapped_column(Integer, primary_key=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rustlings_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

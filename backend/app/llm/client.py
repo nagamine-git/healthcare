@@ -1032,6 +1032,10 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload.update(_gather_today_activity(target))
     today_payload["recent_trends"] = _gather_recent_trends(target)
     today_payload["life_domains"] = _gather_life_domains(target)
+    # 学習プラン (The Rust Book 完走): コンディション×学習の統合判断用
+    from app.scoring.learning import llm_summary as _learning_summary
+
+    today_payload["learning"] = _learning_summary(today=target)
     today_payload["physio"] = _gather_physio(target)
     today_payload["subjective"] = _gather_subjective(target)
     today_payload["advice_feedback_recent"] = _gather_advice_feedback(target)

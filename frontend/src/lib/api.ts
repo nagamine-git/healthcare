@@ -361,6 +361,9 @@ export type DayTimelineData = {
   checkin_estimated: { mood: number | null; energy: number | null; stress: number | null; soreness: number | null } | null;
   caffeine_curve: { h: number; mg: number }[];
   caffeine_bedtime_safe_mg: number | null;
+  focus_windows: { start_h: number; end_h: number; score: number }[];
+  sleep_window: { melatonin_h: number; bedtime_h: number } | null;
+  recovery_bands: { start_h: number; end_h: number }[];
   events: { start_h: number; end_h: number; title: string }[];
 };
 
@@ -646,6 +649,32 @@ export type LifeResponse = {
   generated_at: string;
 };
 
+export type LearningCheckField = "read" | "rustlings" | "explained";
+export type LearningChapter = {
+  chapter: number;
+  title: string;
+  note: string | null;
+  milestone: boolean;
+  read: boolean;
+  rustlings: boolean;
+  explained: boolean;
+  complete: boolean;
+};
+export type LearningState = {
+  chapters: LearningChapter[];
+  /** 全章完了なら null */
+  current_chapter: number | null;
+  done_count: number;
+  total: number;
+  started_on: string | null;
+  weeks_elapsed: number;
+  pace: "not_started" | "behind" | "on_track" | "ahead";
+  streak_sessions: number;
+  last_activity: string | null;
+  today: { achievement: number | null; detail: string | null } | null;
+  completed: boolean;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -758,6 +787,12 @@ export const api = {
   alcoholDelete: (id: number) =>
     request<{ deleted: number }>(`/api/alcohol/${id}`, { method: "DELETE" }),
   life: () => request<LifeResponse>("/api/life"),
+  learningState: () => request<LearningState>("/api/learning/state"),
+  learningCheck: (chapter: number, field: LearningCheckField, done: boolean) =>
+    request<LearningState>(`/api/learning/chapter/${chapter}/check`, {
+      method: "POST",
+      body: JSON.stringify({ field, done }),
+    }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {
       method: "PUT",

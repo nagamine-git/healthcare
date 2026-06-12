@@ -227,6 +227,100 @@ def _caffeine_curve(origin_utc, start_utc, end_utc, off):
     return points, threshold_mg
 
 
+def _hhmm_to_off(hhmm: str, origin_utc, off) -> float | None:
+    """'HH:MM' (JST) を、ウィンドウ origin の JST 日付に合わせて offset 化。"""
+    try:
+        h, _, m = hhmm.partition(":")
+        origin_jst = origin_utc.replace(tzinfo=UTC).astimezone(JST)
+        # origin と同じ日付の HH:MM。HH < origin の時 (日跨ぎ) は翌日扱い
+        cand = origin_jst.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
+        if cand < origin_jst:
+            cand = cand + timedelta(days=1)
+        return off(cand.astimezone(UTC).replace(tzinfo=None))
+    except Exception:
+        return None
+
+
+def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
+    """同一時間軸に重ねる「文脈ウィンドウ」: 集中ピーク窓 / 就寝(メラトニン)窓 / 回復ゾーン。"""
+    from datetime import time as _time
+
+    from app.config import get_settings
+    from app.models import HrvDaily
+    from app.scoring.focus import extract_peak_windows, predict_today_curve
+    from app.scoring.recompute import _hrv_baseline
+    from app.scoring.sleep_plan import compute_tonight_plan
+
+    s = get_settings()
+    now_jst = datetime.now(JST)
+    out: dict[str, Any] = {"focus_windows": [], "sleep_window": None, "recovery_bands": []}
+
+    # --- 集中ピーク窓 (現在以降の予測。今日のみ意味を持つ) ---
+    try:
+        with session_scope() as session:
+            hrv = session.get(HrvDaily, target)
+            sleep = session.get(SleepSession, target)
+            bb_cur = session.execute(
+                select(BodyBattery.value).where(BodyBattery.ts < end_utc)
+                .order_by(BodyBattery.ts.desc()).limit(1)
+            ).scalar()
+            since = now_jst.astimezone(UTC).replace(tzinfo=None) - timedelta(minutes=60)
+            srows = session.execute(
+                select(MetricSample.value).where(
+                    MetricSample.metric_key == "stress", MetricSample.ts >= since,
+                    MetricSample.value >= 0,
+                )
+            ).all()
+            stress_recent = sum(float(r[0]) for r in srows) / len(srows) if srows else None
+            baseline = _hrv_baseline(session, target)
+        wake_t = None
+        try:
+            h, _, m = s.target_wake_time.partition(":")
+            wake_t = _time(int(h), int(m))
+        except Exception:
+            wake_t = None
+        curve = predict_today_curve(
+            now=now_jst, hrv_value=hrv.last_night_avg if hrv else None, hrv_baseline=baseline,
+            body_battery_current=float(bb_cur) if bb_cur is not None else None,
+            stress_recent_avg=stress_recent,
+            sleep_score=sleep.sleep_score if sleep else None,
+            sleep_total_min=sleep.total_min if sleep else None, wake_time=wake_t,
+        )
+        for w in extract_peak_windows(curve):
+            so = _hhmm_to_off(w.start, origin_utc, off)
+            eo = _hhmm_to_off(w.end, origin_utc, off)
+            if so is not None and eo is not None and eo > so:
+                out["focus_windows"].append({"start_h": so, "end_h": eo, "score": round(w.avg_score)})
+    except Exception:
+        pass
+
+    # --- 就寝/メラトニン窓 (メラトニン上昇 ≈ 就寝2h前 〜 就寝) ---
+    try:
+        plan = compute_tonight_plan(target)
+        bed = _hhmm_to_off(plan["bedtime"], origin_utc, off)
+        if bed is not None:
+            out["sleep_window"] = {"melatonin_h": max(0.0, bed - 2.0), "bedtime_h": bed}
+    except Exception:
+        pass
+
+    # --- 回復ゾーン (Garmin ストレス安息帯 <26 が続く時間 = 副交感優位) ---
+    rec: list[dict[str, float]] = []
+    cur_start: float | None = None
+    for p in g["stress"]:
+        if p["v"] < 26:
+            if cur_start is None:
+                cur_start = p["h"]
+            last = p["h"]
+        else:
+            if cur_start is not None and last - cur_start >= 0.5:
+                rec.append({"start_h": cur_start, "end_h": last})
+            cur_start = None
+    if cur_start is not None and g["stress"] and g["stress"][-1]["h"] - cur_start >= 0.5:
+        rec.append({"start_h": cur_start, "end_h": g["stress"][-1]["h"]})
+    out["recovery_bands"] = rec
+    return out
+
+
 def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     """カレンダー予定 (gcal 未設定なら空)。ウィンドウが触れる JST 日付を走査。終日除外。"""
     start_jst_d = start_utc.replace(tzinfo=UTC).astimezone(JST).date()
@@ -272,6 +366,7 @@ async def day_timeline(
         checkin_estimated = None
 
     caffeine_curve, caf_threshold = _caffeine_curve(origin_utc, start_utc, end_utc, off)
+    ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
 
     return {
         "window": window,
@@ -290,6 +385,9 @@ async def day_timeline(
         "checkin_estimated": checkin_estimated,
         "caffeine_curve": caffeine_curve,
         "caffeine_bedtime_safe_mg": caf_threshold,
+        "focus_windows": ctx["focus_windows"],
+        "sleep_window": ctx["sleep_window"],
+        "recovery_bands": ctx["recovery_bands"],
         "events": _gather_events(start_utc, end_utc, off),
     }
 
