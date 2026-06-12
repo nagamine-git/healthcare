@@ -90,9 +90,8 @@ export function DayStory() {
   const d = story.data;
   const t = tl.data;
 
-  // 軸ラベル: origin からの offset を実時刻に変換 (24hビューは日付をまたぐため)
+  // 軸ラベルは origin からの実時刻 (24hビューは日付をまたぐため)
   const originHour = d ? new Date(d.origin_jst).getHours() : 0;
-  const axisLabel = (offset: number) => `${(originHour + offset) % 24}時`;
 
   const toggle = (
     <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[11px]">
@@ -128,6 +127,18 @@ export function DayStory() {
   const stressPts = stress.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ");
   // 拡大するほど狭い帯にもラベルを出せる (viewBox幅基準の閾値を下げる)
   const labelMinW = zoom === "fit" ? 52 : zoom === "wide" ? 42 : 34;
+  // 目盛り間隔: 拡大するほど細かく (fit=3h grid/6h label, wide=1h/2h, max=30m/1h)
+  const gridStep = zoom === "fit" ? 3 : zoom === "wide" ? 1 : 0.5;
+  const labelStep = zoom === "fit" ? 6 : zoom === "wide" ? 2 : 1;
+  const gridTicks = Array.from({ length: Math.round(24 / gridStep) + 1 }, (_, i) => i * gridStep);
+  const labelTicks = Array.from({ length: Math.round(24 / labelStep) + 1 }, (_, i) => i * labelStep);
+  // 24hビューは origin からの実時刻、30分刻みは ":30" まで出す
+  const tickText = (off: number) => {
+    const total = (originHour * 60 + off * 60) % (24 * 60);
+    const hh = Math.floor(total / 60);
+    const mm = Math.round(total % 60);
+    return mm === 0 ? `${hh}時` : `${hh}:${mm.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
@@ -155,10 +166,11 @@ export function DayStory() {
           role="img"
           aria-label="今日のタイムライン"
         >
-        {/* 3hグリッド (全トラック貫通) */}
-        {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => (
+        {/* 時間グリッド (拡大で細かく)。整時は濃いめ、半端目盛りは薄く */}
+        {gridTicks.map((h) => (
           <line key={h} x1={X(h)} y1={ACT_Y} x2={X(h)} y2={BODY_Y1}
-                stroke="#1e293b" strokeWidth={h % 6 === 0 ? 1 : 0.5} />
+                stroke="#1e293b" strokeWidth={Number.isInteger(h) && h % 6 === 0 ? 1 : 0.5}
+                opacity={Number.isInteger(h) ? 1 : 0.5} />
         ))}
 
         {/* ── 行動トラック ── */}
@@ -247,10 +259,10 @@ export function DayStory() {
           </g>
         )}
 
-        {/* 時刻軸 (低不透明度)。24hビューは origin からの実時刻 */}
-        {[0, 6, 12, 18, 24].map((h) => (
-          <text key={h} x={X(h)} y={AXIS_Y} fontSize={11} fill="#64748b"
-                textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{axisLabel(h)}</text>
+        {/* 時刻軸 (低不透明度)。拡大で細かく、24hビューは origin からの実時刻 */}
+        {labelTicks.map((h) => (
+          <text key={h} x={X(h)} y={AXIS_Y} fontSize={10} fill="#64748b"
+                textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
         ))}
         </svg>
       </div>
