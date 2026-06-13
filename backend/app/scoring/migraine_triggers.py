@@ -165,10 +165,11 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "pressure_drop", "label": "気圧変動 (低下)",
          "case": lambda a: _exposure_pressure_drop(pressure, a - window, a),
          "ctrl": lambda a: _exposure_pressure_drop(pressure, a - window, a)},
-        {"key": "caffeine_withdrawal", "label": "カフェイン離脱 (不足)",
-         "case": lambda a: caf_daily_baseline - caffeine_window_mg(a - window, a),
-         "ctrl": lambda a: caf_daily_baseline - caffeine_window_mg(a - window, a)},
-        {"key": "caffeine_excess", "label": "カフェイン過多",
+        # カフェインは「baseline からの偏差」を1因子で検定する。
+        # 離脱(不足)と過多を別因子にすると符号反転の鏡像になり、必ず同じ p 値が
+        # 2 行出て多重比較補正まで水増しする。偏差の符号(頭痛日に多い/少ない)で
+        # 過多/離脱を後段で動的にラベルする (どちらも最適から外れる=誘発)。
+        {"key": "caffeine", "label": "カフェイン (離脱/過多)",
          "case": lambda a: caffeine_window_mg(a - window, a) - caf_daily_baseline,
          "ctrl": lambda a: caffeine_window_mg(a - window, a) - caf_daily_baseline},
         {"key": "sleep_short", "label": "睡眠不足 (前夜)",
@@ -221,9 +222,16 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
             tier = "trend"
         else:
             tier = "weak"
+        label = r["label"]
+        direction = "誘発" if r["diff"] > 0 else "抑制?"
+        if r["key"] == "caffeine":
+            # baseline からの偏差。頭痛日に多ければ「過多」、少なければ「離脱」。
+            # どちらも最適から外れた=トリガなので direction は常に誘発。
+            label = "カフェイン過多" if r["diff"] > 0 else "カフェイン離脱 (不足)"
+            direction = "誘発"
         factors.append({
-            "key": r["key"], "label": r["label"],
-            "direction": "誘発" if r["diff"] > 0 else "抑制?",
+            "key": r["key"], "label": label,
+            "direction": direction,
             "case_mean": r["case_mean"], "control_mean": r["control_mean"],
             "n_case": r["n_case"], "p": r["p"], "q": round(q, 4), "tier": tier,
         })

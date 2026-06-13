@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from app.db import session_scope
-from app.models import MetricSample, MigraineEpisode
+from app.models import CaffeineIntake, MetricSample, MigraineEpisode
 
 # DB は UTC naive。JST 15:00 = UTC 06:00。
 JST_AFTERNOON_UTC_HOUR = 6
@@ -63,6 +63,36 @@ def test_detects_pressure_swing_factor(db_engine):
     assert pf["tier"] == "strong"
     assert out["status"] == "analyzed"
     assert out["reliability"] == "medium"  # 12 例
+
+
+def test_caffeine_single_factor_not_mirror(db_engine):
+    """カフェインは離脱/過多の鏡像2行ではなく、観測方向で1因子に統合される。"""
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    today = date(2026, 6, 30)
+    with session_scope() as s:
+        def _caf(ts, mg):
+            return CaffeineIntake(ts=ts, source="manual", amount=mg, unit="mg", mg=mg)
+        # 全日に少量のベースライン摂取 (50mg/日) を敷く
+        for i in range(31):
+            d = today - timedelta(days=i)
+            s.add(_caf(datetime.combine(d, datetime.min.time()).replace(hour=0), 50.0))
+        # 頭痛 12 件: 発症直前に大量カフェイン (過多) を入れる
+        for i in range(12):
+            d = today - timedelta(days=i * 2)
+            onset = datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)
+            s.add(MigraineEpisode(started_at=onset))
+            s.add(_caf(onset - timedelta(hours=2), 200.0))
+
+    out = analyze_triggers(today, min_episodes=10)
+    # caffeine_withdrawal / caffeine_excess の2キーは存在しない
+    assert "caffeine_withdrawal" not in out["tested"]
+    assert "caffeine_excess" not in out["tested"]
+    caf = [f for f in out["factors"] if f["key"] == "caffeine"]
+    assert len(caf) == 1  # 鏡像で2行出ない
+    # 頭痛日に多い → 過多・誘発
+    assert caf[0]["label"] == "カフェイン過多"
+    assert caf[0]["direction"] == "誘発"
 
 
 def test_no_significant_factor_when_flat(db_engine):
