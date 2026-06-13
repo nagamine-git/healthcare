@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import itertools
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Any, TypedDict
 
@@ -114,6 +114,68 @@ def _progress_rows() -> dict[int, LearningChapterProgress]:
 
 def _is_complete(row: LearningChapterProgress | None) -> bool:
     return bool(row and row.read_at and row.rustlings_at and row.explained_at)
+
+
+def projection(rows: dict[int, LearningChapterProgress], today: date_type) -> dict[str, Any] | None:
+    """チェック完了タイムスタンプから「いつ終わりそうか」を予測 + 累積グラフ用系列。
+
+    単位はチェック (章×3 = 63)。完了日ごとの累積進捗 % を返し、現在ペースで
+    100% に到達する予定日を線形外挿する。データが乏しいと confidence=low。
+    """
+    total_units = TOTAL_CHAPTERS * len(CHECK_FIELDS)
+    # 全完了タイムスタンプを日付で集める
+    dates: list[date_type] = []
+    for r in rows.values():
+        for col in _FIELD_COLUMNS.values():
+            ts = getattr(r, col, None)
+            if ts:
+                dates.append(ts.date())
+    if len(dates) < 2:
+        return None
+    dates.sort()
+    started_on = dates[0]
+    done_units = len(dates)
+
+    # 累積系列 (日付 → その日までの累積 %)
+    from collections import Counter
+    by_day = Counter(dates)
+    series: list[dict[str, Any]] = []
+    cum = 0
+    for day in sorted(by_day):
+        cum += by_day[day]
+        series.append({"date": day.isoformat(), "pct": round(cum / total_units * 100, 1)})
+
+    elapsed_days = max(1, (today - started_on).days)
+    pace_per_day = done_units / elapsed_days  # チェック/日
+    remaining = total_units - done_units
+    eta_date = None
+    eta_days = None
+    if pace_per_day > 0 and remaining > 0:
+        eta_days = round(remaining / pace_per_day)
+        eta_date = (today + timedelta(days=eta_days)).isoformat()
+    elif remaining == 0:
+        eta_date = today.isoformat()
+        eta_days = 0
+
+    # 信頼度: 経過日数とサンプル数で
+    if elapsed_days >= 21 and done_units >= 9:
+        confidence = "high"
+    elif elapsed_days >= 7 and done_units >= 4:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    return {
+        "started_on": started_on.isoformat(),
+        "done_units": done_units,
+        "total_units": total_units,
+        "pct": round(done_units / total_units * 100, 1),
+        "pace_per_week": round(pace_per_day * 7, 1),
+        "eta_date": eta_date,
+        "eta_days": eta_days,
+        "confidence": confidence,
+        "series": series,
+    }
 
 
 def _streak_days(today: date_type) -> int:
@@ -263,6 +325,7 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
         "last_activity": last_activity,
         "today": today_entry,
         "completed": done_count >= TOTAL_CHAPTERS,
+        "projection": projection(rows, d),
     }
 
 

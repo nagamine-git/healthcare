@@ -113,3 +113,26 @@ def test_llm_summary_shape(app_client):
     assert s["current_chapter"]["chapter"] == 1
     assert s["current_chapter"]["checks"]["read"] is True
     assert s["today_done"] is True
+
+
+def test_projection_estimates_completion(db_engine):
+    from datetime import date, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import LearningChapterProgress
+    from app.scoring.learning import _progress_rows, projection
+
+    today = date(2026, 6, 13)
+    start = datetime(2026, 6, 1, 9, 0)
+    with session_scope() as s:
+        for i in range(3):
+            ts = start + timedelta(days=i * 4)
+            s.add(LearningChapterProgress(chapter=i + 1, read_at=ts,
+                                          rustlings_at=ts, explained_at=ts))
+    p = projection(_progress_rows(), today)
+    assert p is not None
+    assert p["done_units"] == 9
+    assert p["total_units"] == 63
+    assert p["started_on"] == "2026-06-01"
+    assert p["eta_date"] is not None
+    assert len(p["series"]) >= 1

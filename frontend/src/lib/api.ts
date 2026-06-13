@@ -690,6 +690,18 @@ export type LearningState = {
   last_activity: string | null;
   today: { achievement: number | null; detail: string | null } | null;
   completed: boolean;
+  projection: LearningProjection | null;
+};
+export type LearningProjection = {
+  started_on: string;
+  done_units: number;
+  total_units: number;
+  pct: number;
+  pace_per_week: number;
+  eta_date: string | null;
+  eta_days: number | null;
+  confidence: "low" | "medium" | "high";
+  series: { date: string; pct: number }[];
 };
 
 export const api = {
