@@ -22,19 +22,19 @@ from app.models import MetricSample
 DOMAIN_WEIGHT_PRESETS: dict[str, dict[str, Any]] = {
     "balanced": {"label": "バランス",
                  "weights": {"health": 1.0, "meditation": 1.0, "speech": 1.0, "learning": 1.0,
-                             "work": 1.0, "programming": 1.0}},
+                             "work": 1.0}},
     "recovery": {"label": "回復優先",
                  "weights": {"health": 2.0, "meditation": 1.0, "speech": 0.5, "learning": 0.5,
-                             "work": 0.5, "programming": 0.5}},
+                             "work": 0.5}},
     "mindful": {"label": "内省優先",
                 "weights": {"health": 1.0, "meditation": 2.0, "speech": 0.5, "learning": 1.0,
-                            "work": 0.5, "programming": 0.5}},
+                            "work": 0.5}},
     "deep_work": {"label": "仕事集中",
                   "weights": {"health": 1.0, "meditation": 0.5, "speech": 1.0, "learning": 1.5,
-                              "work": 2.0, "programming": 1.5}},
+                              "work": 2.0}},
     "speech_focus": {"label": "発話強化",
                      "weights": {"health": 1.0, "meditation": 0.5, "speech": 2.0, "learning": 0.5,
-                                 "work": 1.0, "programming": 0.5}},
+                                 "work": 1.0}},
 }
 
 
@@ -158,12 +158,11 @@ LIFE_DOMAINS: list[tuple[str, str, Callable[[date_type], float | None]]] = [
     ("speech", "発話力", speech_achievement),
     ("learning", "学習", _external_achievement("learning")),
     ("work", "仕事", _external_achievement("work")),
-    ("programming", "プログラミング", _external_achievement("programming")),
 ]
 
 # この日数を超えてデータが無いドメインは「途絶 (stale)」とみなす
 STALE_AFTER_DAYS: dict[str, int] = {
-    "health": 2, "meditation": 7, "speech": 7, "learning": 7, "work": 7, "programming": 7,
+    "health": 2, "meditation": 7, "speech": 7, "learning": 7, "work": 7,
 }
 
 

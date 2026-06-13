@@ -39,7 +39,7 @@ def test_get_life(app_client):
     assert resp.status_code == 200
     body = resp.json()
     assert "life_score" in body
-    assert {d["key"] for d in body["domains"]} == {"health", "meditation", "speech", "learning", "work", "programming"}
+    assert {d["key"] for d in body["domains"]} == {"health", "meditation", "speech", "learning", "work"}
     assert any(p["key"] == "balanced" for p in body["presets"])
 
 
@@ -90,8 +90,8 @@ def test_life_freshness_and_coverage(app_client):
     assert learning["last_data_at"] is None
     assert learning["stale"] is True  # データ未受信は stale 扱い
 
-    # 既定重み 1.0 × 6 ドメインのうち達成度があるのは瞑想だけ
-    assert body["coverage"] == {"active": 1, "total": 6}
+    # 既定重み 1.0 × 5 ドメインのうち達成度があるのは瞑想だけ
+    assert body["coverage"] == {"active": 1, "total": 5}
 
 
 def test_apply_preset(app_client):

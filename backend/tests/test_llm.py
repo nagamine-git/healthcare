@@ -193,7 +193,7 @@ def test_gather_life_domains(db_engine):
 
     out = _gather_life_domains(app_today())
     assert "life_score" in out
-    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work", "programming"}
+    assert {d["key"] for d in out["domains"]} == {"health", "meditation", "speech", "learning", "work"}
 
 
 def test_gather_subjective_and_feedback_no_detached_error(db_engine):

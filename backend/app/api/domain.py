@@ -17,7 +17,7 @@ from app.scoring.timewindow import app_today
 router = APIRouter()
 
 # 外部取り込み対象のドメイン (health/meditation/speech は専用ロジックなので含めない)。
-_EXTERNAL = {"learning", "work", "programming"}
+_EXTERNAL = {"learning", "work"}
 
 
 class DomainIngestIn(BaseModel):
