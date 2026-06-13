@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date as date_type, datetime, timedelta
+import itertools
+from datetime import UTC, datetime
+from datetime import date as date_type
 from typing import Any, TypedDict
 
 from sqlalchemy import select
@@ -137,7 +139,7 @@ def _streak_days(today: date_type) -> int:
         return 0
     # 7 日以内の間隔で繋がっている活動日数を数える
     streak = 1
-    for prev, cur in zip(rows, rows[1:]):
+    for prev, cur in itertools.pairwise(rows):
         if (prev - cur).days <= 7:
             streak += 1
         else:

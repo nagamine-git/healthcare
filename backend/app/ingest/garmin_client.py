@@ -21,6 +21,7 @@ class GarminAPIProtocol(Protocol):
     def get_activities_by_date(self, startdate: str, enddate: str) -> Any: ...
     def get_user_summary(self, cdate: str) -> Any: ...
     def get_stress_data(self, cdate: str) -> Any: ...
+    def get_heart_rates(self, cdate: str) -> Any: ...
     def get_hydration_data(self, cdate: str) -> Any: ...
     def get_training_readiness(self, cdate: str) -> Any: ...
     def get_fitnessage_data(self, cdate: str) -> Any: ...
@@ -111,6 +112,15 @@ class GarminClient:
         except Exception:
             return []
         return _normalise_stress(raw)
+
+    def get_heart_rate(self, target: date_type) -> list[dict[str, Any]]:
+        """分単位の心拍 (intraday)。Apple Health に依存しないための主データ源。"""
+        self.login()
+        try:
+            raw = self._api.get_heart_rates(target.isoformat())
+        except Exception:
+            return []
+        return _normalise_heart_rate(raw)
 
     def get_training_readiness(self, target: date_type) -> dict[str, Any] | None:
         """Training Readiness (0-100 合成スコア + 要因分解)。対応端末のみ値が返る。"""
@@ -405,6 +415,23 @@ def _normalise_floors(raw: Any) -> dict[str, Any] | None:
             except (TypeError, ValueError):
                 continue
     return {"ascended": total}
+
+
+def _normalise_heart_rate(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Garmin の intraday 心拍 (heartRateValues: [[epoch_ms, bpm], ...]) を正規化。"""
+    if not raw or not isinstance(raw, dict):
+        return []
+    arr: list[list[Any]] = raw.get("heartRateValues") or []
+    out: list[dict[str, Any]] = []
+    for entry in arr:
+        if not entry or len(entry) < 2:
+            continue
+        ts = _to_dt(entry[0])
+        value = entry[1]
+        if ts is None or value is None or value <= 0:
+            continue
+        out.append({"ts": ts, "value": float(value)})
+    return out
 
 
 def _normalise_stress(raw: dict[str, Any]) -> list[dict[str, Any]]:

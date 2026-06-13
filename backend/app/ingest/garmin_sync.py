@@ -76,6 +76,11 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
             with session_scope() as session:
                 counts["stress"] = _upsert_stress(session, stress)
 
+        heart_rate = client.get_heart_rate(target)
+        if heart_rate:
+            with session_scope() as session:
+                counts["heart_rate"] = _upsert_heart_rate(session, heart_rate)
+
         hydration = client.get_hydration(target)
         if hydration:
             with session_scope() as session:
@@ -146,7 +151,7 @@ def _has_garmin_token(settings: Any) -> bool:
     return False
 
 
-async def sync_garmin_job() -> dict[str, Any]:
+async def sync_garmin_job(target: date_type | None = None) -> dict[str, Any]:
     settings = get_settings()
     if not (settings.garmin_email and settings.garmin_password):
         logger.info("garmin_sync_skipped_no_credentials")
@@ -161,7 +166,7 @@ async def sync_garmin_job() -> dict[str, Any]:
         return {"status": "skipped", "reason": "no_token"}
 
     client = GarminClient.from_settings(settings)
-    return sync_garmin(client)
+    return sync_garmin(client, target)
 
 
 def _upsert_sleep(session: Session, target: date_type, sleep: dict[str, Any]) -> None:
@@ -423,6 +428,38 @@ def _upsert_stress(session: Session, stress: list[dict[str, Any]]) -> int:
     stmt = stmt.on_conflict_do_update(
         index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
         set_={"value": stmt.excluded.value, "raw_json": stmt.excluded.raw_json},
+    )
+    session.execute(stmt)
+    return len(payload)
+
+
+def _upsert_heart_rate(session: Session, hr: list[dict[str, Any]]) -> int:
+    """Garmin の分単位心拍を metric_key=heart_rate_avg (source=garmin) で保存。
+
+    心拍を Apple Health (HAE) 依存にしないための主データ源。同一 ts は
+    バッチ内で重複排除する。
+    """
+    seen: set[datetime] = set()
+    payload = []
+    for point in hr:
+        ts = point.get("ts")
+        value = point.get("value")
+        if not isinstance(ts, datetime) or value is None:
+            continue
+        ts_naive = ts.astimezone(UTC).replace(tzinfo=None) if ts.tzinfo else ts
+        if ts_naive in seen:
+            continue
+        seen.add(ts_naive)
+        payload.append({
+            "source": "garmin", "metric_key": "heart_rate_avg",
+            "ts": ts_naive, "value": float(value), "unit": "bpm", "raw_json": None,
+        })
+    if not payload:
+        return 0
+    stmt = sqlite_insert(MetricSample).values(payload)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
+        set_={"value": stmt.excluded.value},
     )
     session.execute(stmt)
     return len(payload)

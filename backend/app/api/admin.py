@@ -20,11 +20,11 @@ async def recompute(target: date_type | None = None) -> dict[str, Any]:
 
 
 @router.post("/admin/garmin/sync")
-async def garmin_sync() -> dict[str, Any]:
+async def garmin_sync(target: date_type | None = None) -> dict[str, Any]:
     from app.ingest.garmin_sync import sync_garmin_job
 
     try:
-        result = await sync_garmin_job()
+        result = await sync_garmin_job(target)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Garmin sync failed: {exc}"
