@@ -98,9 +98,22 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         "factors": [],
     }
 
-    if episode_count < min_episodes:
+    # 件数による「精度ランク」。少なくても分析は走らせ、信頼度を明示する。
+    # 片頭痛トリガー研究で安定するのは ~10 例以降だが、数例でも傾向は見たい。
+    if episode_count >= 20:
+        reliability = "high"
+    elif episode_count >= min_episodes:
+        reliability = "medium"
+    elif episode_count >= 4:
+        reliability = "low"
+    else:
+        reliability = "very_low"
+    base["reliability"] = reliability
+
+    # 4 例未満は permutation 検定が成立しない (対照との差を語れない)
+    if episode_count < 4:
         base["status"] = "accumulating"
-        base["remaining"] = min_episodes - episode_count
+        base["remaining"] = max(0, 4 - episode_count)
         return base
 
     # --- 曝露の組み立て ---
@@ -183,26 +196,39 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
             continue
         results.append({
             "key": fd["key"], "label": fd["label"], "p": round(p, 4), "diff": diff,
+            "n_case": len(case_vals),
             "case_mean": round(sum(case_vals) / len(case_vals), 2),
             "control_mean": round(sum(ctrl_vals) / len(ctrl_vals), 2),
         })
 
     base["tested"] = [r["key"] for r in results]
     if not results:
-        base["status"] = "no_significant_factor"
+        base["status"] = "no_data"
         return base
 
     qs = benjamini_hochberg([r["p"] for r in results])
     factors = []
     for r, q in zip(results, qs, strict=True):
-        if q < FDR_Q and r["diff"] != 0:
-            factors.append({
-                "key": r["key"], "label": r["label"],
-                "direction": "誘発" if r["diff"] > 0 else "抑制?",
-                "case_mean": r["case_mean"], "control_mean": r["control_mean"],
-                "p": r["p"], "q": round(q, 4),
-            })
-    factors.sort(key=lambda f: f["q"])
+        if r["diff"] == 0:
+            continue
+        # 全要因を返し、確からしさを tier で表現 (UI で薄さに反映):
+        #   strong = FDR<0.05 / suggestive = p<0.1 / trend = p<0.25 / weak = それ未満
+        if q < FDR_Q:
+            tier = "strong"
+        elif r["p"] < 0.1:
+            tier = "suggestive"
+        elif r["p"] < 0.25:
+            tier = "trend"
+        else:
+            tier = "weak"
+        factors.append({
+            "key": r["key"], "label": r["label"],
+            "direction": "誘発" if r["diff"] > 0 else "抑制?",
+            "case_mean": r["case_mean"], "control_mean": r["control_mean"],
+            "n_case": r["n_case"], "p": r["p"], "q": round(q, 4), "tier": tier,
+        })
+    # 確からしさ順 (q 昇順 = p 昇順に近い)
+    factors.sort(key=lambda f: (f["q"], f["p"]))
     base["factors"] = factors
-    base["status"] = "has_factors" if factors else "no_significant_factor"
+    base["status"] = "analyzed"
     return base

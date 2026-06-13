@@ -24,9 +24,11 @@ def test_accumulating_below_min_episodes(db_engine):
                 started_at=datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)))
 
     out = analyze_triggers(today, min_episodes=10)
+    # 3 例は permutation が成立しない最小未満 → accumulating (4 例で分析開始)
     assert out["status"] == "accumulating"
     assert out["episode_count"] == 3
-    assert out["remaining"] == 7
+    assert out["remaining"] == 1
+    assert out["reliability"] == "very_low"
     assert out["onset_profile"]["peak_bucket"] == "昼〜午後"  # JST 15:00
     assert out["factors"] == []
 
@@ -58,7 +60,9 @@ def test_detects_pressure_swing_factor(db_engine):
     assert pf is not None, f"pressure_drop should be significant: {out['status']} {out['factors']}"
     assert pf["direction"] == "誘発"
     assert pf["case_mean"] > pf["control_mean"]
-    assert out["status"] == "has_factors"
+    assert pf["tier"] == "strong"
+    assert out["status"] == "analyzed"
+    assert out["reliability"] == "medium"  # 12 例
 
 
 def test_no_significant_factor_when_flat(db_engine):
@@ -77,6 +81,7 @@ def test_no_significant_factor_when_flat(db_engine):
                 started_at=datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)))
 
     out = analyze_triggers(today, min_episodes=10)
-    assert out["status"] == "no_significant_factor"
-    assert out["factors"] == []
+    # 全要因を返すが、平坦なので強い (strong) 判定は出ない
+    assert out["status"] in ("analyzed", "no_data")
+    assert not any(f["tier"] == "strong" for f in out["factors"])
     assert out["episode_count"] == 12

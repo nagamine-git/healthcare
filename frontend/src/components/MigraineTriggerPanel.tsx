@@ -67,40 +67,72 @@ export function MigraineTriggerPanel() {
         <div className="flex items-start gap-1.5 rounded-lg bg-slate-900/70 p-2.5 text-[11px] text-slate-400">
           <Info size={13} className="mt-0.5 shrink-0 text-sky-400" />
           <span>
-            <span className="text-slate-300">要因の統計判定は保留中。</span>
-            有意差を誠実に出すには、あと <b className="text-sky-300">{data.remaining}</b> 件の頭痛記録が必要です
-            (最低 {data.min_episodes} 件)。気圧・カフェイン離脱・睡眠不足・HRV 低下・飲酒を追跡しています。
+            <span className="text-slate-300">あと <b className="text-sky-300">{data.remaining}</b> 件で要因分析を開始</span>
+            します (最低4件)。気圧・カフェイン離脱・睡眠不足・HRV低下・飲酒を追跡中。
           </span>
         </div>
       )}
 
-      {data.status === "no_significant_factor" && (
-        <div className="rounded-lg bg-slate-900/70 p-2.5 text-[11px] text-slate-400">
-          測定した要因のうち、頭痛と<span className="text-slate-300">統計的に有意な関連</span>を持つものは
-          現時点でありません。<span className="text-slate-500">
-            (= 既知の要因では説明しきれない。引き続き記録で精度が上がります)
-          </span>
-        </div>
-      )}
-
-      {data.status === "has_factors" && (
+      {(data.status === "analyzed" || data.status === "no_data") && (
         <div className="space-y-1.5">
-          <div className="text-[11px] text-slate-400">統計的に有意な要因 (多重比較補正済み):</div>
-          {data.factors.map((f) => (
-            <div key={f.key} className="rounded-lg bg-rose-500/10 p-2.5 ring-1 ring-rose-500/30">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm text-rose-200">
-                  {f.label} <span className="text-[10px] text-rose-300/80">{f.direction}</span>
-                </span>
-                <span className="text-[10px] tabular-nums text-slate-400">p={f.p} · q={f.q}</span>
-              </div>
-              <div className="mt-0.5 text-[10px] text-slate-400">
-                頭痛時の平均 {f.case_mean} vs 平常時 {f.control_mean}
-              </div>
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span>要因の関連度 (確からしさ順)</span>
+            <ReliabilityBadge r={data.reliability} n={data.episode_count} />
+          </div>
+          {data.factors.length === 0 && (
+            <div className="rounded-lg bg-slate-900/70 p-2.5 text-[11px] text-slate-500">
+              比較できるデータがまだありません。記録が増えると関連度が出ます。
             </div>
+          )}
+          {data.factors.map((f) => (
+            <FactorRow key={f.key} f={f} />
           ))}
+          <p className="text-[9px] leading-relaxed text-slate-600">
+            ◆ 濃い=確からしい / 薄い=傾向どまり。件数が少ないほど全体的に淡く、誤検出しやすい点に注意。
+            記録が貯まると「強い示唆」へ格上げされます (多重比較補正 q 値で判定)。
+          </p>
         </div>
       )}
     </section>
   );
+}
+
+const TIER: Record<string, { label: string; ring: string; bg: string; op: string }> = {
+  strong: { label: "強い示唆", ring: "ring-rose-500/50", bg: "bg-rose-500/15", op: "opacity-100" },
+  suggestive: { label: "弱い示唆", ring: "ring-amber-500/40", bg: "bg-amber-500/10", op: "opacity-90" },
+  trend: { label: "傾向", ring: "ring-slate-600/50", bg: "bg-slate-800/40", op: "opacity-70" },
+  weak: { label: "関連薄", ring: "ring-slate-700/40", bg: "bg-slate-900/40", op: "opacity-45" },
+};
+
+function FactorRow({ f }: { f: import("../lib/api").MigraineFactor }) {
+  const t = TIER[f.tier ?? "weak"] ?? TIER.weak;
+  const trigger = f.direction === "誘発";
+  return (
+    <div className={`rounded-lg p-2.5 ring-1 ${t.ring} ${t.bg} ${t.op}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm text-slate-100">
+          {f.label}{" "}
+          <span className={`text-[10px] ${trigger ? "text-rose-300/80" : "text-emerald-300/70"}`}>
+            {trigger ? "誘発↑" : "抑制?"}
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full bg-slate-900/60 px-1.5 py-0.5 text-[9px] text-slate-300">{t.label}</span>
+      </div>
+      <div className="mt-0.5 flex items-baseline justify-between text-[10px] text-slate-400">
+        <span>頭痛時 {f.case_mean} vs 平常 {f.control_mean}</span>
+        <span className="tabular-nums text-slate-500">p={f.p} · q={f.q}{f.n_case != null ? ` · n=${f.n_case}` : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+function ReliabilityBadge({ r, n }: { r?: string; n: number }) {
+  const map: Record<string, { t: string; c: string }> = {
+    very_low: { t: "精度 とても低い", c: "text-slate-500" },
+    low: { t: "精度 低い", c: "text-amber-400/80" },
+    medium: { t: "精度 中", c: "text-sky-300" },
+    high: { t: "精度 高い", c: "text-emerald-300" },
+  };
+  const m = map[r ?? "very_low"] ?? map.very_low;
+  return <span className={`text-[10px] ${m.c}`}>{m.t} (n={n})</span>;
 }

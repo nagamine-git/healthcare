@@ -423,13 +423,16 @@ export type MigraineFactor = {
   direction: string;
   case_mean: number;
   control_mean: number;
+  n_case?: number;
   p: number;
   q: number;
+  tier?: "strong" | "suggestive" | "trend" | "weak";
 };
 export type MigraineTriggers = {
   episode_count: number;
   onset_profile: MigraineOnsetProfile;
-  status: "accumulating" | "no_significant_factor" | "has_factors";
+  status: "accumulating" | "no_data" | "analyzed" | "no_significant_factor" | "has_factors";
+  reliability?: "very_low" | "low" | "medium" | "high";
   min_episodes: number;
   remaining?: number;
   factors: MigraineFactor[];
