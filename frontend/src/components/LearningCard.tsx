@@ -81,49 +81,78 @@ function ChapterRow({
   );
 }
 
+function PlanEditor({ s }: { s: import("../lib/api").LearningState }) {
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
+      api.learningPlan(body),
+    onSuccess: (st) => { qc.setQueryData(["learning"], st); },
+  });
+  const startVal = s.projection?.started_on ?? "";
+  const targetVal = s.projection?.target_date ?? "";
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+      <label className="flex items-center gap-1 text-slate-400">
+        開始日
+        <input type="date" value={startVal}
+          onChange={(e) => save.mutate(e.target.value ? { started_on: e.target.value } : { clear_started: true })}
+          className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-slate-200" />
+      </label>
+      <label className="flex items-center gap-1 text-slate-400">
+        目標完了日
+        <input type="date" value={targetVal}
+          onChange={(e) => save.mutate(e.target.value ? { target_date: e.target.value } : { clear_target: true })}
+          className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-slate-200" />
+      </label>
+    </div>
+  );
+}
+
 function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) {
   const W = 320, H = 90, padL = 4, padR = 4, padT = 8, padB = 16;
   const start = new Date(p.series[0].date).getTime();
   const today = Date.now();
   const etaTs = p.eta_date ? new Date(p.eta_date).getTime() : today;
-  const tMax = Math.max(etaTs, today) + 12 * 3600_000;
   const tMin = start - 12 * 3600_000;
-  const x = (ts: number) => padL + ((ts - tMin) / (tMax - tMin)) * (W - padL - padR);
   const y = (pct: number) => padT + (1 - pct / 100) * (H - padT - padB);
-  const pts = p.series.map((s) => `${x(new Date(s.date).getTime())},${y(s.pct)}`).join(" ");
-  const confLabel = { low: "精度 低", medium: "精度 中", high: "精度 高" }[p.confidence];
-  const confColor = { low: "text-slate-500", medium: "text-sky-300", high: "text-emerald-300" }[p.confidence];
+  const targetTs = p.target_date ? new Date(p.target_date).getTime() : null;
+  const tMax2 = Math.max(etaTs, today, targetTs ?? 0) + 12 * 3600_000;
+  const x2 = (ts: number) => padL + ((ts - tMin) / (tMax2 - tMin)) * (W - padL - padR);
+  const confLabel = { none: "予測待ち", low: "精度 低", medium: "精度 中", high: "精度 高" }[p.confidence];
+  const confColor = { none: "text-slate-600", low: "text-slate-500", medium: "text-sky-300", high: "text-emerald-300" }[p.confidence];
   const fmt = (iso: string | null) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : "--");
   return (
     <div className="rounded-xl bg-slate-900/60 p-2.5">
       <div className="mb-1 flex items-baseline justify-between text-[11px]">
         <span className="text-slate-300">完走予測</span>
-        <span className={`text-[10px] ${confColor}`}>{confLabel} (n={p.done_units})</span>
+        <span className={`text-[10px] ${confColor}`}>{confLabel}{p.done_units > 0 ? ` (n=${p.done_units})` : ""}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="完走予測グラフ">
-        {/* 100% / 0% グリッド */}
         {[0, 50, 100].map((g) => (
           <line key={g} x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="#1e293b" strokeWidth={0.5} />
         ))}
-        {/* 実績 (実線) */}
-        <polyline points={pts} fill="none" stroke="#34d399" strokeWidth={1.8} strokeLinejoin="round" />
-        {/* 予測 (現在→eta、破線) */}
-        {p.eta_date && p.pct < 100 && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaTs)} y2={y(100)} stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 3" />
+        {/* 目標完了日の縦線 */}
+        {targetTs && (
+          <>
+            <line x1={x2(targetTs)} y1={padT} x2={x2(targetTs)} y2={H - padB} stroke={p.on_track === false ? "#fb7185" : "#a78bfa"} strokeWidth={0.8} strokeDasharray="2 2" opacity={0.7} />
+            <text x={x2(targetTs)} y={padT + 6} fontSize={8} fill={p.on_track === false ? "#fb7185" : "#a78bfa"} textAnchor="middle">目標</text>
+          </>
         )}
-        {/* 現在の点 */}
-        <circle cx={x(today)} cy={y(p.pct)} r={2.5} fill="#34d399" />
-        {/* eta の点 */}
-        {p.eta_date && p.pct < 100 && <circle cx={x(etaTs)} cy={y(100)} r={2.5} fill="#38bdf8" />}
-        {/* 軸ラベル */}
-        <text x={x(start)} y={H - 4} fontSize={9} fill="#64748b" textAnchor="start">{fmt(p.series[0].date)} 開始</text>
+        <polyline points={p.series.map((s) => `${x2(new Date(s.date).getTime())},${y(s.pct)}`).join(" ")} fill="none" stroke="#34d399" strokeWidth={1.8} strokeLinejoin="round" />
+        {p.eta_date && p.pct < 100 && (
+          <line x1={x2(today)} y1={y(p.pct)} x2={x2(etaTs)} y2={y(100)} stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 3" />
+        )}
+        <circle cx={x2(today)} cy={y(p.pct)} r={2.5} fill="#34d399" />
+        {p.eta_date && p.pct < 100 && <circle cx={x2(etaTs)} cy={y(100)} r={2.5} fill="#38bdf8" />}
+        <text x={x2(start)} y={H - 4} fontSize={9} fill="#64748b" textAnchor="start">{fmt(p.series[0].date)} 開始</text>
         {p.eta_date && p.pct < 100 && (
           <text x={W - padR} y={H - 4} fontSize={9} fill="#38bdf8" textAnchor="end">{fmt(p.eta_date)} 完走予測</text>
         )}
       </svg>
       <p className="mt-0.5 text-[10px] text-slate-400">
-        {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}項目) · 週{p.pace_per_week}項目ペース
-        {p.eta_date && p.pct < 100 ? ` → このペースで ${fmt(p.eta_date)}頃 完走` : p.pct >= 100 ? " → 完走!" : ""}
+        {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}項目){p.done_units > 0 ? ` · 週${p.pace_per_week}項目ペース` : ""}
+        {p.eta_date && p.pct < 100 ? ` → このペースで ${fmt(p.eta_date)}頃 完走` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → チェックを入れると予測開始" : ""}
+        {p.target_date && p.on_track != null ? (p.on_track ? " ✓目標内" : " ⚠目標に遅れ") : ""}
       </p>
     </div>
   );
@@ -194,7 +223,8 @@ export function LearningCard() {
         />
       </div>
 
-      {/* 完走予測グラフ (いつから・どこまで・いつ終わりそうか) */}
+      {/* 開始日・目標完了日の記録 + 完走予測グラフ */}
+      <PlanEditor s={s} />
       {s.projection && <ProjectionGraph p={s.projection} />}
 
       {s.completed ? (

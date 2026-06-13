@@ -700,7 +700,9 @@ export type LearningProjection = {
   pace_per_week: number;
   eta_date: string | null;
   eta_days: number | null;
-  confidence: "low" | "medium" | "high";
+  target_date: string | null;
+  on_track: boolean | null;
+  confidence: "none" | "low" | "medium" | "high";
   series: { date: string; pct: number }[];
 };
 
@@ -822,6 +824,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ field, done }),
     }),
+  learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
+    request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {
       method: "PUT",

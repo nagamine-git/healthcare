@@ -318,5 +318,19 @@ class LearningChapterProgress(Base):
     explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class LearningPlanMeta(Base):
+    """完走プランのメタ情報 (シングルトン id=1)。
+
+    started_on: 手動で記録する学習開始日 (未設定なら最初のチェック日を使う)。
+    target_date: 目標完了日 (任意)。予測と突き合わせて間に合うか判定する。
+    """
+
+    __tablename__ = "learning_plan_meta"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    started_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

@@ -116,13 +116,45 @@ def _is_complete(row: LearningChapterProgress | None) -> bool:
     return bool(row and row.read_at and row.rustlings_at and row.explained_at)
 
 
+def _plan_meta() -> tuple[date_type | None, date_type | None]:
+    """(手動開始日, 目標完了日)。未設定は (None, None)。"""
+    from app.models import LearningPlanMeta
+
+    with session_scope() as session:
+        m = session.get(LearningPlanMeta, 1)
+        return (m.started_on, m.target_date) if m else (None, None)
+
+
+def set_plan(*, started_on: str | None = None, target_date: str | None = None,
+             clear_started: bool = False, clear_target: bool = False) -> dict[str, Any]:
+    """学習開始日 / 目標完了日 を記録する。"""
+    from app.models import LearningPlanMeta
+
+    with session_scope() as session:
+        m = session.get(LearningPlanMeta, 1)
+        if m is None:
+            m = LearningPlanMeta(id=1)
+            session.add(m)
+        if clear_started:
+            m.started_on = None
+        elif started_on:
+            m.started_on = date_type.fromisoformat(started_on)
+        if clear_target:
+            m.target_date = None
+        elif target_date:
+            m.target_date = date_type.fromisoformat(target_date)
+    return state()
+
+
 def projection(rows: dict[int, LearningChapterProgress], today: date_type) -> dict[str, Any] | None:
     """チェック完了タイムスタンプから「いつ終わりそうか」を予測 + 累積グラフ用系列。
 
     単位はチェック (章×3 = 63)。完了日ごとの累積進捗 % を返し、現在ペースで
     100% に到達する予定日を線形外挿する。データが乏しいと confidence=low。
+    手動の開始日/目標完了日があれば反映する。
     """
     total_units = TOTAL_CHAPTERS * len(CHECK_FIELDS)
+    manual_start, target_date = _plan_meta()
     # 全完了タイムスタンプを日付で集める
     dates: list[date_type] = []
     for r in rows.values():
@@ -130,16 +162,17 @@ def projection(rows: dict[int, LearningChapterProgress], today: date_type) -> di
             ts = getattr(r, col, None)
             if ts:
                 dates.append(ts.date())
-    if len(dates) < 2:
+    # 開始日 (手動 > 最初のチェック)。手動開始日があれば 0 チェックでも予測枠は出す
+    if not dates and manual_start is None:
         return None
     dates.sort()
-    started_on = dates[0]
+    started_on = manual_start or (dates[0] if dates else today)
     done_units = len(dates)
 
-    # 累積系列 (日付 → その日までの累積 %)
+    # 累積系列 (日付 → その日までの累積 %)。開始点 0% を先頭に置く
     from collections import Counter
     by_day = Counter(dates)
-    series: list[dict[str, Any]] = []
+    series: list[dict[str, Any]] = [{"date": started_on.isoformat(), "pct": 0.0}]
     cum = 0
     for day in sorted(by_day):
         cum += by_day[day]
@@ -157,13 +190,20 @@ def projection(rows: dict[int, LearningChapterProgress], today: date_type) -> di
         eta_date = today.isoformat()
         eta_days = 0
 
-    # 信頼度: 経過日数とサンプル数で
-    if elapsed_days >= 21 and done_units >= 9:
+    # 信頼度: 経過日数とサンプル数で (チェック1個未満は予測不能)
+    if done_units < 1:
+        confidence = "none"
+    elif elapsed_days >= 21 and done_units >= 9:
         confidence = "high"
     elif elapsed_days >= 7 and done_units >= 4:
         confidence = "medium"
     else:
         confidence = "low"
+
+    # 目標日との突き合わせ
+    on_track: bool | None = None
+    if target_date and eta_date:
+        on_track = date_type.fromisoformat(eta_date) <= target_date
 
     return {
         "started_on": started_on.isoformat(),
@@ -173,6 +213,8 @@ def projection(rows: dict[int, LearningChapterProgress], today: date_type) -> di
         "pace_per_week": round(pace_per_day * 7, 1),
         "eta_date": eta_date,
         "eta_days": eta_days,
+        "target_date": target_date.isoformat() if target_date else None,
+        "on_track": on_track,
         "confidence": confidence,
         "series": series,
     }

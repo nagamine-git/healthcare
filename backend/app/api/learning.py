@@ -41,3 +41,21 @@ class ActivityIn(BaseModel):
 @router.post("/api/learning/activity")
 async def record_activity(body: ActivityIn) -> dict[str, Any]:
     return learning.record_activity(body.detail)
+
+
+class PlanIn(BaseModel):
+    started_on: str | None = None  # YYYY-MM-DD
+    target_date: str | None = None
+    clear_started: bool = False
+    clear_target: bool = False
+
+
+@router.post("/api/learning/plan")
+async def set_plan(body: PlanIn) -> dict[str, Any]:
+    try:
+        return learning.set_plan(
+            started_on=body.started_on, target_date=body.target_date,
+            clear_started=body.clear_started, clear_target=body.clear_target,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
