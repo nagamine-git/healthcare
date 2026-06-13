@@ -21,28 +21,18 @@ async def learning_state() -> dict[str, Any]:
     return learning.state()
 
 
-class CheckIn(BaseModel):
+class SectionCheckIn(BaseModel):
     field: Literal["read", "rustlings", "explained"]
-    done: bool = True
-
-
-@router.post("/api/learning/chapter/{chapter}/check")
-async def check_chapter(chapter: int, body: CheckIn) -> dict[str, Any]:
-    try:
-        return learning.set_check(chapter, body.field, body.done)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-class SectionIn(BaseModel):
     done: bool = True
     done_at_iso: str | None = None  # 過去の学習を記録する場合 (例 6/13 14:30)
 
 
-@router.post("/api/learning/section/{section_id}/toggle")
-async def toggle_section(section_id: str, body: SectionIn) -> dict[str, Any]:
+@router.post("/api/learning/section/{section_id}/check")
+async def check_section(section_id: str, body: SectionCheckIn) -> dict[str, Any]:
     try:
-        return learning.set_section(section_id, body.done, done_at_iso=body.done_at_iso)
+        return learning.set_section_check(
+            section_id, body.field, body.done, done_at_iso=body.done_at_iso
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

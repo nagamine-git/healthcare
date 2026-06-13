@@ -319,12 +319,19 @@ class LearningChapterProgress(Base):
 
 
 class LearningSectionProgress(Base):
-    """The Book の節 (subsection, 例 "4.2") 単位の進捗。done_at がセットなら読了。"""
+    """The Book の節 (subsection, 例 "4.2") 単位の進捗。
+
+    クリア条件の 3 点セット (読了 / Rustlings / 説明できた) を節ごとに持つ。
+    「読んだだけでわかったふり」を構造的に防ぐ設計を最下層 (節) に下ろしたもの。
+    旧 done_at カラムは migration で read_at へ引き継ぐ (互換)。
+    """
 
     __tablename__ = "learning_section_progress"
 
     section_id: Mapped[str] = mapped_column(String(8), primary_key=True)
-    done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rustlings_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class LearningPlanMeta(Base):

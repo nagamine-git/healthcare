@@ -27,68 +27,73 @@ const PACE_LABEL: Record<string, { text: string; cls: string }> = {
   ahead: { text: "前倒し", cls: "text-sky-400" },
 };
 
+function SectionRow({
+  s,
+  onCheck,
+  pending,
+}: {
+  s: import("../lib/api").LearningSection;
+  onCheck: (sectionId: string, field: LearningCheckField, done: boolean) => void;
+  pending: boolean;
+}) {
+  return (
+    <div className={`rounded-md px-1.5 py-1.5 ${s.done ? "opacity-60" : ""}`}>
+      <div className="flex items-baseline gap-2 text-[11px]">
+        <span className="w-8 shrink-0 tabular-nums text-slate-500">{s.id}</span>
+        <span className={`min-w-0 flex-1 ${s.done ? "text-slate-400 line-through" : "text-slate-300"}`}>{s.title}</span>
+      </div>
+      {/* 最下層の 3 点チェック (読了 / Rustlings / 説明できた)。モバイルでも折り返す */}
+      <div className="mt-1 flex flex-wrap gap-1 pl-10">
+        {CHECKS.map((c) => {
+          const done = s[c.key];
+          return (
+            <button key={c.key} type="button" disabled={pending} title={c.hint}
+              onClick={() => onCheck(s.id, c.key, !done)}
+              className={`flex h-6 items-center gap-0.5 rounded-md border px-1.5 text-[10px] transition-colors ${
+                done ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
+                     : "border-slate-700 bg-slate-900/60 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>
+              {done && <Check size={10} className="shrink-0" />}
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChapterRow({
   ch,
   isCurrent,
   onCheck,
-  onSection,
   pending,
 }: {
   ch: LearningChapter;
   isCurrent: boolean;
-  onCheck: (chapter: number, field: LearningCheckField, done: boolean) => void;
-  onSection: (sectionId: string, done: boolean) => void;
+  onCheck: (sectionId: string, field: LearningCheckField, done: boolean) => void;
   pending: boolean;
 }) {
   const [open, setOpen] = useState(isCurrent);
-  const hasSec = ch.section_total > 1;
   return (
     <div className={`rounded-lg ${isCurrent ? "bg-slate-800/80 ring-1 ring-emerald-500/40" : ""} ${ch.complete ? "opacity-60" : ""}`}>
-      <div className="flex items-center gap-2 px-2 py-1.5">
-        <button type="button" onClick={() => hasSec && setOpen((v) => !v)}
-          className={`flex min-w-0 flex-1 items-center gap-2 text-left ${hasSec ? "" : "cursor-default"}`}>
-          {hasSec ? (open ? <ChevronUp size={12} className="shrink-0 text-slate-500" /> : <ChevronDown size={12} className="shrink-0 text-slate-500" />) : <span className="w-3 shrink-0" />}
-          <span className={`w-9 shrink-0 text-[11px] tabular-nums ${ch.milestone ? "font-semibold text-amber-300" : "text-slate-400"}`}>ch{ch.chapter}</span>
-          <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">
-            {ch.title}
-            {ch.milestone && <span className="ml-1 text-[10px] text-amber-400/80">⛰ 山場</span>}
-          </span>
-          {ch.section_total > 0 && (
-            <span className={`shrink-0 text-[10px] tabular-nums ${ch.section_done === ch.section_total ? "text-emerald-400" : "text-slate-500"}`}>
-              {ch.section_done}/{ch.section_total}節
-            </span>
-          )}
-        </button>
-        <div className="flex shrink-0 gap-1">
-          {CHECKS.map((c) => {
-            const done = ch[c.key];
-            return (
-              <button key={c.key} type="button" disabled={pending} title={c.hint}
-                onClick={() => onCheck(ch.chapter, c.key, !done)}
-                className={`flex h-6 items-center gap-0.5 rounded-md border px-1.5 text-[10px] transition-colors ${
-                  done ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
-                       : "border-slate-700 bg-slate-900/60 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>
-                {done && <Check size={10} />}
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {/* 節 (subsection) チェックリスト */}
-      {open && hasSec && (
-        <div className="grid gap-0.5 px-2 pb-2 pl-12">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="flex w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left">
+        {open ? <ChevronUp size={12} className="shrink-0 text-slate-500" /> : <ChevronDown size={12} className="shrink-0 text-slate-500" />}
+        <span className={`w-9 shrink-0 text-[11px] tabular-nums ${ch.milestone ? "font-semibold text-amber-300" : "text-slate-400"}`}>ch{ch.chapter}</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">
+          {ch.title}
+          {ch.milestone && <span className="ml-1 text-[10px] text-amber-400/80">⛰ 山場</span>}
+        </span>
+        {ch.complete && <Check size={12} className="shrink-0 text-emerald-400" />}
+        <span className={`shrink-0 text-[10px] tabular-nums ${ch.section_done === ch.section_total ? "text-emerald-400" : "text-slate-500"}`}>
+          {ch.section_done}/{ch.section_total}節
+        </span>
+      </button>
+      {/* 節 (subsection) ごとの 3 点チェック */}
+      {open && (
+        <div className="grid gap-0.5 px-1 pb-2 pl-3">
           {ch.sections.map((s) => (
-            <button key={s.id} type="button" disabled={pending}
-              onClick={() => onSection(s.id, !s.done)}
-              className="flex items-center gap-2 rounded px-1.5 py-1 text-left text-[11px] hover:bg-slate-800/60">
-              <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${
-                s.done ? "border-emerald-500 bg-emerald-500/30 text-emerald-300" : "border-slate-600 text-transparent"}`}>
-                <Check size={10} />
-              </span>
-              <span className="w-8 shrink-0 tabular-nums text-slate-500">{s.id}</span>
-              <span className={`min-w-0 flex-1 truncate ${s.done ? "text-slate-400 line-through" : "text-slate-300"}`}>{s.title}</span>
-            </button>
+            <SectionRow key={s.id} s={s} onCheck={onCheck} pending={pending} />
           ))}
         </div>
       )}
@@ -123,60 +128,80 @@ function PlanEditor({ s }: { s: import("../lib/api").LearningState }) {
   );
 }
 
+const GOAL_LABEL: Record<string, { text: string; cls: string }> = {
+  safe: { text: "✓ 達成ほぼ確実", cls: "text-emerald-300" },
+  likely: { text: "達成見込み", cls: "text-sky-300" },
+  at_risk: { text: "⚠ ギリギリ", cls: "text-amber-300" },
+  unlikely: { text: "⚠ 目標に届かない見込み", cls: "text-rose-300" },
+};
+
 function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) {
   const W = 320, H = 96, padL = 4, padR = 4, padT = 8, padB = 16;
   const start = new Date(p.series[0].date).getTime();
   const today = Date.now();
   const ts = (iso: string | null) => (iso ? new Date(iso).getTime() : today);
   const etaN = ts(p.eta_normal);
-  const etaP = ts(p.eta_optimistic);
+  const etaBest = ts(p.eta_best);
+  const etaWorst = ts(p.eta_worst);
   const targetTs = p.target_date ? new Date(p.target_date).getTime() : null;
   const tMin = start - 12 * 3600_000;
-  const tMax = Math.max(etaN, etaP, today, targetTs ?? 0) + 12 * 3600_000;
+  const tMax = Math.max(etaN, etaBest, etaWorst, today, targetTs ?? 0) + 12 * 3600_000;
   const x = (t: number) => padL + ((t - tMin) / (tMax - tMin)) * (W - padL - padR);
   const y = (pct: number) => padT + (1 - pct / 100) * (H - padT - padB);
   const confLabel = { none: "予測待ち", low: "精度 低", medium: "精度 中", high: "精度 高" }[p.confidence];
   const confColor = { none: "text-slate-600", low: "text-slate-500", medium: "text-sky-300", high: "text-emerald-300" }[p.confidence];
   const fmt = (iso: string | null) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : "--");
   const showProj = p.pct < 100 && p.done_units > 0;
+  const goal = p.goal_status ? GOAL_LABEL[p.goal_status] : null;
+  // best/worst を結ぶ予測帯 (today,pct → 100%) の塗り
+  const band = showProj
+    ? `${x(today)},${y(p.pct)} ${x(etaBest)},${y(100)} ${x(etaWorst)},${y(100)}`
+    : "";
   return (
     <div className="rounded-xl bg-slate-900/60 p-2.5">
-      <div className="mb-1 flex items-baseline justify-between text-[11px]">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
         <span className="text-slate-300">完走予測</span>
-        <span className={`text-[10px] ${confColor}`}>{confLabel}{p.done_units > 0 ? ` (n=${p.done_units})` : ""}</span>
+        <span className="ml-auto flex items-baseline gap-2">
+          {goal && <span className={`text-[10px] ${goal.cls}`}>{goal.text}</span>}
+          <span className={`text-[10px] ${confColor}`}>{confLabel}{p.done_units > 0 ? ` (n=${p.done_units})` : ""}</span>
+        </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="完走予測グラフ">
         {[0, 50, 100].map((g) => (
           <line key={g} x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="#1e293b" strokeWidth={0.5} />
         ))}
+        {/* 予測帯 (好調〜不調の幅) */}
+        {showProj && <polygon points={band} fill="#fbbf24" opacity={0.1} />}
         {/* 目標線 (開始0%→目標日100%、グレー直線) */}
         {targetTs && (
           <line x1={x(start)} y1={y(0)} x2={x(targetTs)} y2={y(100)} stroke="#64748b" strokeWidth={1.3} />
         )}
-        {/* P予想 (楽観・直近ペース) と N予想 (標準・全体ペース) */}
-        {showProj && p.eta_optimistic && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaP)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.3} strokeDasharray="2 2" opacity={0.85} />
+        {/* best予想 (好調 1.43倍速) / N予想 (標準) / worst予想 (不調 0.7倍) */}
+        {showProj && p.eta_best && (
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaBest)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
+        )}
+        {showProj && p.eta_worst && (
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaWorst)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
         )}
         {showProj && p.eta_normal && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaN)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.3} strokeDasharray="5 3" opacity={0.55} />
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaN)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="5 3" opacity={0.9} />
         )}
         {/* 実測 (オレンジ実線) */}
         <polyline points={p.series.map((s) => `${x(new Date(s.date).getTime())},${y(s.pct)}`).join(" ")} fill="none" stroke="#f59e0b" strokeWidth={1.8} strokeLinejoin="round" />
         <circle cx={x(today)} cy={y(p.pct)} r={2.5} fill="#f59e0b" />
         <text x={x(start)} y={H - 4} fontSize={9} fill="#64748b" textAnchor="start">{fmt(p.series[0].date)}開始</text>
-        {showProj && <text x={W - padR} y={H - 4} fontSize={9} fill="#fbbf24" textAnchor="end">完走 {fmt(p.eta_optimistic)}〜{fmt(p.eta_normal)}</text>}
+        {showProj && <text x={W - padR} y={H - 4} fontSize={9} fill="#fbbf24" textAnchor="end">完走 {fmt(p.eta_best)}〜{fmt(p.eta_worst)}</text>}
       </svg>
       {/* 凡例 */}
       <div className="mt-0.5 flex flex-wrap gap-x-3 text-[9px] text-slate-500">
         <span><span className="text-amber-500">━</span> 実測</span>
-        <span><span className="text-amber-400">┈</span> P予想(直近ペース)</span>
-        <span><span className="text-amber-400/60">╌</span> N予想(平均ペース)</span>
+        <span><span className="text-amber-400">╌</span> 標準ペース</span>
+        <span><span className="text-amber-400/70">┈</span> 好調〜不調(±0.7×)</span>
         {targetTs && <span><span className="text-slate-400">━</span> 目標</span>}
       </div>
       <p className="mt-0.5 text-[10px] text-slate-400">
-        {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}節){p.done_units > 0 ? ` · 直近週${p.pace_recent_per_week}/平均週${p.pace_per_week}節` : ""}
-        {showProj ? ` → ${fmt(p.eta_optimistic)}〜${fmt(p.eta_normal)}頃 完走` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → 節をチェックすると予測開始" : ""}
-        {p.target_date && p.on_track != null ? (p.on_track ? " ✓目標内" : " ⚠目標に遅れ") : ""}
+        {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}チェック){p.done_units > 0 ? ` · 平均週${p.pace_per_week}チェック` : ""}
+        {showProj ? ` → 標準${fmt(p.eta_normal)}頃 (好調${fmt(p.eta_best)}〜不調${fmt(p.eta_worst)})` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → チェックすると予測開始" : ""}
       </p>
     </div>
   );
@@ -186,16 +211,9 @@ export function LearningCard() {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const q = useQuery({ queryKey: ["learning"], queryFn: api.learningState });
-  const check = useMutation({
-    mutationFn: ({ chapter, field, done }: { chapter: number; field: LearningCheckField; done: boolean }) =>
-      api.learningCheck(chapter, field, done),
-    onSuccess: (state) => {
-      qc.setQueryData(["learning"], state);
-      qc.invalidateQueries({ queryKey: ["life"] });
-    },
-  });
   const section = useMutation({
-    mutationFn: ({ id, done }: { id: string; done: boolean }) => api.learningSection(id, done),
+    mutationFn: ({ id, field, done }: { id: string; field: LearningCheckField; done: boolean }) =>
+      api.learningSection(id, field, done),
     onSuccess: (state) => {
       qc.setQueryData(["learning"], state);
       qc.invalidateQueries({ queryKey: ["life"] });
@@ -221,9 +239,8 @@ export function LearningCard() {
         (c) => s.current_chapter != null && Math.abs(c.chapter - s.current_chapter) <= 1,
       );
 
-  const onCheck = (chapter: number, field: LearningCheckField, done: boolean) =>
-    check.mutate({ chapter, field, done });
-  const onSection = (id: string, done: boolean) => section.mutate({ id, done });
+  const onCheck = (id: string, field: LearningCheckField, done: boolean) =>
+    section.mutate({ id, field, done });
 
   return (
     <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
@@ -277,8 +294,7 @@ export function LearningCard() {
                 ch={ch}
                 isCurrent={ch.chapter === s.current_chapter}
                 onCheck={onCheck}
-                onSection={onSection}
-                pending={check.isPending || section.isPending}
+                pending={section.isPending}
               />
             ))}
           </div>

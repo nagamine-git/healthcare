@@ -37,21 +37,28 @@ def test_initial_state(app_client):
     assert ch4["milestone"] is True
 
 
+def _check(client, sid, field, done=True):
+    return client.post(f"/api/learning/section/{sid}/check", json={"field": field, "done": done})
+
+
 def test_three_point_completion(app_client):
-    """読了だけでは complete にならない — 3 点セットで初めて章クリア。"""
-    r = app_client.post("/api/learning/chapter/1/check", json={"field": "read", "done": True})
+    """節は 3 点セットで初めて complete。章は全節 complete で初めてクリア。"""
+    # 1 章は 1.1 / 1.2 / 1.3 の 3 節。1.1 を読了だけ → まだ未完
+    r = _check(app_client, "1.1", "read")
     assert r.status_code == 200
     s = r.json()
     ch1 = next(c for c in s["chapters"] if c["chapter"] == 1)
-    assert ch1["read"] is True
+    sec = next(x for x in ch1["sections"] if x["id"] == "1.1")
+    assert sec["read"] is True
+    assert sec["done"] is False
     assert ch1["complete"] is False
-    assert s["done_count"] == 0
-    assert s["current_chapter"] == 1  # まだ 1 章のまま
+    assert s["section_done"] == 0
+    assert s["current_chapter"] == 1
 
-    app_client.post("/api/learning/chapter/1/check", json={"field": "rustlings", "done": True})
-    s = app_client.post(
-        "/api/learning/chapter/1/check", json={"field": "explained", "done": True}
-    ).json()
+    # 1 章の全 3 節 × 3 点を埋めると章クリア
+    for sid in ("1.1", "1.2", "1.3"):
+        for field in ("read", "rustlings", "explained"):
+            s = _check(app_client, sid, field).json()
     ch1 = next(c for c in s["chapters"] if c["chapter"] == 1)
     assert ch1["complete"] is True
     assert s["done_count"] == 1
@@ -59,13 +66,13 @@ def test_three_point_completion(app_client):
 
 
 def test_check_writes_learning_domain_entry(app_client):
-    """章チェックが当日の学習ドメイン達成度 (ライフスコア経路) に反映される。"""
-    app_client.post("/api/learning/chapter/4/check", json={"field": "read", "done": True})
+    """節チェックが当日の学習ドメイン達成度 (ライフスコア経路) に反映される。"""
+    _check(app_client, "4.1", "read")
     today = app_today().isoformat()
     body = app_client.get("/api/domain/learning").json()
     entry = next(d for d in body["data"] if d["date"] == today)
     assert entry["achievement"] == 100.0
-    assert "ch4" in entry["detail"]
+    assert "4.1" in entry["detail"]
     assert "読了" in entry["detail"]
 
     life = app_client.get("/api/life").json()
@@ -74,21 +81,17 @@ def test_check_writes_learning_domain_entry(app_client):
 
 
 def test_uncheck_reverts_field(app_client):
-    app_client.post("/api/learning/chapter/2/check", json={"field": "read", "done": True})
-    s = app_client.post(
-        "/api/learning/chapter/2/check", json={"field": "read", "done": False}
-    ).json()
+    _check(app_client, "2", "read")
+    s = _check(app_client, "2", "read", done=False).json()
     ch2 = next(c for c in s["chapters"] if c["chapter"] == 2)
-    assert ch2["read"] is False
+    sec = next(x for x in ch2["sections"] if x["id"] == "2")
+    assert sec["read"] is False
 
 
-def test_unknown_chapter_and_field(app_client):
+def test_unknown_section_and_field(app_client):
+    assert _check(app_client, "99.9", "read").status_code == 404
     assert (
-        app_client.post("/api/learning/chapter/99/check", json={"field": "read", "done": True}).status_code
-        == 404
-    )
-    assert (
-        app_client.post("/api/learning/chapter/1/check", json={"field": "bogus", "done": True}).status_code
+        app_client.post("/api/learning/section/1.1/check", json={"field": "bogus", "done": True}).status_code
         == 422
     )
 
@@ -107,11 +110,12 @@ def test_llm_summary_shape(app_client):
     """LLM payload 用サマリが現在章と進捗を返す。"""
     from app.scoring.learning import llm_summary
 
-    app_client.post("/api/learning/chapter/1/check", json={"field": "read", "done": True})
+    _check(app_client, "1.1", "read")
     s = llm_summary()
     assert s["progress"] == "0/21 章完了"
     assert s["current_chapter"]["chapter"] == 1
-    assert s["current_chapter"]["checks"]["read"] is True
+    # 章の read は全節が read で初めて True。1.1 だけなのでまだ False
+    assert s["current_chapter"]["checks"]["read"] is False
     assert s["today_done"] is True
 
 
@@ -120,30 +124,41 @@ def test_projection_estimates_completion(db_engine):
 
     from app.db import session_scope
     from app.models import LearningSectionProgress
-    from app.scoring.learning import TOTAL_SECTIONS, _progress_rows, projection
+    from app.scoring.learning import TOTAL_CHECKS, projection
 
     today = date(2026, 6, 13)
-    start = datetime(2026, 6, 1, 9, 0)
-    # 節を5つ、最初の12日に分散して読了 (projection は節単位)
+    start = datetime(2026, 6, 1, 0, 0)
+    # 節を5つ、最初の12日に分散して読了 (projection はチェック単位)
     with session_scope() as s:
         for i, sid in enumerate(["1.1", "1.2", "1.3", "3.1", "3.2"]):
-            s.add(LearningSectionProgress(section_id=sid, done_at=start + timedelta(days=i * 3)))
-    p = projection(_progress_rows(), today)
+            s.add(LearningSectionProgress(section_id=sid, read_at=start + timedelta(days=i * 3)))
+    p = projection(today)
     assert p is not None
     assert p["done_units"] == 5
-    assert p["total_units"] == TOTAL_SECTIONS
+    assert p["total_units"] == TOTAL_CHECKS
     assert p["started_on"] == "2026-06-01"
     assert p["eta_date"] is not None
+    # ±0.7 帯: best (好調) は normal より早く、worst (不調) は遅い
+    assert p["eta_best"] <= p["eta_normal"] <= p["eta_worst"]
     assert len(p["series"]) >= 1
 
 
-def test_section_toggle(app_client):
-    """節をトグルすると section_done が増え、章に節リストが付く。"""
-    r = app_client.post("/api/learning/section/4.1/toggle", json={"done": True}).json()
-    assert r["section_done"] == 1
+def test_section_check(app_client):
+    """節は 3 点揃って done。section_done は完了節数を数える。"""
+    # 4.1 を読了だけ → section_done はまだ 0 (3 点未達)
+    r = _check(app_client, "4.1", "read").json()
+    assert r["section_done"] == 0
     ch4 = next(c for c in r["chapters"] if c["chapter"] == 4)
     assert ch4["section_total"] == 3
+    sec = next(x for x in ch4["sections"] if x["id"] == "4.1")
+    assert sec["read"] is True and sec["done"] is False
+
+    # 3 点揃えると done
+    _check(app_client, "4.1", "rustlings")
+    r = _check(app_client, "4.1", "explained").json()
+    assert r["section_done"] == 1
+    ch4 = next(c for c in r["chapters"] if c["chapter"] == 4)
     assert ch4["section_done"] == 1
     assert any(s["id"] == "4.1" and s["done"] for s in ch4["sections"])
     # 不正な節は 404
-    assert app_client.post("/api/learning/section/99.9/toggle", json={"done": True}).status_code == 404
+    assert _check(app_client, "99.9", "read").status_code == 404

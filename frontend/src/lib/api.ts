@@ -667,7 +667,14 @@ export type LifeResponse = {
 };
 
 export type LearningCheckField = "read" | "rustlings" | "explained";
-export type LearningSection = { id: string; title: string; done: boolean };
+export type LearningSection = {
+  id: string;
+  title: string;
+  done: boolean;
+  read: boolean;
+  rustlings: boolean;
+  explained: boolean;
+};
 export type LearningChapter = {
   chapter: number;
   title: string;
@@ -694,6 +701,10 @@ export type LearningState = {
   last_activity: string | null;
   today: { achievement: number | null; detail: string | null } | null;
   completed: boolean;
+  section_done: number;
+  section_total: number;
+  check_done: number;
+  check_total: number;
   projection: LearningProjection | null;
 };
 export type LearningProjection = {
@@ -706,9 +717,11 @@ export type LearningProjection = {
   eta_date: string | null;
   eta_days: number | null;
   eta_normal: string | null;
-  eta_optimistic: string | null;
+  eta_best: string | null;
+  eta_worst: string | null;
   target_date: string | null;
   on_track: boolean | null;
+  goal_status: "safe" | "likely" | "at_risk" | "unlikely" | null;
   confidence: "none" | "low" | "medium" | "high";
   series: { date: string; pct: number }[];
 };
@@ -826,17 +839,12 @@ export const api = {
     request<{ deleted: number }>(`/api/alcohol/${id}`, { method: "DELETE" }),
   life: () => request<LifeResponse>("/api/life"),
   learningState: () => request<LearningState>("/api/learning/state"),
-  learningCheck: (chapter: number, field: LearningCheckField, done: boolean) =>
-    request<LearningState>(`/api/learning/chapter/${chapter}/check`, {
-      method: "POST",
-      body: JSON.stringify({ field, done }),
-    }),
   learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
     request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),
-  learningSection: (sectionId: string, done: boolean, doneAtIso?: string) =>
-    request<LearningState>(`/api/learning/section/${sectionId}/toggle`, {
+  learningSection: (sectionId: string, field: LearningCheckField, done: boolean, doneAtIso?: string) =>
+    request<LearningState>(`/api/learning/section/${sectionId}/check`, {
       method: "POST",
-      body: JSON.stringify({ done, done_at_iso: doneAtIso }),
+      body: JSON.stringify({ field, done, done_at_iso: doneAtIso }),
     }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {

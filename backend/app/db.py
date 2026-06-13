@@ -100,6 +100,11 @@ def _apply_lightweight_migrations() -> None:
         "daily_score": [("body_fat_sub", "REAL")],
         "llm_comment": [("payload", "JSON")],
         "subjective_checkin": [("from_suggested", "JSON")],
+        "learning_section_progress": [
+            ("read_at", "DATETIME"),
+            ("rustlings_at", "DATETIME"),
+            ("explained_at", "DATETIME"),
+        ],
     }
     with engine.begin() as conn:
         for table, cols in expected.items():
@@ -109,3 +114,12 @@ def _apply_lightweight_migrations() -> None:
             for name, sql_type in cols:
                 if name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+        # 旧 done_at (節の単一トグル) を read_at へ引き継ぐ。done_at がまだ
+        # 物理的に残っている既存 DB のみ対象 (新規 DB には存在しない)。
+        if "learning_section_progress" in inspector.get_table_names():
+            cols = {c["name"] for c in inspector.get_columns("learning_section_progress")}
+            if "done_at" in cols:
+                conn.execute(text(
+                    "UPDATE learning_section_progress SET read_at = done_at "
+                    "WHERE read_at IS NULL AND done_at IS NOT NULL"
+                ))
