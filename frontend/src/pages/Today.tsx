@@ -271,9 +271,9 @@ export function TodayPage({ onOpenDebug }: Props) {
         }
       />
 
-      {/* ===== 💪 部位別トレーニング ===== */}
+      {/* ===== 💪 部位別ステータス ===== */}
       <div id="bodyload-section">
-        <SectionHeader label="部位別トレーニング" hint="刺激・回復・週間負荷 — 今日やるべき部位を自動算出" />
+        <SectionHeader label="部位別ステータス" hint="筋負荷マップ + 統合HP — 人体図で自動表示" />
         <BodyLoadCard />
       </div>
 

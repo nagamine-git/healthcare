@@ -761,6 +761,31 @@ export type LearningQuizResult = {
   error?: boolean;
 };
 
+export type BodyMapMuscle = {
+  key: string;
+  label: string;
+  recovery_pct: number;
+  confidence: "measured" | "inferred" | "none";
+  suggested: boolean;
+  week_load: number;
+  home: string;
+  hours_since: number | null;
+};
+export type BodyHpGauge = {
+  region: "head" | "thorax" | "stomach" | "arm" | "leg";
+  label: string;
+  metric: string;
+  value: number | null;
+  detail: string;
+};
+export type BodyMapState = {
+  muscle: BodyMapMuscle[];
+  suggestion: BodyLoadSuggestion[];
+  muscle_confidence: "high" | "low" | "none";
+  hp: BodyHpGauge[];
+  hp_total: number | null;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -874,6 +899,7 @@ export const api = {
     request<{ deleted: number }>(`/api/alcohol/${id}`, { method: "DELETE" }),
   life: () => request<LifeResponse>("/api/life"),
   bodyLoad: () => request<BodyLoadState>("/api/bodyload"),
+  bodyMap: () => request<BodyMapState>("/api/bodymap"),
   learningState: () => request<LearningState>("/api/learning/state"),
   learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
     request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),

@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.scoring import bodyload
+from app.scoring import bodyload, bodymap
 
 router = APIRouter()
 
@@ -18,3 +18,9 @@ router = APIRouter()
 @router.get("/api/bodyload")
 async def get_bodyload() -> dict[str, Any]:
     return bodyload.state()
+
+
+@router.get("/api/bodymap")
+async def get_bodymap() -> dict[str, Any]:
+    """部位別の筋負荷マップ + 統合ステータス (HP ゲージ)。"""
+    return bodymap.state()

@@ -1,70 +1,113 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Dumbbell, ChevronDown, ChevronUp } from "lucide-react";
+import { Dumbbell, HeartPulse } from "lucide-react";
 import { api } from "../lib/api";
-import type { BodyGroup } from "../lib/api";
+import type { BodyMapMuscle, BodyHpGauge } from "../lib/api";
+import { BodyFigure } from "./BodyFigure";
+import type { ShapeKey } from "./BodyFigure";
 
 /**
- * 部位別 (5 機能群) の刺激・回復・週間負荷カード。
+ * 部位別の筋負荷マップ + 統合ステータス (Tarkov 風 HP ゲージ)。
  *
- * データは Garmin の activity から完全自動で導出 (手動入力なし)。
- * 「今日やるべき部位」= 回復済み × 美的重み (V字なら肩・背中を重視) × 直近負荷少。
- * 強度を確証できない群 (種目情報なしの cardio/HIIT 由来) は confidence で薄く表示し、
- * 「刺激記録なし=伸びしろ」も正直に出す。
+ * データは Garmin の activity / Body Battery / 偏頭痛 / 水分から完全自動で導出。
+ * 筋負荷: 緑=回復済み(やれる) / 橙→赤=直近に負荷(回復中)。おすすめ部位は枠で強調。
+ * 統合: 緑=良好 / 赤=要注意。各ゲージは実指標の裏付けつき。
  */
 
-function recoveryColor(pct: number): string {
-  if (pct >= 100) return "bg-emerald-500";
-  if (pct >= 60) return "bg-amber-500";
-  return "bg-rose-500";
+// 回復% → 色 (高=回復済み=緑 / 低=直近に負荷=赤)
+function recoveryColor(pct: number, conf: string): string {
+  if (conf === "none") return "#475569";
+  if (pct >= 90) return "#34d399";
+  if (pct >= 60) return "#fbbf24";
+  return "#f87171";
+}
+// HP値 → 色 (高=良好=緑 / 低=要注意=赤)
+function hpColor(v: number | null): string {
+  if (v == null) return "#475569";
+  if (v >= 70) return "#34d399";
+  if (v >= 40) return "#fbbf24";
+  return "#f87171";
 }
 
-function ConfBadge({ c }: { c: BodyGroup["confidence"] }) {
-  if (c === "measured")
-    return <span className="text-[9px] text-emerald-400" title="種目記録から実測">実測</span>;
-  if (c === "inferred")
-    return <span className="text-[9px] text-slate-500" title="活動種別からの推定 (強度は概算)">推定</span>;
-  return <span className="text-[9px] text-slate-600" title="刺激の記録なし">記録なし</span>;
+const MUSCLE_FRONT: Record<string, ShapeKey[]> = {
+  shoulders: ["shoulderL", "shoulderR"],
+  push: ["chest"],
+  core: ["abs"],
+  legs: ["legL", "legR"],
+};
+const MUSCLE_BACK: Record<string, ShapeKey[]> = {
+  shoulders: ["shoulderL", "shoulderR"],
+  pull: ["upperBack"],
+  legs: ["legL", "legR"],
+};
+const HP_SHAPES: Record<string, ShapeKey[]> = {
+  head: ["head"],
+  thorax: ["chest"],
+  stomach: ["abs"],
+  arm: ["armL", "armR"],
+  leg: ["legL", "legR"],
+};
+
+function buildFills(
+  map: Record<string, ShapeKey[]>,
+  colorOf: (key: string) => string,
+  suggestedKeys?: Set<string>,
+): { fills: Partial<Record<ShapeKey, string>>; suggested: Partial<Record<ShapeKey, boolean>> } {
+  const fills: Partial<Record<ShapeKey, string>> = {};
+  const suggested: Partial<Record<ShapeKey, boolean>> = {};
+  for (const [key, shapes] of Object.entries(map)) {
+    for (const sh of shapes) {
+      fills[sh] = colorOf(key);
+      if (suggestedKeys?.has(key)) suggested[sh] = true;
+    }
+  }
+  return { fills, suggested };
 }
 
-function GroupRow({ g }: { g: BodyGroup }) {
-  const ready = g.recovery_pct >= 100;
-  const sore = g.recovery_pct < 60;
+function MuscleRow({ m }: { m: BodyMapMuscle }) {
+  const ready = m.recovery_pct >= 100;
   return (
-    <div className={`rounded-md px-2 py-1.5 ${g.confidence === "none" ? "opacity-70" : ""}`}>
+    <div className={`rounded-md px-2 py-1.5 ${m.confidence === "none" ? "opacity-70" : ""} ${m.suggested ? "bg-amber-500/5" : ""}`}>
       <div className="flex items-baseline gap-2 text-[11px]">
-        <span className="min-w-0 flex-1 truncate text-slate-200">{g.label}</span>
-        <ConfBadge c={g.confidence} />
+        <span className="min-w-0 flex-1 truncate text-slate-200">
+          {m.label}
+          {m.suggested && <span className="ml-1 text-[9px] text-amber-300">★今日</span>}
+        </span>
         <span className="shrink-0 tabular-nums text-slate-500">
-          {g.confidence === "none"
-            ? "刺激なし"
-            : ready
-              ? "回復済"
-              : `回復${g.recovery_pct}%`}
+          {m.confidence === "none" ? "刺激なし" : ready ? "回復済" : `回復${m.recovery_pct}%`}
         </span>
       </div>
-      {/* 回復バー */}
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
-        <div className={`h-full rounded-full ${recoveryColor(g.recovery_pct)} transition-all`}
-          style={{ width: `${Math.max(g.recovery_pct, 3)}%` }} />
+        <div className="h-full rounded-full transition-all"
+          style={{ width: `${Math.max(m.recovery_pct, 3)}%`, background: recoveryColor(m.recovery_pct, m.confidence) }} />
       </div>
-      <div className="mt-0.5 flex items-baseline justify-between text-[9px] text-slate-500">
-        <span>{g.home}</span>
-        <span className="shrink-0 tabular-nums">
-          {g.confidence === "none"
-            ? "伸びしろ"
-            : sore
-              ? "回復待ち"
-              : `週負荷 ${Math.round(g.week_load)}`}
+      <div className="mt-0.5 truncate text-[9px] text-slate-500">{m.confidence === "none" ? `伸びしろ · ${m.home}` : m.home}</div>
+    </div>
+  );
+}
+
+function HpRow({ g }: { g: BodyHpGauge }) {
+  return (
+    <div className="rounded-md px-2 py-1.5">
+      <div className="flex items-baseline gap-2 text-[11px]">
+        <span className="shrink-0 text-slate-200">{g.label}</span>
+        <span className="min-w-0 flex-1 truncate text-[10px] text-slate-500">{g.metric}</span>
+        <span className="shrink-0 tabular-nums" style={{ color: hpColor(g.value) }}>
+          {g.value == null ? "—" : g.value}
         </span>
       </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full rounded-full transition-all"
+          style={{ width: `${Math.max(g.value ?? 0, 3)}%`, background: hpColor(g.value) }} />
+      </div>
+      <div className="mt-0.5 truncate text-[9px] text-slate-500">{g.detail}</div>
     </div>
   );
 }
 
 export function BodyLoadCard() {
-  const [open, setOpen] = useState(false);
-  const q = useQuery({ queryKey: ["bodyload"], queryFn: api.bodyLoad });
+  const [tab, setTab] = useState<"muscle" | "hp">("muscle");
+  const q = useQuery({ queryKey: ["bodymap"], queryFn: api.bodyMap });
 
   if (q.isLoading || !q.data) {
     return (
@@ -74,52 +117,96 @@ export function BodyLoadCard() {
     );
   }
   const s = q.data;
-  // 優先度順 (今日やるべき部位が上)
-  const ordered = [...s.groups].sort((a, b) => b.priority - a.priority);
-  const sug = s.suggestion;
+  const muscleByKey = (key: string) => s.muscle.find((m) => m.key === key);
+  const suggestedKeys = new Set(s.suggestion.map((x) => x.key));
+
+  const muscleColor = (key: string) => {
+    const m = muscleByKey(key);
+    return m ? recoveryColor(m.recovery_pct, m.confidence) : "#475569";
+  };
+  const front = buildFills(MUSCLE_FRONT, muscleColor, suggestedKeys);
+  const back = buildFills(MUSCLE_BACK, muscleColor, suggestedKeys);
+
+  const hpByRegion = (r: string) => s.hp.find((g) => g.region === r);
+  const hpColorOf = (r: string) => hpColor(hpByRegion(r)?.value ?? null);
+  const hpFig = buildFills(HP_SHAPES, hpColorOf);
+
+  const orderedMuscle = [...s.muscle].sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.recovery_pct - b.recovery_pct);
 
   return (
     <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
       <div className="flex items-center gap-1.5">
         <Dumbbell size={14} className="text-amber-300" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">部位別トレーニング</span>
-        <span className="ml-auto text-[10px] text-slate-500">
-          {s.confidence === "high" ? "精度 高 (種目記録あり)" : s.confidence === "low" ? "精度 低 (活動種別から推定)" : "活動記録待ち"}
+        <span className="text-xs uppercase tracking-wider text-slate-400">部位別ステータス</span>
+        {/* タブ */}
+        <span className="ml-auto flex gap-1 rounded-lg bg-slate-800/80 p-0.5 text-[10px]">
+          <button type="button" onClick={() => setTab("muscle")}
+            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "muscle" ? "bg-slate-700 text-amber-200" : "text-slate-400"}`}>
+            <Dumbbell size={11} /> 筋負荷
+          </button>
+          <button type="button" onClick={() => setTab("hp")}
+            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "hp" ? "bg-slate-700 text-emerald-200" : "text-slate-400"}`}>
+            <HeartPulse size={11} /> 統合
+          </button>
         </span>
       </div>
 
-      {/* 今日やるべき部位 */}
-      {sug.length > 0 && (
-        <div className="rounded-xl bg-slate-900/60 p-2.5">
-          <div className="mb-1 text-[11px] text-slate-300">今日やるべき部位</div>
-          <div className="flex flex-col gap-1.5">
-            {sug.map((x) => (
-              <div key={x.key} className="flex items-baseline gap-2 text-[12px]">
-                <span className="shrink-0 font-semibold text-amber-300">{x.label}</span>
-                {x.confidence === "none" && (
-                  <span className="shrink-0 text-[9px] text-slate-500">伸びしろ (刺激記録なし)</span>
-                )}
-                <span className="min-w-0 flex-1 truncate text-[10px] text-slate-400">{x.home}</span>
-              </div>
-            ))}
+      {tab === "muscle" ? (
+        <>
+          <div className="flex items-start justify-center gap-6 rounded-xl bg-slate-900/60 py-2">
+            <div className="flex flex-col items-center">
+              <BodyFigure fills={front.fills} suggested={front.suggested} />
+              <span className="mt-0.5 text-[9px] text-slate-500">前面</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <BodyFigure fills={back.fills} suggested={back.suggested} />
+              <span className="mt-0.5 text-[9px] text-slate-500">背面</span>
+            </div>
           </div>
-          <p className="mt-1.5 text-[9px] text-slate-500">
-            魅力的な肉体 (V字=肩幅:ウエスト) には肩・背中が最優先。Garmin の活動から自動算出 — 背中(引く)は自重だと検出されにくく「伸びしろ」に出やすい。
+          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-slate-500">
+            <span><span style={{ color: "#34d399" }}>■</span> 回復済(やれる)</span>
+            <span><span style={{ color: "#fbbf24" }}>■</span> 回復途中</span>
+            <span><span style={{ color: "#f87171" }}>■</span> 直近に負荷</span>
+            <span><span className="text-amber-300">▢</span> 今日のおすすめ</span>
+          </div>
+          {s.suggestion.length > 0 && (
+            <p className="text-center text-[11px] text-slate-300">
+              今日やるべき部位: <span className="font-semibold text-amber-300">{s.suggestion.map((x) => x.label).join(" / ")}</span>
+            </p>
+          )}
+          <div className="grid gap-0.5">
+            {orderedMuscle.map((m) => <MuscleRow key={m.key} m={m} />)}
+          </div>
+          <p className="text-[9px] text-slate-500">
+            Garmin の活動から自動算出。背中(引く)は自重だと検出されにくく「伸びしろ」に出やすい。
+            {s.muscle_confidence === "high" ? " 種目記録あり=精度高。" : " 活動種別から推定。"}
           </p>
-        </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-center gap-4 rounded-xl bg-slate-900/60 py-2">
+            <BodyFigure fills={hpFig.fills} size={104} />
+            <div className="text-center">
+              <div className="text-[10px] text-slate-500">総合コンディション</div>
+              <div className="text-2xl font-bold tabular-nums" style={{ color: hpColor(s.hp_total) }}>
+                {s.hp_total ?? "—"}
+              </div>
+              <div className="text-[9px] text-slate-600">/ 100</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-slate-500">
+            <span><span style={{ color: "#34d399" }}>■</span> 良好</span>
+            <span><span style={{ color: "#fbbf24" }}>■</span> 注意</span>
+            <span><span style={{ color: "#f87171" }}>■</span> 要対処</span>
+          </div>
+          <div className="grid gap-0.5">
+            {s.hp.map((g) => <HpRow key={g.region} g={g} />)}
+          </div>
+          <p className="text-[9px] text-slate-500">
+            各ゲージは実指標の裏付け: 頭=偏頭痛 / 胸=Body Battery / 腹=水分 / 腕・脚=筋の回復。"HP" は状態把握のためのメタファ。
+          </p>
+        </>
       )}
-
-      {/* 部位別の回復・負荷 */}
-      <div className="grid gap-0.5">
-        {(open ? ordered : ordered.slice(0, 3)).map((g) => (
-          <GroupRow key={g.key} g={g} />
-        ))}
-      </div>
-
-      <button type="button" onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-slate-300">
-        {open ? <><ChevronUp size={11} /> 折りたたむ</> : <><ChevronDown size={11} /> 全{s.groups.length}部位を表示</>}
-      </button>
     </section>
   );
 }
