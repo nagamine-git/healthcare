@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronDown, ChevronUp, Flame } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, Flame, GraduationCap } from "lucide-react";
 import { api } from "../lib/api";
 import type { LearningCheckField, LearningChapter } from "../lib/api";
+import { ChapterQuiz } from "./ChapterQuiz";
 
 /**
  * The Rust Book 完走プラン (週1章・約5ヶ月) の進捗カード。
@@ -67,12 +68,14 @@ function ChapterRow({
   isCurrent,
   onCheck,
   onRustlings,
+  onQuiz,
   pending,
 }: {
   ch: LearningChapter;
   isCurrent: boolean;
   onCheck: (sectionId: string, field: LearningCheckField, done: boolean) => void;
   onRustlings: (chapter: number, done: boolean) => void;
+  onQuiz: (ch: LearningChapter) => void;
   pending: boolean;
 }) {
   const [open, setOpen] = useState(isCurrent);
@@ -114,6 +117,15 @@ function ChapterRow({
               <span className="min-w-0 flex-1 truncate text-[9px] text-slate-500">{ch.rustlings_topic}</span>
             </div>
           )}
+          {/* 口頭試問 — 「説明できた」をClaudeが判定して付与 */}
+          <button type="button" onClick={() => onQuiz(ch)}
+            className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border py-2 text-[11px] transition-colors ${
+              ch.explained
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"}`}>
+            <GraduationCap size={13} />
+            {ch.explained ? "口頭試問 合格済み — もう一度挑戦" : "口頭試問で「説明できた」を判定"}
+          </button>
         </div>
       )}
     </div>
@@ -229,6 +241,7 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
 export function LearningCard() {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [quizCh, setQuizCh] = useState<LearningChapter | null>(null);
   const q = useQuery({ queryKey: ["learning"], queryFn: api.learningState });
   const section = useMutation({
     mutationFn: ({ id, field, done }: { id: string; field: LearningCheckField; done: boolean }) =>
@@ -323,6 +336,7 @@ export function LearningCard() {
                 isCurrent={ch.chapter === s.current_chapter}
                 onCheck={onCheck}
                 onRustlings={onRustlings}
+                onQuiz={setQuizCh}
                 pending={section.isPending || rustlings.isPending}
               />
             ))}
@@ -350,6 +364,8 @@ export function LearningCard() {
           )}
         </button>
       </div>
+
+      {quizCh && <ChapterQuiz ch={quizCh} onClose={() => setQuizCh(null)} />}
     </section>
   );
 }

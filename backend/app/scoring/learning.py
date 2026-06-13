@@ -250,6 +250,25 @@ def set_section_check(
     return state()
 
 
+def mark_chapter_explained(chapter: int) -> dict[str, Any]:
+    """章の全節の「説明できた」を立てる (口頭試問の合格時に呼ぶ)。"""
+    secs = SECTIONS.get(chapter, [])
+    if not secs:
+        raise ValueError(f"unknown chapter: {chapter}")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as session:
+        for sid, _title in secs:
+            row = session.get(LearningSectionProgress, sid)
+            if row is None:
+                row = LearningSectionProgress(section_id=sid)
+                session.add(row)
+            if row.explained_at is None:
+                row.explained_at = now
+    title = next(c["title"] for c in CURRICULUM if c["chapter"] == chapter)
+    upsert_today_entry(f"The Book ch{chapter} {title}: 口頭試問 合格")
+    return state()
+
+
 def _plan_meta() -> tuple[date_type | None, date_type | None]:
     """(手動開始日, 目標完了日)。未設定は (None, None)。"""
     from app.models import LearningPlanMeta

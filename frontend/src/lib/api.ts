@@ -754,6 +754,13 @@ export type BodyLoadState = {
   window_days: number;
 };
 
+export type LearningQuizResult = {
+  reply: string;
+  verdict: { decided: boolean; passed: boolean | null; feedback: string | null };
+  state?: LearningState;
+  error?: boolean;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -879,6 +886,11 @@ export const api = {
     request<LearningState>(`/api/learning/chapter/${chapter}/rustlings`, {
       method: "POST",
       body: JSON.stringify({ done, done_at_iso: doneAtIso }),
+    }),
+  learningQuiz: (chapter: number, messages: { role: "user" | "assistant"; content: string }[]) =>
+    request<LearningQuizResult>(`/api/learning/chapter/${chapter}/quiz`, {
+      method: "POST",
+      body: JSON.stringify({ messages }),
     }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {
