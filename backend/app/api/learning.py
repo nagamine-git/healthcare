@@ -22,7 +22,7 @@ async def learning_state() -> dict[str, Any]:
 
 
 class SectionCheckIn(BaseModel):
-    field: Literal["read", "rustlings", "explained"]
+    field: Literal["read", "explained"]
     done: bool = True
     done_at_iso: str | None = None  # 過去の学習を記録する場合 (例 6/13 14:30)
 
@@ -33,6 +33,20 @@ async def check_section(section_id: str, body: SectionCheckIn) -> dict[str, Any]
         return learning.set_section_check(
             section_id, body.field, body.done, done_at_iso=body.done_at_iso
         )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+class RustlingsIn(BaseModel):
+    done: bool = True
+    done_at_iso: str | None = None
+
+
+@router.post("/api/learning/chapter/{chapter}/rustlings")
+async def check_rustlings(chapter: int, body: RustlingsIn) -> dict[str, Any]:
+    """章単位の Rustlings 達成をトグル (演習のある章のみ)。"""
+    try:
+        return learning.set_chapter_rustlings(chapter, body.done, done_at_iso=body.done_at_iso)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

@@ -24,10 +24,12 @@ from app.scoring.timewindow import app_today
 
 DOMAIN_KEY = "learning"
 
-# クリア条件の 3 点セット。順序は UI 表示順。最下層 (節) 単位で持つ。
-CHECK_FIELDS = ("read", "rustlings", "explained")
-_FIELD_COLUMNS = {"read": "read_at", "rustlings": "rustlings_at", "explained": "explained_at"}
-_FIELD_LABELS = {"read": "読了", "rustlings": "Rustlings", "explained": "説明できた"}
+# 節 (最下層) のクリア条件は 読了 / 説明できた の 2 点。
+# Rustlings は演習が章 (トピック) 単位で構成され、しかも演習の無い章があるため、
+# 節ではなく「章」単位の達成として別管理する (RUSTLINGS_TOPICS 参照)。
+SECTION_FIELDS = ("read", "explained")
+_FIELD_COLUMNS = {"read": "read_at", "explained": "explained_at"}
+_FIELD_LABELS = {"read": "読了", "explained": "説明できた", "rustlings": "Rustlings"}
 
 
 class Chapter(TypedDict):
@@ -121,17 +123,39 @@ SECTIONS: dict[int, list[tuple[str, str]]] = {
          ("15.4", "Rc<T> 参照カウント"), ("15.5", "RefCell<T> 内部可変性"), ("15.6", "循環参照")],
     16: [("16.1", "スレッド"), ("16.2", "メッセージ受け渡し"), ("16.3", "状態共有"),
          ("16.4", "Sync と Send")],
-    17: [("17.1", "OO 言語の特徴"), ("17.2", "トレイトオブジェクト"), ("17.3", "OO デザインパターン")],
-    18: [("18.1", "パターンが使える箇所"), ("18.2", "論駁可能性"), ("18.3", "パターン記法")],
-    19: [("19.1", "Unsafe Rust"), ("19.2", "高度なトレイト"), ("19.3", "高度な型"),
-         ("19.4", "高度な関数とクロージャ"), ("19.5", "マクロ")],
-    20: [("20.1", "シングルスレッド Web サーバ"), ("20.2", "マルチスレッド化"), ("20.3", "正常なシャットダウン")],
-    21: [("21.1", "付録A キーワード"), ("21.2", "付録B 演算子と記号"), ("21.3", "付録C 導出可能なトレイト"),
-         ("21.4", "付録D 開発ツール"), ("21.5", "付録E エディション"), ("21.6", "付録F 翻訳"),
-         ("21.7", "付録G Rust の作られ方")],
+    # 2024 edition で ch17 に「非同期」が挿入され、OO 以降が 1 章ずつ後ろへ移動した。
+    17: [("17.1", "Future と async/await"), ("17.2", "async で並行性を扱う"),
+         ("17.3", "任意個数の Future を扱う"), ("17.4", "ストリーム"),
+         ("17.5", "async のトレイトを詳しく"), ("17.6", "Future・タスク・スレッド")],
+    18: [("18.1", "OO 言語の特徴"), ("18.2", "トレイトオブジェクト"), ("18.3", "OO デザインパターン")],
+    19: [("19.1", "パターンが使える箇所"), ("19.2", "論駁可能性"), ("19.3", "パターン記法")],
+    20: [("20.1", "Unsafe Rust"), ("20.2", "高度なトレイト"), ("20.3", "高度な型"),
+         ("20.4", "高度な関数とクロージャ"), ("20.5", "マクロ")],
+    21: [("21.1", "シングルスレッド Web サーバ"), ("21.2", "マルチスレッド化"),
+         ("21.3", "正常なシャットダウンとクリーンアップ")],
 }
 TOTAL_SECTIONS = sum(len(v) for v in SECTIONS.values())
-TOTAL_CHECKS = TOTAL_SECTIONS * len(CHECK_FIELDS)  # 進捗単位は節×3点 = 243
+
+# Rustlings は章 (トピック) 単位。演習がある章だけ Rustlings 達成を要求する。
+# 値は対応する rustlings ディレクトリ (UI ヒント用)。ここに無い章は Rustlings 不要。
+RUSTLINGS_TOPICS: dict[int, str] = {
+    1: "00_intro",
+    3: "01_variables 〜 04_primitive_types",
+    4: "06_move_semantics",
+    5: "07_structs",
+    6: "08_enums / 12_options",
+    7: "10_modules",
+    8: "05_vecs / 09_strings / 11_hashmaps",
+    9: "13_error_handling",
+    10: "14_generics / 15_traits / 16_lifetimes / 23_conversions",
+    11: "17_tests",
+    13: "18_iterators",
+    15: "19_smart_pointers",
+    16: "20_threads",
+    20: "21_macros",
+}
+# 進捗単位 = 節×2点 (読了/説明) + Rustlings のある章数
+TOTAL_CHECKS = TOTAL_SECTIONS * len(SECTION_FIELDS) + len(RUSTLINGS_TOPICS)
 
 # 節ID → 所属章 の逆引き。タイトルも引けるよう (chapter, title) を持つ。
 _SECTION_CHAPTER: dict[str, tuple[int, str]] = {
@@ -144,23 +168,55 @@ def _section_rows() -> dict[str, dict[str, datetime | None]]:
     with session_scope() as session:
         rows = session.execute(select(LearningSectionProgress)).scalars().all()
         return {
-            r.section_id: {
-                "read": r.read_at,
-                "rustlings": r.rustlings_at,
-                "explained": r.explained_at,
-            }
+            r.section_id: {"read": r.read_at, "explained": r.explained_at}
             for r in rows
         }
 
 
+def _chapter_rustlings() -> dict[int, datetime | None]:
+    """章 → Rustlings 達成タイムスタンプ。LearningChapterProgress.rustlings_at に保存。"""
+    from app.models import LearningChapterProgress
+
+    with session_scope() as session:
+        rows = session.execute(select(LearningChapterProgress)).scalars().all()
+        return {r.chapter: r.rustlings_at for r in rows}
+
+
+def set_chapter_rustlings(
+    chapter: int, done: bool, *, done_at_iso: str | None = None
+) -> dict[str, Any]:
+    """章の Rustlings 達成をトグル。Rustlings 演習のある章のみ有効。"""
+    from app.models import LearningChapterProgress
+
+    if chapter not in RUSTLINGS_TOPICS:
+        raise ValueError(f"chapter has no rustlings: {chapter}")
+    ts: datetime | None = None
+    if done:
+        if done_at_iso:
+            dt = datetime.fromisoformat(done_at_iso)
+            ts = dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
+        else:
+            ts = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as session:
+        row = session.get(LearningChapterProgress, chapter)
+        if row is None:
+            row = LearningChapterProgress(chapter=chapter)
+            session.add(row)
+        row.rustlings_at = ts
+    if done and ts is not None:
+        day = (ts + timedelta(hours=9)).date()
+        upsert_today_entry(f"The Book ch{chapter}: Rustlings ({RUSTLINGS_TOPICS[chapter]})", today=day)
+    return state()
+
+
 def _section_complete(checks: dict[str, datetime | None] | None) -> bool:
-    return bool(checks and all(checks.get(f) for f in CHECK_FIELDS))
+    return bool(checks and all(checks.get(f) for f in SECTION_FIELDS))
 
 
 def set_section_check(
     section_id: str, field: str, done: bool, *, done_at_iso: str | None = None
 ) -> dict[str, Any]:
-    """節のクリア条件 1 つ (読了/Rustlings/説明) をトグル。
+    """節のクリア条件 1 つ (読了/説明) をトグル。
 
     done_at_iso を指定すれば過去の学習も記録できる (例 6/13 14:30)。
     記録した日の学習ドメイン達成度 (ライフスコア) にも反映する。
@@ -227,7 +283,7 @@ def set_plan(*, started_on: str | None = None, target_date: str | None = None,
 def projection(today: date_type) -> dict[str, Any] | None:
     """チェック完了タイムスタンプから「いつ終わりそうか」を予測 + 累積グラフ用系列。
 
-    進捗単位はチェック (節×3点 = 243)。完了日ごとの累積進捗 % を返し、
+    進捗単位はチェック (節×2点 + Rustlings のある章)。完了日ごとの累積進捗 % を返し、
     現在の平均ペースで 100% に到達する予定日を線形外挿する。
     予測は ±0.7 倍のペース帯で楽観 (best=÷0.7≒1.43倍速) / 悲観 (worst=×0.7) を出す。
     データが乏しいと confidence=low。手動の開始日/目標完了日があれば反映する。
@@ -235,7 +291,8 @@ def projection(today: date_type) -> dict[str, Any] | None:
     total_units = TOTAL_CHECKS
     manual_start, target_date = _plan_meta()
     done_ts: list[datetime] = sorted(
-        ts for checks in _section_rows().values() for ts in checks.values() if ts
+        [ts for checks in _section_rows().values() for ts in checks.values() if ts]
+        + [ts for ts in _chapter_rustlings().values() if ts]
     )
     if not done_ts and manual_start is None:
         return None
@@ -386,11 +443,13 @@ def record_activity(detail: str | None = None) -> dict[str, Any]:
 def state(*, today: date_type | None = None) -> dict[str, Any]:
     """カリキュラム全体の進捗状態。フロントと LLM の両方がこれを読む。
 
-    進捗の真実は節 (subsection) 単位の 3 点チェック。章の read/rustlings/explained
-    は「全節がその条件を満たす」かどうかで導出し、章の complete は全節 complete。
+    進捗の真実は節 (subsection) 単位の 2 点 (読了/説明) + 章単位の Rustlings。
+    章の read/explained は全節がその条件を満たすかで導出。章の complete は
+    全節 complete かつ (Rustlings 不要 or Rustlings 達成)。
     """
     d = today or app_today()
     sec_rows = _section_rows()
+    rustlings = _chapter_rustlings()
 
     chapters: list[dict[str, Any]] = []
     current: int | None = None
@@ -399,16 +458,16 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
     check_done = 0
     first_ts: datetime | None = None
     for c in CURRICULUM:
-        # 節 (subsection) ごとに 3 点チェック
+        ch = c["chapter"]
         secs = []
         sec_complete_flags: list[bool] = []
-        field_all: dict[str, bool] = {f: True for f in CHECK_FIELDS}
+        field_all: dict[str, bool] = {f: True for f in SECTION_FIELDS}
         has_sec = False
-        for sid, stitle in SECTIONS.get(c["chapter"], []):
+        for sid, stitle in SECTIONS.get(ch, []):
             has_sec = True
             checks = sec_rows.get(sid)
-            sec_checks = {f: bool(checks and checks.get(f)) for f in CHECK_FIELDS}
-            for f in CHECK_FIELDS:
+            sec_checks = {f: bool(checks and checks.get(f)) for f in SECTION_FIELDS}
+            for f in SECTION_FIELDS:
                 field_all[f] = field_all[f] and sec_checks[f]
                 if sec_checks[f]:
                     check_done += 1
@@ -420,17 +479,28 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
             if scomplete:
                 section_done += 1
             secs.append({"id": sid, "title": stitle, "done": scomplete, **sec_checks})
-        complete = has_sec and all(sec_complete_flags)
+        # Rustlings (章単位)。演習のある章のみ達成を要求する
+        has_rustlings = ch in RUSTLINGS_TOPICS
+        rustlings_done = bool(rustlings.get(ch))
+        if has_rustlings:
+            if rustlings_done:
+                check_done += 1
+                rts = rustlings.get(ch)
+                if rts and (first_ts is None or rts < first_ts):
+                    first_ts = rts
+        complete = has_sec and all(sec_complete_flags) and (rustlings_done or not has_rustlings)
         if complete:
             done_count += 1
         elif current is None:
-            current = c["chapter"]
+            current = ch
         chapters.append(
             {
                 **c,
                 "read": has_sec and field_all["read"],
-                "rustlings": has_sec and field_all["rustlings"],
                 "explained": has_sec and field_all["explained"],
+                "has_rustlings": has_rustlings,
+                "rustlings": rustlings_done,
+                "rustlings_topic": RUSTLINGS_TOPICS.get(ch),
                 "complete": complete,
                 "sections": secs,
                 "section_done": sum(1 for s in secs if s["done"]),
@@ -498,7 +568,11 @@ def llm_summary(*, today: date_type | None = None) -> dict[str, Any]:
                 "title": cur_info["title"],
                 "note": cur_info["note"],
                 "milestone": cur_info["milestone"],
-                "checks": {f: cur_info[f] for f in CHECK_FIELDS},
+                "checks": {
+                    "read": cur_info["read"],
+                    "explained": cur_info["explained"],
+                    **({"rustlings": cur_info["rustlings"]} if cur_info["has_rustlings"] else {}),
+                },
             }
             if cur_info
             else None

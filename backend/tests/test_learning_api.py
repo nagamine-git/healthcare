@@ -41,8 +41,12 @@ def _check(client, sid, field, done=True):
     return client.post(f"/api/learning/section/{sid}/check", json={"field": field, "done": done})
 
 
-def test_three_point_completion(app_client):
-    """節は 3 点セットで初めて complete。章は全節 complete で初めてクリア。"""
+def _rustlings(client, chapter, done=True):
+    return client.post(f"/api/learning/chapter/{chapter}/rustlings", json={"done": done})
+
+
+def test_chapter_completion(app_client):
+    """節は 読了+説明 で complete。章は全節 complete かつ Rustlings (あれば) でクリア。"""
     # 1 章は 1.1 / 1.2 / 1.3 の 3 節。1.1 を読了だけ → まだ未完
     r = _check(app_client, "1.1", "read")
     assert r.status_code == 200
@@ -51,18 +55,40 @@ def test_three_point_completion(app_client):
     sec = next(x for x in ch1["sections"] if x["id"] == "1.1")
     assert sec["read"] is True
     assert sec["done"] is False
+    assert ch1["has_rustlings"] is True
     assert ch1["complete"] is False
     assert s["section_done"] == 0
     assert s["current_chapter"] == 1
 
-    # 1 章の全 3 節 × 3 点を埋めると章クリア
+    # 全 3 節 × 読了+説明 を埋めても Rustlings 未達なら章は未完
     for sid in ("1.1", "1.2", "1.3"):
-        for field in ("read", "rustlings", "explained"):
+        for field in ("read", "explained"):
             s = _check(app_client, sid, field).json()
     ch1 = next(c for c in s["chapters"] if c["chapter"] == 1)
+    assert ch1["read"] is True and ch1["explained"] is True
+    assert ch1["complete"] is False  # Rustlings がまだ
+    assert s["done_count"] == 0
+
+    # 章の Rustlings を達成 → クリア
+    s = _rustlings(app_client, 1).json()
+    ch1 = next(c for c in s["chapters"] if c["chapter"] == 1)
+    assert ch1["rustlings"] is True
     assert ch1["complete"] is True
     assert s["done_count"] == 1
-    assert s["current_chapter"] == 2  # 次の章へ進む
+    assert s["current_chapter"] == 2
+
+
+def test_chapter_without_rustlings_needs_no_rustlings(app_client):
+    """ch2 (数当て) は Rustlings 演習なし → 読了+説明だけでクリア。"""
+    s = app_client.get("/api/learning/state").json()
+    ch2 = next(c for c in s["chapters"] if c["chapter"] == 2)
+    assert ch2["has_rustlings"] is False
+    for field in ("read", "explained"):
+        s = _check(app_client, "2", field).json()
+    ch2 = next(c for c in s["chapters"] if c["chapter"] == 2)
+    assert ch2["complete"] is True
+    # Rustlings 演習のない章へ rustlings を打つと 404
+    assert _rustlings(app_client, 2).status_code == 404
 
 
 def test_check_writes_learning_domain_entry(app_client):
@@ -144,8 +170,8 @@ def test_projection_estimates_completion(db_engine):
 
 
 def test_section_check(app_client):
-    """節は 3 点揃って done。section_done は完了節数を数える。"""
-    # 4.1 を読了だけ → section_done はまだ 0 (3 点未達)
+    """節は 読了+説明 の 2 点揃って done。section_done は完了節数を数える。"""
+    # 4.1 を読了だけ → section_done はまだ 0 (2 点未達)
     r = _check(app_client, "4.1", "read").json()
     assert r["section_done"] == 0
     ch4 = next(c for c in r["chapters"] if c["chapter"] == 4)
@@ -153,12 +179,29 @@ def test_section_check(app_client):
     sec = next(x for x in ch4["sections"] if x["id"] == "4.1")
     assert sec["read"] is True and sec["done"] is False
 
-    # 3 点揃えると done
-    _check(app_client, "4.1", "rustlings")
+    # 読了+説明で done
     r = _check(app_client, "4.1", "explained").json()
     assert r["section_done"] == 1
     ch4 = next(c for c in r["chapters"] if c["chapter"] == 4)
     assert ch4["section_done"] == 1
     assert any(s["id"] == "4.1" and s["done"] for s in ch4["sections"])
+    # 節には rustlings フィールドは無い → 422
+    assert (
+        app_client.post("/api/learning/section/4.1/check", json={"field": "rustlings"}).status_code
+        == 422
+    )
     # 不正な節は 404
     assert _check(app_client, "99.9", "read").status_code == 404
+
+
+def test_2024_edition_sections_aligned(app_client):
+    """2024 edition: ch17=非同期, ch21=Webサーバ。付録は完走対象外。"""
+    s = app_client.get("/api/learning/state").json()
+    chs = {c["chapter"]: c for c in s["chapters"]}
+    assert any("async" in x["title"] or "Future" in x["title"] for x in chs[17]["sections"])
+    assert any("Web サーバ" in x["title"] for x in chs[21]["sections"])
+    # async (ch17)・OO (ch18) は Rustlings 演習なし
+    assert chs[17]["has_rustlings"] is False
+    assert chs[18]["has_rustlings"] is False
+    # 付録が紛れ込んでいない
+    assert not any("付録" in x["title"] for c in s["chapters"] for x in c["sections"])

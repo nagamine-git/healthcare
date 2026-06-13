@@ -666,13 +666,12 @@ export type LifeResponse = {
   generated_at: string;
 };
 
-export type LearningCheckField = "read" | "rustlings" | "explained";
+export type LearningCheckField = "read" | "explained";
 export type LearningSection = {
   id: string;
   title: string;
   done: boolean;
   read: boolean;
-  rustlings: boolean;
   explained: boolean;
 };
 export type LearningChapter = {
@@ -681,8 +680,10 @@ export type LearningChapter = {
   note: string | null;
   milestone: boolean;
   read: boolean;
-  rustlings: boolean;
   explained: boolean;
+  has_rustlings: boolean;
+  rustlings: boolean;
+  rustlings_topic: string | null;
   complete: boolean;
   sections: LearningSection[];
   section_done: number;
@@ -873,6 +874,11 @@ export const api = {
     request<LearningState>(`/api/learning/section/${sectionId}/check`, {
       method: "POST",
       body: JSON.stringify({ field, done, done_at_iso: doneAtIso }),
+    }),
+  learningRustlings: (chapter: number, done: boolean, doneAtIso?: string) =>
+    request<LearningState>(`/api/learning/chapter/${chapter}/rustlings`, {
+      method: "POST",
+      body: JSON.stringify({ done, done_at_iso: doneAtIso }),
     }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {

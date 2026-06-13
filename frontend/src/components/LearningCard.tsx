@@ -14,9 +14,9 @@ import type { LearningCheckField, LearningChapter } from "../lib/api";
  * LLM コーチングに反映される。
  */
 
+// 節 (最下層) は 読了 / 説明 の 2 点。Rustlings は演習が章 (トピック) 単位のため章で扱う。
 const CHECKS: { key: LearningCheckField; label: string; hint: string }[] = [
-  { key: "read", label: "読了", hint: "章を読み終えた" },
-  { key: "rustlings", label: "Rustlings", hint: "該当セクションの演習を解いた" },
+  { key: "read", label: "読了", hint: "節を読み終えた" },
   { key: "explained", label: "説明できた", hint: "Claude の口頭試問に合格した" },
 ];
 
@@ -42,7 +42,7 @@ function SectionRow({
         <span className="w-8 shrink-0 tabular-nums text-slate-500">{s.id}</span>
         <span className={`min-w-0 flex-1 ${s.done ? "text-slate-400 line-through" : "text-slate-300"}`}>{s.title}</span>
       </div>
-      {/* 最下層の 3 点チェック (読了 / Rustlings / 説明できた)。モバイルでも折り返す */}
+      {/* 最下層の 2 点チェック (読了 / 説明できた)。モバイルでも折り返す */}
       <div className="mt-1 flex flex-wrap gap-1 pl-10">
         {CHECKS.map((c) => {
           const done = s[c.key];
@@ -66,11 +66,13 @@ function ChapterRow({
   ch,
   isCurrent,
   onCheck,
+  onRustlings,
   pending,
 }: {
   ch: LearningChapter;
   isCurrent: boolean;
   onCheck: (sectionId: string, field: LearningCheckField, done: boolean) => void;
+  onRustlings: (chapter: number, done: boolean) => void;
   pending: boolean;
 }) {
   const [open, setOpen] = useState(isCurrent);
@@ -89,12 +91,29 @@ function ChapterRow({
           {ch.section_done}/{ch.section_total}節
         </span>
       </button>
-      {/* 節 (subsection) ごとの 3 点チェック */}
       {open && (
-        <div className="grid gap-0.5 px-1 pb-2 pl-3">
-          {ch.sections.map((s) => (
-            <SectionRow key={s.id} s={s} onCheck={onCheck} pending={pending} />
-          ))}
+        <div className="px-1 pb-2 pl-3">
+          {/* 節 (subsection) ごとの 2 点チェック */}
+          <div className="grid gap-0.5">
+            {ch.sections.map((s) => (
+              <SectionRow key={s.id} s={s} onCheck={onCheck} pending={pending} />
+            ))}
+          </div>
+          {/* Rustlings (章単位)。演習のある章だけ表示 */}
+          {ch.has_rustlings && (
+            <div className="mt-1.5 flex items-center gap-2 pl-1.5">
+              <button type="button" disabled={pending}
+                title={`rustlings ${ch.rustlings_topic ?? ""} を解いた`}
+                onClick={() => onRustlings(ch.chapter, !ch.rustlings)}
+                className={`flex h-6 items-center gap-0.5 rounded-md border px-1.5 text-[10px] transition-colors ${
+                  ch.rustlings ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
+                               : "border-slate-700 bg-slate-900/60 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>
+                {ch.rustlings && <Check size={10} className="shrink-0" />}
+                Rustlings
+              </button>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-slate-500">{ch.rustlings_topic}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -219,6 +238,14 @@ export function LearningCard() {
       qc.invalidateQueries({ queryKey: ["life"] });
     },
   });
+  const rustlings = useMutation({
+    mutationFn: ({ chapter, done }: { chapter: number; done: boolean }) =>
+      api.learningRustlings(chapter, done),
+    onSuccess: (state) => {
+      qc.setQueryData(["learning"], state);
+      qc.invalidateQueries({ queryKey: ["life"] });
+    },
+  });
 
   if (q.isLoading || !q.data) {
     return (
@@ -241,6 +268,7 @@ export function LearningCard() {
 
   const onCheck = (id: string, field: LearningCheckField, done: boolean) =>
     section.mutate({ id, field, done });
+  const onRustlings = (chapter: number, done: boolean) => rustlings.mutate({ chapter, done });
 
   return (
     <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
@@ -294,7 +322,8 @@ export function LearningCard() {
                 ch={ch}
                 isCurrent={ch.chapter === s.current_chapter}
                 onCheck={onCheck}
-                pending={section.isPending}
+                onRustlings={onRustlings}
+                pending={section.isPending || rustlings.isPending}
               />
             ))}
           </div>
