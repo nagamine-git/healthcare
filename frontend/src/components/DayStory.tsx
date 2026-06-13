@@ -335,6 +335,9 @@ export function DayStory() {
         {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
           <WaterTrack water={t.water} nowH={nowH} X={X} gridTicks={gridTicks} />
         )}
+        {t && (t.pressure_curve?.length ?? 0) > 1 && (
+          <PressureTrack curve={t.pressure_curve} nowH={nowH} X={X} gridTicks={gridTicks} />
+        )}
 
         {/* サブチャート下の共有 x 軸 */}
         {(t?.caffeine_curve.length || t?.water) ? (
@@ -581,6 +584,36 @@ function WaterTrack({ water, nowH, X, gridTicks }: {
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill={deficit > 500 ? "#fcd34d" : "#94a3b8"}>
         水分 {total}/{goal}mL{src}{water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}{deficit > 0 ? ` · あと${(deficit / 1000).toFixed(1)}L` : " · 達成"}
+      </text>
+    </svg>
+  );
+}
+
+function PressureTrack({ curve, nowH, X, gridTicks }: {
+  curve: { h: number; hpa: number }[];
+  nowH: number | null;
+  X: (h: number) => number;
+  gridTicks: number[];
+}) {
+  const H = SUB_H;
+  const vals = curve.map((p) => p.hpa);
+  const lo = Math.min(...vals) - 1, hi = Math.max(...vals) + 1;
+  const y = (hpa: number) => H - 8 - ((hpa - lo) / Math.max(1, hi - lo)) * (H - 22);
+  const past = nowH == null ? curve : curve.filter((p) => p.h <= nowH);
+  const fut = nowH == null ? [] : curve.filter((p) => p.h >= nowH);
+  // 未来3hの変化量 (急降下=片頭痛トリガー)
+  const nowHpa = nowH != null && curve.length ? curve.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).hpa : (curve.length ? curve[curve.length - 1].hpa : null);
+  const lastFut = fut.length ? fut[fut.length - 1].hpa : null;
+  const drop = nowHpa != null && lastFut != null ? lastFut - nowHpa : null;
+  const warnDrop = drop != null && drop <= -3;
+  return (
+    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="気圧(実測+予報)">
+      <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
+      {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke="#94a3b8" strokeWidth={1.5} />}
+      {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? "#fb7185" : "#94a3b8"} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={warnDrop ? "#fda4af" : "#94a3b8"}>
+        気圧(実測+予報){nowHpa != null ? ` · 現在${Math.round(nowHpa)}hPa` : ""}{drop != null ? ` · 3h後${drop > 0 ? "+" : ""}${drop.toFixed(1)}${warnDrop ? " ⚠頭痛注意" : ""}` : ""}
       </text>
     </svg>
   );

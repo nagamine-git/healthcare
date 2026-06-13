@@ -76,6 +76,33 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict[str, Any] | None:
         return None
 
 
+def get_pressure_hourly(
+    *, latitude: float | None = None, longitude: float | None = None
+) -> list[tuple[datetime, float]]:
+    """毎時の海面更正気圧を (JST naive datetime, hPa) で返す。過去48h+未来48h。
+
+    予報を含むので、未来数時間の気圧トレンド (片頭痛トリガー) を出せる。
+    """
+    settings = get_settings()
+    lat = latitude if latitude is not None else settings.weather_latitude
+    lon = longitude if longitude is not None else settings.weather_longitude
+    data = _fetch_open_meteo(lat, lon)
+    if data is None or "hourly" not in data:
+        return []
+    hourly = data["hourly"]
+    times = hourly.get("time", [])
+    pres = hourly.get("pressure_msl", [])
+    out: list[tuple[datetime, float]] = []
+    for t, p in zip(times, pres, strict=False):
+        if p is None:
+            continue
+        try:
+            out.append((datetime.fromisoformat(t), float(p)))
+        except Exception:
+            continue
+    return out
+
+
 def _cache_key(lat: float, lon: float) -> str:
     return f"{lat:.4f}_{lon:.4f}"
 

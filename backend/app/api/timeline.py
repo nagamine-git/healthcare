@@ -418,6 +418,26 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     return out, baseline_per_h
 
 
+def _pressure_curve(start_utc, end_utc, off):
+    """毎時の気圧 (実測+予報) を window に合わせて offset 化。片頭痛トリガーの可視化。
+
+    Open-Meteo は JST naive 時刻を返すので UTC naive に変換して窓で絞る。
+    予報を含むので未来枠 (現在線の右) に気圧トレンドが伸びる。
+    """
+    from app.integrations.weather import get_pressure_hourly
+
+    try:
+        series = get_pressure_hourly()
+    except Exception:
+        return []
+    out: list[dict[str, float]] = []
+    for jst_naive, hpa in series:
+        utc_naive = jst_naive - timedelta(hours=9)  # JST → UTC
+        if start_utc <= utc_naive < end_utc:
+            out.append({"h": off(utc_naive), "hpa": round(hpa, 1)})
+    return out
+
+
 def _bin_steps(step_pairs, bin_h: float = 0.25):
     """歩数を bin_h 時間ごとに集計 (運動量バー用)。"""
     bins: dict[int, float] = {}
@@ -472,6 +492,7 @@ async def day_timeline(
         checkin_estimated = None
 
     caffeine_curve, caf_info = _caffeine_curve(origin_utc, start_utc, end_utc, off)
+    pressure_curve = _pressure_curve(start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
 
@@ -497,6 +518,7 @@ async def day_timeline(
         "caffeine_alert_floor_mg": caf_info["alert_floor_mg"] if caf_info else None,
         "caffeine_today_mg": caf_info["today_total_mg"] if caf_info else None,
         "caffeine_daily_limit_mg": caf_info["daily_limit_mg"] if caf_info else None,
+        "pressure_curve": pressure_curve,
         "focus_windows": ctx["focus_windows"],
         "sleep_window": ctx["sleep_window"],
         "recovery_bands": ctx["recovery_bands"],

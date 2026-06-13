@@ -366,6 +366,7 @@ export type DayTimelineData = {
   caffeine_alert_floor_mg: number | null;
   caffeine_today_mg: number | null;
   caffeine_daily_limit_mg: number | null;
+  pressure_curve: { h: number; hpa: number }[];
   focus_windows: { start_h: number; end_h: number; score: number }[];
   sleep_window: { melatonin_h: number; bedtime_h: number } | null;
   recovery_bands: { start_h: number; end_h: number }[];
