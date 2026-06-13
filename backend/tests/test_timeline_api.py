@@ -73,7 +73,7 @@ def test_timeline_24h_window(app_client):
     assert body["window"] == "24h"
     assert body["date"] is None
     assert body["span_h"] == 24.0
-    assert body["now_h"] == 24.0  # 右端が現在
+    assert body["now_h"] == 21.0  # 過去21h+未来3h。現在は offset 21
     assert "origin_jst" in body
 
 

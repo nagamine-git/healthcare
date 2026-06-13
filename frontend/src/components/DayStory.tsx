@@ -176,6 +176,10 @@ export function DayStory() {
           role="img"
           aria-label="今日のタイムライン"
         >
+        {/* 未来領域 (現在線より右) を薄く塗って「予測」と分かるように */}
+        {nowH != null && nowH < 24 && (
+          <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill="#0ea5e9" opacity={0.05} />
+        )}
         {/* 時間グリッド (拡大で細かく)。整時は濃いめ、半端目盛りは薄く */}
         {gridTicks.map((h) => (
           <line key={h} x1={X(h)} y1={ACT_Y} x2={X(h)} y2={BODY_Y1}
@@ -297,6 +301,9 @@ export function DayStory() {
           <g>
             <line x1={X(nowH)} y1={ACT_Y} x2={X(nowH)} y2={BODY_Y1} stroke="#f43f5e" strokeWidth={1.5} />
             <circle cx={X(nowH)} cy={ACT_Y} r={3} fill="#f43f5e" />
+            {nowH < 23 && (
+              <text x={X(nowH) + 4} y={ACT_Y + 9} fontSize={9} fill="#38bdf8" opacity={0.85}>予測 →</text>
+            )}
           </g>
         )}
 
@@ -525,7 +532,17 @@ function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, 
         </>
       )}
       <path d={area} fill="#a78bfa" opacity={0.18} />
-      <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")} fill="none" stroke="#a78bfa" strokeWidth={1.5} />
+      {/* 実測 (現在まで) は実線、未来 (減衰予測) は破線 */}
+      {(() => {
+        const past = nowH == null ? curve : curve.filter((p) => p.h <= nowH);
+        const fut = nowH == null ? [] : curve.filter((p) => p.h >= nowH);
+        return (
+          <>
+            {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")} fill="none" stroke="#a78bfa" strokeWidth={1.5} />}
+            {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")} fill="none" stroke="#a78bfa" strokeWidth={1.5} strokeDasharray="3 3" opacity={0.7} />}
+          </>
+        );
+      })()}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill={over || overLimit ? "#fcd34d" : "#94a3b8"}>
         体内カフェイン 現在約{Math.round(nowMg)}mg{todayMg != null && dailyLimit != null ? ` · 本日${todayMg}/${dailyLimit}mg` : ""}

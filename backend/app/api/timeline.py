@@ -31,6 +31,9 @@ from app.scoring.timewindow import app_today, jst_day_bounds
 router = APIRouter()
 JST = ZoneInfo("Asia/Tokyo")
 SPAN_H = 24.0
+# 24h ビューの構成: 過去21h + 未来3h (= 予測の精度が保てる範囲)
+FUTURE_PAST_H = 21.0
+FUTURE_AHEAD_H = 3.0
 
 
 def _resolve_window(window: str, date: str | None):
@@ -42,11 +45,13 @@ def _resolve_window(window: str, date: str | None):
 
     now_jst = datetime.now(JST)
     if window == "24h":
-        end_jst = now_jst
-        origin_jst = end_jst - timedelta(hours=SPAN_H)
+        # 直近 21h + 未来 3h の窓。右端に未来枠を作り、予測可能な系列
+        # (カフェイン減衰・集中窓) だけが現在線の右に伸びる。
+        origin_jst = now_jst - timedelta(hours=FUTURE_PAST_H)
+        end_jst = now_jst + timedelta(hours=FUTURE_AHEAD_H)
         start_utc = origin_jst.astimezone(UTC).replace(tzinfo=None)
         end_utc = end_jst.astimezone(UTC).replace(tzinfo=None)
-        return start_utc, start_utc, end_utc, SPAN_H, None, origin_jst
+        return start_utc, start_utc, end_utc, FUTURE_PAST_H, None, origin_jst
     # 暦日
     target = date_type.fromisoformat(date) if date else app_today()
     start_utc, end_utc = jst_day_bounds(target)
