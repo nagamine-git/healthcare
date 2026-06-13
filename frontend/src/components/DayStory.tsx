@@ -321,7 +321,9 @@ export function DayStory() {
 
         {/* カフェイン・水分も同じ容器内 = 同幅・同グリッド・スクロール連動 */}
         {t && t.caffeine_curve.length > 1 && (
-          <CaffeineTrack curve={t.caffeine_curve} threshold={t.caffeine_bedtime_safe_mg} nowH={nowH} X={X} gridTicks={gridTicks} />
+          <CaffeineTrack curve={t.caffeine_curve} threshold={t.caffeine_bedtime_safe_mg}
+            floor={t.caffeine_alert_floor_mg} todayMg={t.caffeine_today_mg} dailyLimit={t.caffeine_daily_limit_mg}
+            nowH={nowH} X={X} gridTicks={gridTicks} />
         )}
         {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
           <WaterTrack water={t.water} nowH={nowH} X={X} gridTicks={gridTicks} />
@@ -487,30 +489,46 @@ function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
   );
 }
 
-function CaffeineTrack({ curve, threshold, nowH, X, gridTicks }: {
+function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, gridTicks }: {
   curve: { h: number; mg: number }[];
   threshold: number | null;
+  floor: number | null;
+  todayMg: number | null;
+  dailyLimit: number | null;
   nowH: number | null;
   X: (h: number) => number;
   gridTicks: number[];
 }) {
   const H = SUB_H;
-  const peak = Math.max(50, ...curve.map((p) => p.mg));
+  // 覚醒下限も収まるよう描画レンジを確保
+  const peak = Math.max(50, floor ?? 0, ...curve.map((p) => p.mg));
   const y = (mg: number) => H - 8 - (Math.max(0, mg) / peak) * (H - 22);
   const area = `M ${X(curve[0].h)},${H - 8} L ${curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" L ")} L ${X(curve[curve.length - 1].h)},${H - 8} Z`;
   const nowMg = nowH != null ? curve.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).mg : curve[curve.length - 1].mg;
   const over = threshold != null && nowMg > threshold;
+  const overLimit = todayMg != null && dailyLimit != null && todayMg > dailyLimit;
   return (
     <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="体内カフェイン量">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
+      {/* 覚醒効果の下限 (1mg/kg, Smith 2002): これ以上残れば効果継続 */}
+      {floor != null && floor < peak && (
+        <>
+          <line x1={0} y1={y(floor)} x2={SUB_W} y2={y(floor)} stroke="#34d399" strokeWidth={0.8} strokeDasharray="2 3" opacity={0.5} />
+          <text x={SUB_W - 4} y={y(floor) - 2} fontSize={8} fill="#34d399" textAnchor="end" opacity={0.8}>覚醒{Math.round(floor)}</text>
+        </>
+      )}
+      {/* 就寝安全 (0.5mg/L, Drake 2013): これ以下なら睡眠を妨げにくい */}
       {threshold != null && (
-        <line x1={0} y1={y(threshold)} x2={SUB_W} y2={y(threshold)} stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+        <>
+          <line x1={0} y1={y(threshold)} x2={SUB_W} y2={y(threshold)} stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+          <text x={SUB_W - 4} y={y(threshold) - 2} fontSize={8} fill="#f59e0b" textAnchor="end" opacity={0.85}>就寝{Math.round(threshold)}</text>
+        </>
       )}
       <path d={area} fill="#a78bfa" opacity={0.18} />
       <polyline points={curve.map((p) => `${X(p.h)},${y(p.mg)}`).join(" ")} fill="none" stroke="#a78bfa" strokeWidth={1.5} />
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill={over ? "#fcd34d" : "#94a3b8"}>
-        体内カフェイン 現在約{Math.round(nowMg)}mg{threshold != null ? ` / 就寝安全${threshold}mg以下` : ""}
+      <text x={4} y={9} fontSize={10} fill={over || overLimit ? "#fcd34d" : "#94a3b8"}>
+        体内カフェイン 現在約{Math.round(nowMg)}mg{todayMg != null && dailyLimit != null ? ` · 本日${todayMg}/${dailyLimit}mg` : ""}
       </text>
     </svg>
   );

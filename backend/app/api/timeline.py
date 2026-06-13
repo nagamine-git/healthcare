@@ -220,11 +220,24 @@ def _caffeine_curve(origin_utc, start_utc, end_utc, off):
         points.append({"h": off(cur), "mg": round(total, 1)})
         cur += step
 
-    # 就寝安全閾値 (体重から mg 換算)
     prof = resolve_profile()
     weight = prof.target_weight_kg or 60.0
-    threshold_mg = round(s.caffeine_bedtime_threshold_mg_per_l * s.caffeine_vd_l_per_kg * weight, 1)
-    return points, threshold_mg
+    # 当日 (origin の JST 日付) の摂取合計 = 1日上限 (EFSA 400mg) と比較する量
+    day_start = origin_utc.replace(tzinfo=UTC).astimezone(JST)
+    day_start = day_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_s = day_start.astimezone(UTC).replace(tzinfo=None)
+    day_e = day_s + timedelta(days=1)
+    today_total = round(sum(float(mg) for ts, mg in intakes if day_s <= ts < day_e))
+    info = {
+        # 就寝安全: 血中 0.5mg/L (Drake 2013) 相当の体内残量
+        "bedtime_safe_mg": round(s.caffeine_bedtime_threshold_mg_per_l * s.caffeine_vd_l_per_kg * weight, 1),
+        # 覚醒効果の下限: 最低有効量 ~1mg/kg (Smith 2002 メタ解析)。これ以上残れば効果継続
+        "alert_floor_mg": round(s.caffeine_min_cognitive_mg, 1),
+        # 1日摂取の安全上限 (EFSA 2015: 健常成人 400mg/日)
+        "today_total_mg": today_total,
+        "daily_limit_mg": 400,
+    }
+    return points, info
 
 
 def _hhmm_to_off(hhmm: str, origin_utc, off) -> float | None:
@@ -453,7 +466,7 @@ async def day_timeline(
     except Exception:
         checkin_estimated = None
 
-    caffeine_curve, caf_threshold = _caffeine_curve(origin_utc, start_utc, end_utc, off)
+    caffeine_curve, caf_info = _caffeine_curve(origin_utc, start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
 
@@ -475,7 +488,10 @@ async def day_timeline(
         "checkin": g["checkin"],
         "checkin_estimated": checkin_estimated,
         "caffeine_curve": caffeine_curve,
-        "caffeine_bedtime_safe_mg": caf_threshold,
+        "caffeine_bedtime_safe_mg": caf_info["bedtime_safe_mg"] if caf_info else None,
+        "caffeine_alert_floor_mg": caf_info["alert_floor_mg"] if caf_info else None,
+        "caffeine_today_mg": caf_info["today_total_mg"] if caf_info else None,
+        "caffeine_daily_limit_mg": caf_info["daily_limit_mg"] if caf_info else None,
         "focus_windows": ctx["focus_windows"],
         "sleep_window": ctx["sleep_window"],
         "recovery_bands": ctx["recovery_bands"],
