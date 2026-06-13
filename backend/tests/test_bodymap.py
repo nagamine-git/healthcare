@@ -34,8 +34,37 @@ def test_hp_gauges_from_real_metrics(db_engine):
     hp = {g["region"]: g for g in s["hp"]}
     assert hp["thorax"]["value"] == 72  # Body Battery
     assert hp["stomach"]["value"] == 50  # 1000/2000ml
-    assert hp["head"]["value"] == 75  # 1回 → 100-25
+    # 2日前の発作1回・今は痛みなし → 高得点 (recency -4, chronic -1.3)
+    assert hp["head"]["value"] == 95
+    assert "痛みなし" in hp["head"]["detail"]
     assert s["hp_total"] is not None
     # boxing で肩が刺激 → 筋負荷マップに反映
     sh = next(m for m in s["muscle"] if m["key"] == "shoulders")
     assert sh["confidence"] == "inferred"
+
+
+def test_head_active_episode_low(db_engine):
+    from app.models import MigraineEpisode
+
+    now = datetime(2026, 6, 13, 12, 0)
+    with session_scope() as ss:
+        # 進行中 (ended_at なし、3時間前に開始) → 大きく低下
+        ss.add(MigraineEpisode(started_at=now - timedelta(hours=3)))
+    s = bodymap.state(now=now)
+    head = next(g for g in s["hp"] if g["region"] == "head")
+    assert head["value"] == 30
+    assert "進行中" in head["detail"]
+
+
+def test_head_recent_recovery_penalty(db_engine):
+    from app.models import MigraineEpisode
+
+    now = datetime(2026, 6, 13, 12, 0)
+    with session_scope() as ss:
+        # 6時間前に終わった発作 → recency -40、今は痛くないので 0 ではない
+        ss.add(MigraineEpisode(started_at=now - timedelta(hours=10),
+                               ended_at=now - timedelta(hours=6)))
+    s = bodymap.state(now=now)
+    head = next(g for g in s["hp"] if g["region"] == "head")
+    assert head["value"] == 59  # 100 - 40(recency) - 0.67(chronic, 1回)
+    assert "痛みなし" in head["detail"]

@@ -35,12 +35,13 @@ def _hp_gauges(
     day_start = now - timedelta(hours=24)
 
     with session_scope() as session:
-        # 頭: 直近14日の偏頭痛回数 → リスク (0回=100, 多いほど低い)
-        mig_count = session.execute(
-            select(func.count(MigraineEpisode.id)).where(
-                MigraineEpisode.started_at >= now - timedelta(days=14)
-            )
-        ).scalar() or 0
+        # 頭: 「今の頭の状態」を主に、慢性頻度を従に採点する。
+        # 過去頻度だけで 0 にすると「今は痛くない」のに 0 で厳しすぎるため。
+        mig_rows = session.execute(
+            select(MigraineEpisode.started_at, MigraineEpisode.ended_at)
+            .where(MigraineEpisode.started_at >= now - timedelta(days=30))
+            .order_by(MigraineEpisode.started_at.desc())
+        ).all()
         # 胸: 当日の Body Battery 朝値 (自律神経の回復度, 0-100)
         bb_morning = session.execute(
             select(BodyBatteryDaily.morning_value)
@@ -55,7 +56,26 @@ def _hp_gauges(
             )
         ).scalar()
 
-    head = _clamp(100 - min(100, mig_count * 25))  # 4回/14日で 0
+    # 頭スコア: 現在進行中 → 大きく低下 / 直近の発作からの経過 (recency) → 段階回復 /
+    # 30日頻度 (慢性度) → 緩やかなベースライン低下 (上限 -20)。痛みが無ければ高得点に戻る。
+    count30 = len(mig_rows)
+    active = any(
+        e.ended_at is None and (now - e.started_at) <= timedelta(hours=24) for e in mig_rows
+    )
+    if active:
+        head = 30
+        head_detail = "頭痛 進行中"
+    else:
+        recency_pen = 0.0
+        if mig_rows:
+            ref = mig_rows[0].ended_at or mig_rows[0].started_at
+            h = (now - ref).total_seconds() / 3600
+            recency_pen = (
+                40 if h < 12 else 25 if h < 24 else 12 if h < 48 else 4 if h < 96 else 0
+            )
+        chronic_pen = min(20.0, count30 / 15 * 20)  # 慢性閾値 15回/月 で -20 上限
+        head = _clamp(100 - recency_pen - chronic_pen)
+        head_detail = f"今は痛みなし · 直近30日 {count30}回" if count30 else "直近30日 なし"
     thorax = _clamp(float(bb_morning)) if bb_morning is not None else None
     stomach = _clamp(min(100.0, water_ml / _HYDRATION_TARGET_ML * 100)) if water_ml else None
 
@@ -67,8 +87,8 @@ def _hp_gauges(
     legs = _recov(["legs"])
 
     gauges = [
-        {"region": "head", "label": "頭", "metric": "偏頭痛リスク", "value": head,
-         "detail": f"直近14日 {mig_count}回" if mig_count else "直近14日 なし"},
+        {"region": "head", "label": "頭", "metric": "偏頭痛", "value": head,
+         "detail": head_detail},
         {"region": "thorax", "label": "胸", "metric": "自律神経の回復", "value": thorax,
          "detail": "Body Battery 朝値" if thorax is not None else "データなし"},
         {"region": "stomach", "label": "腹", "metric": "水分", "value": stomach,

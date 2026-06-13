@@ -227,3 +227,23 @@ def state(*, now: datetime | None = None) -> dict[str, Any]:
         "confidence": overall_conf,
         "window_days": _WINDOW_DAYS,
     }
+
+
+def llm_summary(*, now: datetime | None = None) -> dict[str, Any]:
+    """LLM コーチング用の部位別サマリ。トレ処方を部位別カードと同一データに揃える。"""
+    s = state(now=now)
+    return {
+        "groups": [
+            {
+                "key": g["key"], "label": g["label"], "recovery_pct": g["recovery_pct"],
+                "week_load": g["week_load"], "confidence": g["confidence"],
+            }
+            for g in s["groups"]
+        ],
+        "today_should_train": [{"key": x["key"], "label": x["label"]} for x in s["suggestion"]],
+        "note": (
+            "Garmin の活動から自動算出。recovery_pct が高い=回復済みで叩ける / 低い=直近に負荷で要回復。"
+            "today_should_train は回復済み×直近ボリューム不足×美的重み(肩・背中優先)で選んだ本日の推奨部位。"
+            "自重/シャドーボクシング/HIIT は引く(背中)を検出できないため confidence=none で伸びしろ扱い。"
+        ),
+    }

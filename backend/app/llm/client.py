@@ -1036,6 +1036,10 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     from app.scoring.learning import llm_summary as _learning_summary
 
     today_payload["learning"] = _learning_summary(today=target)
+    # 部位別ステータス: トレ処方を部位別カードと同一データに揃える (連動)
+    from app.scoring.bodyload import llm_summary as _bodyparts_summary
+
+    today_payload["body_parts"] = _bodyparts_summary()
     today_payload["physio"] = _gather_physio(target)
     today_payload["subjective"] = _gather_subjective(target)
     today_payload["advice_feedback_recent"] = _gather_advice_feedback(target)
