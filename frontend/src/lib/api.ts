@@ -726,6 +726,33 @@ export type LearningProjection = {
   series: { date: string; pct: number }[];
 };
 
+export type BodyGroup = {
+  key: string;
+  label: string;
+  aesthetic: number;
+  home: string;
+  recovery_h: number;
+  last_at: string | null;
+  hours_since: number | null;
+  recovery_pct: number;
+  week_load: number;
+  confidence: "measured" | "inferred" | "none";
+  priority: number;
+};
+export type BodyLoadSuggestion = {
+  key: string;
+  label: string;
+  home: string;
+  confidence: "measured" | "inferred" | "none";
+  week_load: number;
+};
+export type BodyLoadState = {
+  groups: BodyGroup[];
+  suggestion: BodyLoadSuggestion[];
+  confidence: "high" | "low" | "none";
+  window_days: number;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -838,6 +865,7 @@ export const api = {
   alcoholDelete: (id: number) =>
     request<{ deleted: number }>(`/api/alcohol/${id}`, { method: "DELETE" }),
   life: () => request<LifeResponse>("/api/life"),
+  bodyLoad: () => request<BodyLoadState>("/api/bodyload"),
   learningState: () => request<LearningState>("/api/learning/state"),
   learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
     request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),

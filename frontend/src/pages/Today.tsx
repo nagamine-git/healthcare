@@ -20,6 +20,7 @@ import { DayPrediction } from "../components/DayPrediction";
 import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
+import { BodyLoadCard } from "../components/BodyLoadCard";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -269,6 +270,12 @@ export function TodayPage({ onOpenDebug }: Props) {
             : null
         }
       />
+
+      {/* ===== 💪 部位別トレーニング ===== */}
+      <div id="bodyload-section">
+        <SectionHeader label="部位別トレーニング" hint="刺激・回復・週間負荷 — 今日やるべき部位を自動算出" />
+        <BodyLoadCard />
+      </div>
 
       {/* ===== 📊 今の状態 ===== */}
       <SectionHeader label="いまの状態" hint="主観の調子 + 集中力 + 環境" />
