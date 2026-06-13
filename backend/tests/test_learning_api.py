@@ -119,20 +119,31 @@ def test_projection_estimates_completion(db_engine):
     from datetime import date, datetime, timedelta
 
     from app.db import session_scope
-    from app.models import LearningChapterProgress
-    from app.scoring.learning import _progress_rows, projection
+    from app.models import LearningSectionProgress
+    from app.scoring.learning import TOTAL_SECTIONS, _progress_rows, projection
 
     today = date(2026, 6, 13)
     start = datetime(2026, 6, 1, 9, 0)
+    # 節を5つ、最初の12日に分散して読了 (projection は節単位)
     with session_scope() as s:
-        for i in range(3):
-            ts = start + timedelta(days=i * 4)
-            s.add(LearningChapterProgress(chapter=i + 1, read_at=ts,
-                                          rustlings_at=ts, explained_at=ts))
+        for i, sid in enumerate(["1.1", "1.2", "1.3", "3.1", "3.2"]):
+            s.add(LearningSectionProgress(section_id=sid, done_at=start + timedelta(days=i * 3)))
     p = projection(_progress_rows(), today)
     assert p is not None
-    assert p["done_units"] == 9
-    assert p["total_units"] == 63
+    assert p["done_units"] == 5
+    assert p["total_units"] == TOTAL_SECTIONS
     assert p["started_on"] == "2026-06-01"
     assert p["eta_date"] is not None
     assert len(p["series"]) >= 1
+
+
+def test_section_toggle(app_client):
+    """節をトグルすると section_done が増え、章に節リストが付く。"""
+    r = app_client.post("/api/learning/section/4.1/toggle", json={"done": True}).json()
+    assert r["section_done"] == 1
+    ch4 = next(c for c in r["chapters"] if c["chapter"] == 4)
+    assert ch4["section_total"] == 3
+    assert ch4["section_done"] == 1
+    assert any(s["id"] == "4.1" and s["done"] for s in ch4["sections"])
+    # 不正な節は 404
+    assert app_client.post("/api/learning/section/99.9/toggle", json={"done": True}).status_code == 404

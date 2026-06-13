@@ -318,6 +318,15 @@ class LearningChapterProgress(Base):
     explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class LearningSectionProgress(Base):
+    """The Book の節 (subsection, 例 "4.2") 単位の進捗。done_at がセットなら読了。"""
+
+    __tablename__ = "learning_section_progress"
+
+    section_id: Mapped[str] = mapped_column(String(8), primary_key=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class LearningPlanMeta(Base):
     """完走プランのメタ情報 (シングルトン id=1)。
 
