@@ -418,6 +418,52 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     return out, baseline_per_h
 
 
+def _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx) -> str | None:
+    """予測可能な系列 (カフェイン消失・気圧3h・集中窓) を 1-2 文の予測文に。"""
+    import math
+
+    from app.config import get_settings
+
+    now_jst = datetime.now(JST)
+    parts: list[str] = []
+
+    # カフェイン: 就寝安全域に入る時刻 (半減期で解析的に算出)
+    if caffeine_curve and caf_info and now_off is not None:
+        near = min(caffeine_curve, key=lambda p: abs(p["h"] - now_off))
+        now_mg = near["mg"]
+        safe = caf_info.get("bedtime_safe_mg")
+        if safe and now_mg > safe:
+            s = get_settings()
+            t_h = s.caffeine_half_life_h * math.log2(now_mg / safe)
+            if 0 < t_h <= 14:
+                clk = now_jst + timedelta(hours=t_h)
+                parts.append(f"カフェインは{clk.strftime('%H:%M')}頃に就寝安全域へ")
+
+    # 気圧: 未来3hの変化
+    if pressure_curve and now_off is not None:
+        fut = [p for p in pressure_curve if p["h"] > now_off]
+        cur = min(pressure_curve, key=lambda p: abs(p["h"] - now_off))["hpa"]
+        if fut:
+            d = round(fut[-1]["hpa"] - cur, 1)
+            if d <= -3:
+                parts.append(f"気圧が3時間で{d}hPa低下 (頭痛注意)")
+            elif d <= -1.5:
+                parts.append(f"気圧やや低下 ({d}hPa/3h)")
+
+    # 集中ピーク窓 (これからの分)
+    fw = [w for w in (ctx.get("focus_windows") or []) if now_off is None or w["end_h"] > now_off]
+    if fw:
+        w = fw[0]
+        s_clk = now_jst + timedelta(hours=w["start_h"] - (now_off or 0))
+        e_clk = now_jst + timedelta(hours=w["end_h"] - (now_off or 0))
+        if w["start_h"] >= (now_off or 0):
+            parts.append(f"集中しやすいのは{s_clk.strftime('%H:%M')}〜{e_clk.strftime('%H:%M')}")
+        else:
+            parts.append(f"いま集中ピーク (〜{e_clk.strftime('%H:%M')})")
+
+    return "／".join(parts) if parts else None
+
+
 def _pressure_curve(start_utc, end_utc, off):
     """毎時の気圧 (実測+予報) を window に合わせて offset 化。片頭痛トリガーの可視化。
 
@@ -495,6 +541,7 @@ async def day_timeline(
     pressure_curve = _pressure_curve(start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
+    prediction_text = _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx)
 
     return {
         "window": window,
@@ -519,6 +566,7 @@ async def day_timeline(
         "caffeine_today_mg": caf_info["today_total_mg"] if caf_info else None,
         "caffeine_daily_limit_mg": caf_info["daily_limit_mg"] if caf_info else None,
         "pressure_curve": pressure_curve,
+        "prediction_text": prediction_text,
         "focus_windows": ctx["focus_windows"],
         "sleep_window": ctx["sleep_window"],
         "recovery_bands": ctx["recovery_bands"],

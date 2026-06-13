@@ -16,6 +16,7 @@ import { EnvironmentPanel } from "../components/EnvironmentPanel";
 import { StaleBanner } from "../components/StaleBanner";
 import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
+import { DayPrediction } from "../components/DayPrediction";
 import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
@@ -231,6 +232,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div id="alerts-section">
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ LLMの推奨アクション" />
         <div className="space-y-3">
+          <DayPrediction />
           <WellbeingAlertsBanner alerts={data.alerts} />
           <AdviceCard
             advice={data.advice}

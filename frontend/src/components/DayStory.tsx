@@ -171,14 +171,18 @@ export function DayStory() {
       <div className={ZOOM_PX[zoom] != null ? "-mx-1 space-y-1 overflow-x-auto px-1" : "space-y-1"}>
         <div style={ZOOM_PX[zoom] != null ? { width: `${ZOOM_PX[zoom]}px` } : undefined} className="space-y-1">
         <svg
-          viewBox={`0 0 ${W} ${TOTAL_H}`}
+          viewBox={`0 0 ${W + 12} ${TOTAL_H}`}
           className="w-full"
           role="img"
           aria-label="今日のタイムライン"
         >
-        {/* 未来領域 (現在線より右) を薄く塗って「予測」と分かるように */}
+        {/* 未来領域 (現在線より右) = これからの「予測」ゾーン。移動・運動の水色と
+            混同しないよう中立のスレートで薄く塗る */}
         {nowH != null && nowH < 24 && (
-          <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill="#0ea5e9" opacity={0.05} />
+          <>
+            <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill="#475569" opacity={0.12} />
+            <text x={(X(nowH) + X(24)) / 2} y={ACT_Y + 9} fontSize={9} fill="#94a3b8" textAnchor="middle" opacity={0.8}>予測ゾーン</text>
+          </>
         )}
         {/* 時間グリッド (拡大で細かく)。整時は濃いめ、半端目盛りは薄く */}
         {gridTicks.map((h) => (
@@ -301,9 +305,6 @@ export function DayStory() {
           <g>
             <line x1={X(nowH)} y1={ACT_Y} x2={X(nowH)} y2={BODY_Y1} stroke="#f43f5e" strokeWidth={1.5} />
             <circle cx={X(nowH)} cy={ACT_Y} r={3} fill="#f43f5e" />
-            {nowH < 23 && (
-              <text x={X(nowH) + 4} y={ACT_Y + 9} fontSize={9} fill="#38bdf8" opacity={0.85}>予測 →</text>
-            )}
           </g>
         )}
 
@@ -341,7 +342,7 @@ export function DayStory() {
 
         {/* サブチャート下の共有 x 軸 */}
         {(t?.caffeine_curve.length || t?.water) ? (
-          <svg viewBox={`0 0 ${W} 14`} className="w-full" aria-hidden>
+          <svg viewBox={`0 0 ${W + 12} 14`} className="w-full" aria-hidden>
             {labelTicks.map((h) => (
               <text key={h} x={X(h)} y={10} fontSize={10} fill="#64748b"
                     textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
@@ -474,7 +475,7 @@ function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
   const nowBpm = nowH != null && sm.length
     ? sm.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).v : (sm.length ? sm[sm.length - 1].v : null);
   return (
-    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="心拍と運動">
+    <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="心拍と運動">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       {/* 歩数バー (運動量。心拍の背後に薄く) */}
       {steps.map((s, i) => s.steps > 0 && (
@@ -493,7 +494,8 @@ function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
       )}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill="#94a3b8">
-        心拍(平滑) &amp; 運動量{nowBpm != null ? ` · 現在約${Math.round(nowBpm)}bpm` : ""}{restingHr != null ? ` · 安静${Math.round(restingHr)}` : ""}
+        <tspan fill="#fb7185">━</tspan> 心拍(平滑){nowBpm != null ? `約${Math.round(nowBpm)}` : ""}{restingHr != null ? `/安静${Math.round(restingHr)}` : ""}
+        {"  "}<tspan fill="#38bdf8">▮</tspan> 歩数(動いた量)
       </text>
     </svg>
   );
@@ -518,7 +520,7 @@ function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, 
   const over = threshold != null && nowMg > threshold;
   const overLimit = todayMg != null && dailyLimit != null && todayMg > dailyLimit;
   return (
-    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="体内カフェイン量">
+    <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="体内カフェイン量">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       {/* 覚醒効果の下限 (1mg/kg, Smith 2002): これ以上残れば効果継続 */}
       {floor != null && floor < peak && (
@@ -575,7 +577,7 @@ function WaterTrack({ water, nowH, X, gridTicks }: {
   const deficit = goal - total;
   const src = water.source === "garmin" ? " · Garmin" : water.source === "hae" ? " · Health" : "";
   return (
-    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="水分摂取の累積">
+    <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="水分摂取の累積">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       <line x1={0} y1={y(goal)} x2={SUB_W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
       {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
@@ -607,7 +609,7 @@ function PressureTrack({ curve, nowH, X, gridTicks }: {
   const drop = nowHpa != null && lastFut != null ? lastFut - nowHpa : null;
   const warnDrop = drop != null && drop <= -3;
   return (
-    <svg viewBox={`0 0 ${SUB_W} ${H}`} className="w-full" role="img" aria-label="気圧(実測+予報)">
+    <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="気圧(実測+予報)">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke="#94a3b8" strokeWidth={1.5} />}
       {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? "#fb7185" : "#94a3b8"} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
