@@ -493,6 +493,51 @@ def _bin_steps(step_pairs, bin_h: float = 0.25):
     return [{"h": round(i * bin_h + bin_h / 2, 2), "steps": round(v)} for i, v in sorted(bins.items())]
 
 
+def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list[dict[str, float]]]:
+    """未来ゾーン (now → SPAN_H) の心拍・Body Battery を予測して埋める。
+
+    - Body Battery: 直近2hの最小二乗スロープを線形外挿 (消耗トレンドの継続)。
+    - 心拍: 安静時心拍へ指数的に減衰 (安静を仮定。運動すれば外れる低確度の見通し)。
+    どちらも実測ではない予測。フロントは破線+薄色で「予測ゾーン」に描く。
+    """
+    import math
+
+    out: dict[str, list[dict[str, float]]] = {"body_battery": [], "heart_rate": []}
+    if now_off is None or now_off >= SPAN_H:
+        return out
+    step = 0.25
+
+    def ls_slope(pts: list[tuple[float, float]]) -> float:
+        n = len(pts)
+        mx = sum(p[0] for p in pts) / n
+        my = sum(p[1] for p in pts) / n
+        denom = sum((p[0] - mx) ** 2 for p in pts)
+        return sum((p[0] - mx) * (p[1] - my) for p in pts) / denom if denom else 0.0
+
+    # Body Battery: 直近2hのスロープで外挿
+    bb = [(p["h"], p["v"]) for p in (g.get("body_battery") or []) if now_off - 2 <= p["h"] <= now_off]
+    if len(bb) >= 3:
+        slope = ls_slope(bb)
+        v0 = bb[-1][1]
+        h = now_off
+        while h <= SPAN_H + 1e-6:
+            v = max(5.0, min(100.0, v0 + slope * (h - now_off)))
+            out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
+            h += step
+
+    # 心拍: 安静時心拍へ tau=1h で減衰
+    hr = [(h, v) for h, v in (g.get("_hr") or []) if now_off - 1 <= h <= now_off]
+    rest = g.get("_resting_hr")
+    if hr and rest is not None:
+        v0 = hr[-1][1]
+        h = now_off
+        while h <= SPAN_H + 1e-6:
+            v = rest + (v0 - rest) * math.exp(-(h - now_off) / 1.0)
+            out["heart_rate"].append({"h": round(h, 2), "v": round(v, 1)})
+            h += step
+    return out
+
+
 def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     """カレンダー予定 (gcal 未設定なら空)。ウィンドウが触れる JST 日付を走査。終日除外。"""
     start_jst_d = start_utc.replace(tzinfo=UTC).astimezone(JST).date()
@@ -542,6 +587,7 @@ async def day_timeline(
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
     prediction_text = _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx)
+    _fc = _forecast_curves(g, now_off)
 
     return {
         "window": window,
@@ -552,6 +598,8 @@ async def day_timeline(
         "body_battery": g["body_battery"],
         "stress": g["stress"],
         "heart_rate": g["heart_rate"],
+        "heart_rate_forecast": _fc["heart_rate"],
+        "body_battery_forecast": _fc["body_battery"],
         "resting_hr": g["_resting_hr"],
         "steps_binned": _bin_steps(g["_steps"]),
         "sleep_blocks": g["sleep_blocks"],

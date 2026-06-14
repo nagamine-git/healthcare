@@ -296,6 +296,11 @@ export function DayStory() {
           <polyline points={bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
                     fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" />
         )}
+        {/* Body Battery 予測 (未来ゾーン、破線・薄色) */}
+        {(t?.body_battery_forecast?.length ?? 0) > 1 && (
+          <polyline points={t!.body_battery_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
+                    fill="none" stroke="#34d399" strokeWidth={1.6} strokeDasharray="3 3" opacity={0.6} strokeLinejoin="round" />
+        )}
         {stress.length > 1 && (
           <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
         )}
@@ -319,6 +324,7 @@ export function DayStory() {
         {t && (t.heart_rate.length > 1 || (t.steps_binned?.length ?? 0) > 0) && (
           <HeartMotionTrack
             hr={t.heart_rate}
+            hrForecast={t.heart_rate_forecast ?? []}
             steps={t.steps_binned ?? []}
             restingHr={t.resting_hr}
             nowH={nowH}
@@ -457,8 +463,9 @@ function smooth(pts: { h: number; v: number }[], win = 5): { h: number; v: numbe
   });
 }
 
-function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
+function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks }: {
   hr: { h: number; v: number }[];
+  hrForecast?: { h: number; v: number }[];
   steps: { h: number; steps: number }[];
   restingHr: number | null;
   nowH: number | null;
@@ -491,6 +498,10 @@ function HeartMotionTrack({ hr, steps, restingHr, nowH, X, gridTicks }: {
       {/* 平滑化した心拍 */}
       {sm.length > 1 && (
         <polyline points={sm.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.6} strokeLinejoin="round" />
+      )}
+      {/* 心拍 予測 (未来ゾーン、安静へ減衰。破線・薄色の低確度見通し) */}
+      {(hrForecast?.length ?? 0) > 1 && (
+        <polyline points={hrForecast!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.3} strokeDasharray="3 3" opacity={0.5} strokeLinejoin="round" />
       )}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill="#94a3b8">

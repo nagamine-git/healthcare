@@ -345,8 +345,10 @@ export type DayTimelineData = {
   span_h: number;
   now_h: number | null;
   body_battery: TimelinePoint[];
+  body_battery_forecast?: TimelinePoint[];
   stress: TimelinePoint[];
   heart_rate: TimelinePoint[];
+  heart_rate_forecast?: TimelinePoint[];
   resting_hr: number | null;
   steps_binned: { h: number; steps: number }[];
   sleep_blocks: { start_h: number; end_h: number }[];
