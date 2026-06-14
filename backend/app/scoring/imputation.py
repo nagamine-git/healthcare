@@ -47,28 +47,27 @@ METRICS: dict[str, tuple[float, float]] = {
     "steps": (0.0, 30000.0),
 }
 
-# 特徴量の重み (生理学的事前知識)。慣性=直近の本人水準が最強の予測子。
-_FEATURE_WEIGHTS: dict[str, float] = {
-    "inertia": 2.2,
-    "alcohol_prev": 1.5,
-    "pressure_change": 1.2,
-    "subj_energy": 1.2,
-    "subj_stress": 1.2,
-    "subj_soreness": 1.0,
-    "subj_mood": 0.8,
-    "pressure_mean": 0.8,
-    "caffeine_prev": 0.8,
-    "weekend": 1.0,
-    "dow_sin": 0.6,
-    "dow_cos": 0.6,
-    "month_sin": 0.4,
-    "month_cos": 0.4,
-    "moon": 0.4,
+# 候補特徴量。重みはハードコードせず、各指標ごとにデータから学習する
+# (empirical Bayes: cold-start は生理学的事前分布、データが増えると相関が支配)。
+_FEATURES = [
+    "inertia", "alcohol_prev", "pressure_change", "pressure_mean",
+    "subj_energy", "subj_stress", "subj_soreness", "subj_mood",
+    "caffeine_prev", "weekend", "dow_sin", "dow_cos", "month_sin", "month_cos", "moon",
+]
+# 生理学的事前重み (科学的に効くと分かっているもの)。データ不足時のみ効く。
+_PRIOR: dict[str, float] = {
+    "inertia": 0.8, "alcohol_prev": 0.7, "pressure_change": 0.5, "subj_energy": 0.6,
+    "subj_stress": 0.6, "subj_soreness": 0.4, "subj_mood": 0.3, "pressure_mean": 0.2,
+    "caffeine_prev": 0.3, "weekend": 0.2,
 }
+_PRIOR_N = 25     # この対データ数で prior と学習相関が半々 (alpha = n/(n+_PRIOR_N))
+_MIN_CORR_PAIRS = 8  # 相関を推定する最小ペア数
 
-_HISTORY_DAYS = 180
-_K = 12          # 近傍数の上限
-_MIN_NEIGHBORS = 3  # これ未満は baseline へフォールバック
+_HISTORY_DAYS = 365   # 学習に使う履歴窓 (相関推定の標本を増やす)
+_K_CAP = 40           # 近傍数の上限
+_MIN_NEIGHBORS = 3    # これ未満は baseline へフォールバック
+_SIGNAL_EPS = 1e-6    # 重み総和がこれ未満 = 有意な特徴なし → 個人ベースライン
+_SHRINK_C = 0.05      # 縮小の強さ: beta = learned_signal/(learned_signal+_SHRINK_C)
 _FAR_Z = 2.6     # クエリが全近傍からこれ以上離れていれば外挿として信頼度を下げる
 
 
@@ -216,7 +215,7 @@ def _load_history(target: date_type) -> dict[str, Any]:
 def _zstats(feats: dict[date_type, dict[str, float]], keys: list[date_type]) -> dict[str, tuple[float, float]]:
     """各特徴の (mean, std) を履歴から算出 (std=0 は 1 に置換)。"""
     stats: dict[str, tuple[float, float]] = {}
-    for fk in _FEATURE_WEIGHTS:
+    for fk in _FEATURES:
         vals = [feats[d][fk] for d in keys if fk in feats.get(d, {})]
         if len(vals) < 2:
             continue
@@ -225,6 +224,56 @@ def _zstats(feats: dict[date_type, dict[str, float]], keys: list[date_type]) -> 
         sd = math.sqrt(var) or 1.0
         stats[fk] = (m, sd)
     return stats
+
+
+def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    n = len(xs)
+    if n < 3:
+        return None
+    mx, my = sum(xs) / n, sum(ys) / n
+    sx = math.sqrt(sum((x - mx) ** 2 for x in xs))
+    sy = math.sqrt(sum((y - my) ** 2 for y in ys))
+    if sx == 0 or sy == 0:
+        return None
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / (sx * sy)
+
+
+def _learned_weights(
+    feats: dict[date_type, dict[str, float]],
+    tgts: dict[date_type, dict[str, float]],
+    metric: str,
+    cand_days: list[date_type],
+    inertias: dict[date_type, float | None],
+) -> tuple[dict[str, float], float]:
+    """各特徴の距離重みを empirical Bayes で決める。(weights, learned_signal) を返す。
+
+    weight = alpha * (縮小相関) + (1-alpha) * 事前重み,  alpha = n/(n+_PRIOR_N)。
+    縮小相関 = max(0, |r| - 1SE) を二乗 (分散説明率的) — ノイズ特徴は自動で 0 に。
+    データ (n) が増えるほど学習側 (相関) が支配し、情報のある特徴が浮上する。
+    learned_signal = データ駆動分 (alpha*rel) の総和 = 「本当に効く特徴がどれだけあるか」。
+    """
+    weights: dict[str, float] = {}
+    learned_signal = 0.0
+    for fk in _FEATURES:
+        xs: list[float] = []
+        ys: list[float] = []
+        for d in cand_days:
+            fv = inertias[d] if fk == "inertia" else feats.get(d, {}).get(fk)
+            if fv is None:
+                continue
+            xs.append(fv)
+            ys.append(tgts[d][metric])
+        n = len(xs)
+        r = _pearson(xs, ys) if n >= _MIN_CORR_PAIRS else None
+        if r is not None:
+            shrunk = max(0.0, abs(r) - 1.0 / math.sqrt(n - 1))  # 1SE 縮小
+            rel = shrunk * shrunk
+        else:
+            rel = 0.0
+        alpha = n / (n + _PRIOR_N) if n > 0 else 0.0
+        learned_signal += alpha * rel
+        weights[fk] = alpha * rel + (1 - alpha) * _PRIOR.get(fk, 0.0)
+    return weights, learned_signal
 
 
 def _inertia(tgts: dict[date_type, dict[str, float]], metric: str, day: date_type) -> float | None:
@@ -237,13 +286,14 @@ def _inertia(tgts: dict[date_type, dict[str, float]], metric: str, day: date_typ
 
 
 def _distance(
-    fq: dict[str, float], fd: dict[str, float], stats: dict[str, tuple[float, float]]
+    fq: dict[str, float], fd: dict[str, float], stats: dict[str, tuple[float, float]],
+    weights: dict[str, float],
 ) -> float | None:
     """標準化重み付きユークリッド距離 (両者が持つ特徴のみ、重み正規化)。"""
     num = 0.0
     wsum = 0.0
-    for fk, w in _FEATURE_WEIGHTS.items():
-        if fk not in stats or fk not in fq or fk not in fd:
+    for fk, w in weights.items():
+        if w <= 0 or fk not in stats or fk not in fq or fk not in fd:
             continue
         m, sd = stats[fk]
         dz = (fq[fk] - m) / sd - (fd[fk] - m) / sd
@@ -303,38 +353,51 @@ def impute_metric(metric: str, target: date_type, hist: dict[str, Any]) -> Imput
         sd = math.sqrt(sum((v - m) ** 2 for v in ivals) / (len(ivals) - 1)) or 1.0
         stats["inertia"] = (m, sd)
 
+    # 距離重みをデータから学習 (empirical Bayes)。有意な特徴が無ければ個人ベースラインへ。
+    weights, learned_signal = _learned_weights(feats, tgts, metric, cand_days, inertias)
+    median_val = _median([tgts[d][metric] for d in cand_days])
+    if sum(weights.values()) < _SIGNAL_EPS or len(cand_days) < _MIN_NEIGHBORS:
+        return Imputed(metric, _clamp(median_val, lo_clamp, hi_clamp), "low", "baseline",
+                       None, None, float(len(cand_days)), _drivers(fq, stats))
+
     scored: list[tuple[float, float]] = []  # (distance, target_value)
     for d in cand_days:
         fd = dict(feats.get(d, {}))
         if inertias[d] is not None:
             fd["inertia"] = inertias[d]
-        dist = _distance(fq, fd, stats)
+        dist = _distance(fq, fd, stats, weights)
         if dist is None:
             continue
         scored.append((dist, tgts[d][metric]))
 
-    median_val = _median([tgts[d][metric] for d in cand_days])
     if len(scored) < _MIN_NEIGHBORS:
         return Imputed(metric, _clamp(median_val, lo_clamp, hi_clamp), "low", "baseline",
                        None, None, float(len(scored)), _drivers(fq, stats))
 
     scored.sort(key=lambda x: x[0])
-    nn = scored[: _K]
+    # 一致推定量の条件 (k→∞, k/n→0) を満たすため k は √n で可変
+    k = max(_MIN_NEIGHBORS, min(_K_CAP, round(math.sqrt(len(scored)))))
+    nn = scored[:k]
     dists = [d for d, _ in nn]
     h = _median(dists) or 1.0  # バンド幅 = 近傍距離の中央値
-    weights = [math.exp(-(d * d) / (2 * h * h)) for d, _ in nn]
-    wsum = sum(weights) or 1.0
-    value = sum(w * v for w, (_, v) in zip(weights, nn, strict=True)) / wsum
+    kw = [math.exp(-(d * d) / (2 * h * h)) for d, _ in nn]
+    wsum = sum(kw) or 1.0
+    knn_val = sum(w * v for w, (_, v) in zip(kw, nn, strict=True)) / wsum
     # 加重分散 → 区間
-    var = sum(w * (v - value) ** 2 for w, (_, v) in zip(weights, nn, strict=True)) / wsum
+    var = sum(w * (v - knn_val) ** 2 for w, (_, v) in zip(kw, nn, strict=True)) / wsum
     spread = math.sqrt(max(var, 0.0))
-    n_eff = (wsum * wsum) / (sum(w * w for w in weights) or 1.0)
+    n_eff = (wsum * wsum) / (sum(w * w for w in kw) or 1.0)
 
-    # 信頼度: 有効標本数 + 最近傍距離 (外挿) で段階化
+    # James-Stein 流の縮小: 学習信号が弱いほど個人平均(median)へ寄せる。
+    # これで「効く特徴のデータが増えるほど kNN を信頼、無ければ個人平均」を保証。
+    beta = learned_signal / (learned_signal + _SHRINK_C)
+    value = beta * knn_val + (1 - beta) * median_val
+
+    # 信頼度: 有効標本数 + 最近傍距離(外挿) + 学習信号 で段階化
     min_dist = dists[0]
-    if min_dist > _FAR_Z or n_eff < 3:
+    if min_dist > _FAR_Z or n_eff < 3 or beta < 0.2:
         conf = "low"
-    elif n_eff >= 6 and min_dist < 1.5:
+    elif n_eff >= 6 and min_dist < 1.5 and beta >= 0.5:
         conf = "high"
     else:
         conf = "medium"
