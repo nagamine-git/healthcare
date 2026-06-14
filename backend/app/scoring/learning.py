@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import itertools
+import math
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Any, TypedDict
@@ -161,6 +162,33 @@ TOTAL_CHECKS = TOTAL_SECTIONS * len(SECTION_FIELDS) + len(RUSTLINGS_TOPICS)
 _SECTION_CHAPTER: dict[str, tuple[int, str]] = {
     sid: (ch, title) for ch, secs in SECTIONS.items() for sid, title in secs
 }
+
+
+def _check_sequence() -> list[dict[str, Any]]:
+    """全チェックを学習順に並べる。1節=読了→説明の2チェック、章末に Rustlings。"""
+    seq: list[dict[str, Any]] = []
+    for c in CURRICULUM:
+        ch = c["chapter"]
+        for sid, title in SECTIONS.get(ch, []):
+            seq.append({"chapter": ch, "section": sid, "title": title, "field": "read"})
+            seq.append({"chapter": ch, "section": sid, "title": title, "field": "explained"})
+        if ch in RUSTLINGS_TOPICS:
+            seq.append({"chapter": ch, "section": None, "title": None, "field": "rustlings"})
+    return seq
+
+
+def _check_target_label(units: int) -> dict[str, Any]:
+    """累積 units チェック目に当たる到達点を人間可読ラベルで返す。"""
+    seq = _check_sequence()
+    if units >= len(seq):
+        return {"units": len(seq), "chapter": None, "section": None, "label": "完走"}
+    item = seq[max(0, units - 1)]
+    fld = {"read": "読了", "explained": "説明", "rustlings": "Rustlings"}[item["field"]]
+    if item["field"] == "rustlings":
+        label = f"ch{item['chapter']} の Rustlings まで"
+    else:
+        label = f"ch{item['chapter']} {item['section']} {item['title']} の{fld}まで"
+    return {"units": units, "chapter": item["chapter"], "section": item["section"], "label": label}
 
 
 def _section_rows() -> dict[str, dict[str, datetime | None]]:
@@ -386,19 +414,22 @@ def projection(today: date_type) -> dict[str, Any] | None:
         else:
             goal_status = "unlikely"
 
-    # オンスケ判定用: 目標線(開始0%→目標日100%)で「今日あるべき累積」と、
-    # そこへ追いつくのに今日必要な追加チェック数、目標達成に必要な定常ペース。
+    # オンスケのノルマ。悲観ペース(×0.7)でも目標をクリアできるよう必要ペースに
+    # バッファを掛ける: 必要ペース_安全 = 残り / (残日数 × 0.7)。今日そのぶん進める。
+    # さらに「今日どの節まで到達すべきか」を具体ラベルで返す。
     needed_today: int | None = None
-    required_per_day: float | None = None
-    on_track_units: int | None = None
+    required_per_day: float | None = None       # 標準: 残り/残日数
+    required_per_day_safe: float | None = None   # 悲観(×0.7)でもクリア
+    target_today: dict[str, Any] | None = None
     days_left: int | None = None
     if target_date and remaining > 0:
-        span = max(1, (target_date - started_on).days)
-        elapsed = (today - started_on).days
-        on_track_units = round(total_units * min(1.0, max(0.0, elapsed / span)))
-        needed_today = max(0, on_track_units - done_units)
         days_left = (target_date - today).days
-        required_per_day = round(remaining / days_left, 1) if days_left > 0 else None
+        if days_left > 0:
+            required_per_day = round(remaining / days_left, 1)
+            safe = remaining / (days_left * 0.7)
+            required_per_day_safe = round(safe, 1)
+            needed_today = min(remaining, math.ceil(safe))
+            target_today = _check_target_label(done_units + needed_today)
 
     return {
         "started_on": started_on.isoformat(),
@@ -416,8 +447,9 @@ def projection(today: date_type) -> dict[str, Any] | None:
         "on_track": on_track,
         "goal_status": goal_status,
         "needed_today": needed_today,
-        "on_track_units": on_track_units,
         "required_per_day": required_per_day,
+        "required_per_day_safe": required_per_day_safe,
+        "target_today": target_today,
         "days_left": days_left,
         "confidence": confidence,
         "series": series,
