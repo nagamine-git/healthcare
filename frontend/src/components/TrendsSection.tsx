@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar, ComposedChart, Line, LineChart, ReferenceArea, ReferenceLine,
+  Area, Bar, ComposedChart, Line, LineChart, ReferenceArea, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../lib/api";
@@ -23,6 +23,15 @@ const DIR_COLOR: Record<TrendDirection, string> = {
 const LINE = "#34d399";
 const BAND = "#34d39922";
 const REG = "#f59e0b";
+const PRED = "#38bdf8";        // 予測 (実測欠損/未来) の線色 = sky
+const PRED_BAND = "#38bdf81f"; // 予測の範囲バンド
+
+// トレンド指標 → 統一予測エンジンの指標キー (補完可能なものだけ)
+const PREDICT_KEY: Partial<Record<TrendMetricKey, string>> = {
+  sleep: "sleep_total_min",
+  hrv: "hrv",
+  energy: "body_battery",
+};
 const TICK = { fontSize: 10, fill: "#64748b" } as const;
 
 /** 355 → "5時間55分" (睡眠の分表示を読みやすくする) */
@@ -82,6 +91,23 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
   const wow = metric.achievement_week_over_week;
   const dir = resolveDirection(metric.direction, wow?.delta);
   const ideal = metric.ideal;
+
+  // 統一予測: 補完可能な指標は実測+過去欠損+未来を1系列に統合表示する
+  const predictKey = PREDICT_KEY[metricKey];
+  const predictQ = useQuery({
+    queryKey: ["predict", predictKey],
+    queryFn: () => api.predict(predictKey as string),
+    enabled: !!predictKey && granularity === "daily",
+  });
+  const pred = granularity === "daily" ? predictQ.data : undefined;
+  const pdata = pred
+    ? pred.points.map((p) => ({
+        date: p.date,
+        actual: p.kind === "actual" ? p.value : null,
+        pred: p.value,
+        band: p.low != null && p.high != null ? [p.low, p.high] : null,
+      }))
+    : null;
   // 達成度が十分高い間は「低下傾向」を警告色にしない (理想圏内のゆらぎは騒がない)
   const calm = metric.achievement != null && metric.achievement >= 90;
 
@@ -174,6 +200,26 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
               <Bar dataKey="value" fill={LINE} radius={[3, 3, 0, 0]} />
               {regLine}
             </ComposedChart>
+          ) : pdata ? (
+            <ComposedChart data={pdata}>
+              {xAxis}
+              {yAxis}
+              <Tooltip contentStyle={tooltipStyle} formatter={tooltipFormatter} />
+              {idealOverlay}
+              {/* 予測の範囲バンド (low〜high)。実測区間は band=null で描かれない */}
+              <Area dataKey="band" stroke="none" fill={PRED_BAND} connectNulls={false} isAnimationActive={false} />
+              {/* 予測線 (過去欠損+未来) = 薄い破線で全期間を連続表示 */}
+              <Line type="monotone" dataKey="pred" stroke={PRED} strokeWidth={1.4}
+                    strokeDasharray="4 3" dot={false} connectNulls isAnimationActive={false} />
+              {/* 実測 = 濃い実線を上書き */}
+              <Line type="monotone" dataKey="actual" stroke={LINE} strokeWidth={2}
+                    dot={false} connectNulls isAnimationActive={false} />
+              {/* 「今」の境界 */}
+              {pred && (
+                <ReferenceLine x={pred.today} stroke="#64748b" strokeDasharray="2 3"
+                  label={{ value: "今", fontSize: 9, fill: "#94a3b8", position: "insideTopRight" }} />
+              )}
+            </ComposedChart>
           ) : (
             <LineChart data={merged}>
               {xAxis}
@@ -186,6 +232,14 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
           )}
         </ResponsiveContainer>
       </div>
+      {pdata && (
+        <div className="mt-1 flex flex-wrap gap-x-3 text-[9px] text-slate-500">
+          <span><span style={{ color: LINE }}>━</span> 実測</span>
+          <span><span style={{ color: PRED }}>┈</span> 予測(欠損/未来)</span>
+          <span><span style={{ color: "#38bdf8" }}>▓</span> 範囲</span>
+          <span>｜今 で過去/未来を区切り</span>
+        </div>
+      )}
     </div>
   );
 }

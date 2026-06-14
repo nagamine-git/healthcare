@@ -551,6 +551,25 @@ export type ImputedMetric = {
   drivers: string[];
 };
 
+export type PredictKind = "actual" | "imputed" | "forecast" | "none";
+export type PredictPoint = {
+  date: string;
+  value: number | null;
+  kind: PredictKind;
+  confidence: "high" | "medium" | "low" | null;
+  low: number | null;
+  high: number | null;
+  drivers: string[];
+};
+export type PredictSeries = {
+  metric: string;
+  unit: string;
+  start: string;
+  end: string;
+  today: string;
+  points: PredictPoint[];
+};
+
 export type ForecastRisk = "high" | "elevated" | "low";
 export type MigraineForecastBucket = { label: string; start: string; swing_hpa: number; risk: ForecastRisk };
 export type ForecastState = {
@@ -935,6 +954,10 @@ export const api = {
   bodyLoad: () => request<BodyLoadState>("/api/bodyload"),
   bodyMap: () => request<BodyMapState>("/api/bodymap"),
   forecast: () => request<ForecastState>("/api/forecast"),
+  predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
+    request<PredictSeries>(
+      `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,
+    ),
   learningState: () => request<LearningState>("/api/learning/state"),
   learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
     request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),
