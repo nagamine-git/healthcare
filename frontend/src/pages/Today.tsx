@@ -21,6 +21,7 @@ import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { BodyLoadCard } from "../components/BodyLoadCard";
+import { ImputedNotice } from "../components/ImputedNotice";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -297,6 +298,7 @@ export function TodayPage({ onOpenDebug }: Props) {
 
       {/* ===== 📈 今日のスコア (24h 振り返り) ===== */}
       <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
+      <ImputedNotice imputed={data.imputed} />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
 
       {/* ===== 📈 トレンド (理想への接近度 + 今の各メトリクス) ===== */}

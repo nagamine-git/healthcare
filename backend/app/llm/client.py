@@ -1052,6 +1052,11 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
 
     with session_scope() as session:
         today_payload["nutrition"] = aggregate_nutrition(session, target)
+    # 欠損した一次指標 (ウォッチ未装着日など) の統計的補完。推定値+信頼度を渡し、
+    # 助言は推定混じりの日は確信度を下げる (prompt 側で指示)。
+    from app.scoring.imputation import impute_day
+
+    today_payload["imputed"] = impute_day(target, only_missing=True)
     baselines = _gather_baselines(target)
 
     # Calendar 既存予定を取り込む (gcal 未設定なら空リスト)

@@ -13,6 +13,7 @@ from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
+from app.api import imputation as imputation_api
 from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_api.router)
     app.include_router(caffeine_api.router)
     app.include_router(bodyload_api.router)
+    app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)
     app.include_router(advice_feedback_api.router)
     app.include_router(migraine_api.router)

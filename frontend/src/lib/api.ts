@@ -540,6 +540,17 @@ export type TonightPlan = {
   notes: string[];
 };
 
+export type ImputedMetric = {
+  metric: string;
+  value: number;
+  confidence: "high" | "medium" | "low";
+  method: "knn" | "baseline";
+  low: number | null;
+  high: number | null;
+  n_eff: number;
+  drivers: string[];
+};
+
 export type TodayResponse = {
   date: string;
   last_data_update_at?: string | null;
@@ -547,6 +558,7 @@ export type TodayResponse = {
   score: SubScores | null;
   sub_reasons?: SubReasons;
   data_sources?: DataSources;
+  imputed?: Record<string, ImputedMetric>;
   sub_context?: SubContext;
   metrics: {
     sleep: SleepMetric | null;

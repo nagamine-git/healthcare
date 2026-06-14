@@ -93,6 +93,12 @@ async def today(
             "weight": weight_row.source if weight_row else None,
         }
 
+        # 欠損した一次指標の統計的補完 (ウォッチ未装着日など)。実測が欠けている時だけ算出。
+        imputed: dict[str, Any] = {}
+        if not (sleep and sleep.sleep_score is not None) or hrv is None or bb is None or summary is None:
+            from app.scoring.imputation import impute_day
+            imputed = impute_day(d, only_missing=True)
+
         # 各サブスコアの実世界の値とターゲット (UI 表示用)
         from app.scoring.profile import resolve_profile
         from app.scoring.recompute import _training_load
@@ -246,6 +252,7 @@ async def today(
             "score": _score_to_dict(score),
             "sub_reasons": sub_reasons,
             "data_sources": data_sources,
+            "imputed": imputed,
             "sub_context": sub_context,
             "nutrition": nutrition,
             "tonight_plan": tonight_plan,
