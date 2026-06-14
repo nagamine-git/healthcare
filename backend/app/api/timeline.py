@@ -516,15 +516,23 @@ def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list
 
     # 最後の実測点から窓終端 (SPAN_H) まで投影。データが古い(同期遅れ/未装着)場合は
     # その欠損ギャップも含めて埋める = 現在の空白も未来も予測でつなぐ。
-    # Body Battery: 直近最大4点のスロープを線形外挿
+    # Body Battery: 就寝中は回復(+8/h)、覚醒中は直近スロープで消耗。
+    # 睡眠で外した夜間を消耗で外挿すると「寝てたのに下がる」誤りになるため睡眠ブロックを使う。
+    sleep_blocks = g.get("sleep_blocks") or []
+
+    def in_sleep(hh: float) -> bool:
+        return any(b["start_h"] <= hh <= b["end_h"] for b in sleep_blocks)
+
     bb = [(p["h"], p["v"]) for p in (g.get("body_battery") or [])]
     if len(bb) >= 3:
-        slope = ls_slope(bb[-4:])
+        wake_slope = min(0.0, ls_slope(bb[-4:]))  # 覚醒時は消耗側のみ採用
         h0, v0 = bb[-1]
         if h0 < SPAN_H:
+            v = v0
             h = h0
             while h <= SPAN_H + 1e-6:
-                v = max(5.0, min(100.0, v0 + slope * (h - h0)))
+                rate = 8.0 if in_sleep(h) else wake_slope  # 就寝中は回復
+                v = max(5.0, min(100.0, v + rate * step))
                 out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
                 h += step
 
