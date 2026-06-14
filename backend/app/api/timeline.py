@@ -502,7 +502,7 @@ def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list
     """
     import math
 
-    out: dict[str, list[dict[str, float]]] = {"body_battery": [], "heart_rate": []}
+    out: dict[str, list[dict[str, float]]] = {"body_battery": [], "heart_rate": [], "stress": []}
     if now_off is None:
         return out
     step = 0.25
@@ -514,39 +514,51 @@ def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list
         denom = sum((p[0] - mx) ** 2 for p in pts)
         return sum((p[0] - mx) * (p[1] - my) for p in pts) / denom if denom else 0.0
 
-    # 最後の実測点から窓終端 (SPAN_H) まで投影。データが古い(同期遅れ/未装着)場合は
-    # その欠損ギャップも含めて埋める = 現在の空白も未来も予測でつなぐ。
-    # Body Battery: 就寝中は回復(+8/h)、覚醒中は直近スロープで消耗。
-    # 睡眠で外した夜間を消耗で外挿すると「寝てたのに下がる」誤りになるため睡眠ブロックを使う。
-    sleep_blocks = g.get("sleep_blocks") or []
-
-    def in_sleep(hh: float) -> bool:
-        return any(b["start_h"] <= hh <= b["end_h"] for b in sleep_blocks)
+    def ease_curve(pairs, target, tau, clamp_lo, clamp_hi):
+        """最後の実測 → target へ tau[h] で指数的に戻る曲線を SPAN_H まで。"""
+        if not pairs:
+            return []
+        h0, v0 = pairs[-1]
+        if h0 >= SPAN_H:
+            return []
+        pts = []
+        h = h0
+        while h <= SPAN_H + 1e-6:
+            v = target + (v0 - target) * math.exp(-(h - h0) / tau)
+            pts.append({"h": round(h, 2), "v": round(max(clamp_lo, min(clamp_hi, v)), 1)})
+            h += step
+        return pts
 
     bb = [(p["h"], p["v"]) for p in (g.get("body_battery") or [])]
-    if len(bb) >= 3:
-        wake_slope = min(0.0, ls_slope(bb[-4:]))  # 覚醒時は消耗側のみ採用
-        h0, v0 = bb[-1]
-        if h0 < SPAN_H:
-            v = v0
-            h = h0
-            while h <= SPAN_H + 1e-6:
-                rate = 8.0 if in_sleep(h) else wake_slope  # 就寝中は回復
-                v = max(5.0, min(100.0, v + rate * step))
-                out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
-                h += step
-
-    # 心拍: 最後の実測から安静時心拍へ tau=1h で指数減衰
     hr = g.get("_hr") or []
+    stress = [(p["h"], p["v"]) for p in (g.get("stress") or [])]
     rest = g.get("_resting_hr")
+
+    # 直近データからの経過 (= ギャップ)。長い=未装着/同期遅れ → 休息ベースラインへ戻す。
+    last_h = max((p[0] for p in (bb + hr + stress)), default=None)
+    stale = last_h is not None and (now_off - last_h) > 2.0
+
+    # Body Battery: 鮮度高→直近スロープで短時間外挿、古い→休息で典型(~60)へ回復
+    if len(bb) >= 3:
+        if stale:
+            out["body_battery"] = ease_curve(bb, 60.0, 3.0, 5.0, 100.0)
+        else:
+            slope = ls_slope(bb[-4:])
+            h0, v0 = bb[-1]
+            if h0 < SPAN_H:
+                h = h0
+                while h <= SPAN_H + 1e-6:
+                    v = max(5.0, min(100.0, v0 + slope * (h - h0)))
+                    out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
+                    h += step
+
+    # 心拍: 安静時心拍へ tau=1h で戻る
     if hr and rest is not None:
-        h0, v0 = hr[-1]
-        if h0 < SPAN_H:
-            h = h0
-            while h <= SPAN_H + 1e-6:
-                v = rest + (v0 - rest) * math.exp(-(h - h0) / 1.0)
-                out["heart_rate"].append({"h": round(h, 2), "v": round(v, 1)})
-                h += step
+        out["heart_rate"] = ease_curve(hr, rest, 1.0, 30.0, 200.0)
+
+    # ストレス: 休息レベル(~22)へ tau=2h で戻る
+    if stress:
+        out["stress"] = ease_curve(stress, 22.0, 2.0, 0.0, 100.0)
     return out
 
 
@@ -612,6 +624,7 @@ async def day_timeline(
         "heart_rate": g["heart_rate"],
         "heart_rate_forecast": _fc["heart_rate"],
         "body_battery_forecast": _fc["body_battery"],
+        "stress_forecast": _fc["stress"],
         "resting_hr": g["_resting_hr"],
         "steps_binned": _bin_steps(g["_steps"]),
         "sleep_blocks": g["sleep_blocks"],

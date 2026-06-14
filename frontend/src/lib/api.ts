@@ -347,6 +347,7 @@ export type DayTimelineData = {
   body_battery: TimelinePoint[];
   body_battery_forecast?: TimelinePoint[];
   stress: TimelinePoint[];
+  stress_forecast?: TimelinePoint[];
   heart_rate: TimelinePoint[];
   heart_rate_forecast?: TimelinePoint[];
   resting_hr: number | null;

@@ -307,6 +307,14 @@ export function DayStory() {
         {stress.length > 1 && (
           <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
         )}
+        {/* ストレス 予測 (最終実測〜未来、破線) */}
+        {(t?.stress_forecast?.length ?? 0) > 1 && (
+          <>
+            <polyline points={t!.stress_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
+                      fill="none" stroke="#fbbf24" strokeWidth={1.4} strokeDasharray="4 3" strokeLinejoin="round" />
+            <circle cx={X(t!.stress_forecast![0].h)} cy={bodyY(t!.stress_forecast![0].v)} r={2.2} fill="#fbbf24" />
+          </>
+        )}
 
         {/* 現在線 (全トラック貫通) */}
         {nowH != null && (
