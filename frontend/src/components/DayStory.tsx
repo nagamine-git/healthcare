@@ -296,10 +296,13 @@ export function DayStory() {
           <polyline points={bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
                     fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" />
         )}
-        {/* Body Battery 予測 (未来ゾーン、破線・薄色) */}
+        {/* Body Battery 予測 (最終実測〜未来、破線)。受け渡し点にマーカー */}
         {(t?.body_battery_forecast?.length ?? 0) > 1 && (
-          <polyline points={t!.body_battery_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
-                    fill="none" stroke="#34d399" strokeWidth={1.6} strokeDasharray="3 3" opacity={0.6} strokeLinejoin="round" />
+          <>
+            <polyline points={t!.body_battery_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
+                      fill="none" stroke="#5eead4" strokeWidth={2} strokeDasharray="4 3" opacity={0.95} strokeLinejoin="round" />
+            <circle cx={X(t!.body_battery_forecast![0].h)} cy={bodyY(t!.body_battery_forecast![0].v)} r={2.6} fill="#5eead4" />
+          </>
         )}
         {stress.length > 1 && (
           <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
@@ -499,9 +502,12 @@ function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks
       {sm.length > 1 && (
         <polyline points={sm.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.6} strokeLinejoin="round" />
       )}
-      {/* 心拍 予測 (未来ゾーン、安静へ減衰。破線・薄色の低確度見通し) */}
+      {/* 心拍 予測 (最終実測〜未来、安静へ減衰。破線)。受け渡し点にマーカー */}
       {(hrForecast?.length ?? 0) > 1 && (
-        <polyline points={hrForecast!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.3} strokeDasharray="3 3" opacity={0.5} strokeLinejoin="round" />
+        <>
+          <polyline points={hrForecast!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fda4af" strokeWidth={1.8} strokeDasharray="4 3" opacity={0.95} strokeLinejoin="round" />
+          <circle cx={X(hrForecast![0].h)} cy={y(hrForecast![0].v)} r={2.4} fill="#fda4af" />
+        </>
       )}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill="#94a3b8">
