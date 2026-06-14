@@ -61,7 +61,9 @@ def predict_series(
                     conf = {"high": "medium", "medium": "low", "low": "low"}[conf]
                 points.append({
                     "date": d.isoformat(), "value": round(res.value, 1), "kind": kind,
-                    "confidence": conf, "low": res.low, "high": res.high,
+                    "confidence": conf,
+                    "low": round(res.low, 1) if res.low is not None else None,
+                    "high": round(res.high, 1) if res.high is not None else None,
                     "drivers": res.drivers,
                 })
         d += timedelta(days=1)
