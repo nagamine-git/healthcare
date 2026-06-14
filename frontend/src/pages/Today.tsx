@@ -22,6 +22,7 @@ import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
+import { ForecastCard } from "../components/ForecastCard";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -251,6 +252,12 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div id="timeline-section">
         <SectionHeader label="今日の流れ" hint="直近24h / 今日を切替・同一時間軸" />
         <DayStory />
+      </div>
+
+      {/* ===== 🔮 未来予測 ===== */}
+      <div id="forecast-section">
+        <SectionHeader label="未来予測" hint="片頭痛リスク・エネルギー・明日 — 確度で濃淡" />
+        <ForecastCard />
       </div>
 
       {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}

@@ -551,6 +551,28 @@ export type ImputedMetric = {
   drivers: string[];
 };
 
+export type ForecastRisk = "high" | "elevated" | "low";
+export type MigraineForecastBucket = { label: string; start: string; swing_hpa: number; risk: ForecastRisk };
+export type ForecastState = {
+  generated_at: string;
+  location: string;
+  migraine: {
+    confidence: "high" | "medium" | "low";
+    reliability: string | null;
+    buckets: MigraineForecastBucket[];
+    peak: MigraineForecastBucket;
+    is_trigger_validated: boolean;
+  } | null;
+  energy_today: {
+    confidence: "high" | "medium" | "low";
+    current: number;
+    slope_per_h: number;
+    empty_eta: string | null;
+    floor: number;
+  } | null;
+  tomorrow: Record<string, ImputedMetric>;
+};
+
 export type TodayResponse = {
   date: string;
   last_data_update_at?: string | null;
@@ -912,6 +934,7 @@ export const api = {
   life: () => request<LifeResponse>("/api/life"),
   bodyLoad: () => request<BodyLoadState>("/api/bodyload"),
   bodyMap: () => request<BodyMapState>("/api/bodymap"),
+  forecast: () => request<ForecastState>("/api/forecast"),
   learningState: () => request<LearningState>("/api/learning/state"),
   learningPlan: (body: { started_on?: string; target_date?: string; clear_started?: boolean; clear_target?: boolean }) =>
     request<LearningState>("/api/learning/plan", { method: "POST", body: JSON.stringify(body) }),

@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from app.scoring import forecast as forecast_mod
 from app.scoring import imputation
 from app.scoring.timewindow import app_today
 
@@ -20,6 +21,12 @@ async def get_imputation(date: str | None = None) -> dict[str, Any]:
         "date": target.isoformat(),
         "imputed": imputation.impute_day(target, only_missing=True),
     }
+
+
+@router.get("/api/forecast")
+async def get_forecast() -> dict[str, Any]:
+    """未来予測 (片頭痛リスク / エネルギー推移 / 明日の指標)。"""
+    return forecast_mod.forecast()
 
 
 def date_from(s: str | None) -> date:
