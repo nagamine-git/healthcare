@@ -779,6 +779,10 @@ export type LearningProjection = {
   target_date: string | null;
   on_track: boolean | null;
   goal_status: "safe" | "likely" | "at_risk" | "unlikely" | null;
+  needed_today: number | null;
+  on_track_units: number | null;
+  required_per_day: number | null;
+  days_left: number | null;
   confidence: "none" | "low" | "medium" | "high";
   series: { date: string; pct: number }[];
 };

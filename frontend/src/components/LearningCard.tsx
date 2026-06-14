@@ -234,6 +234,24 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
         {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}チェック){p.done_units > 0 ? ` · 平均週${p.pace_per_week}チェック` : ""}
         {showProj ? ` → 標準${fmt(p.eta_normal)}頃 (好調${fmt(p.eta_best)}〜不調${fmt(p.eta_worst)})` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → チェックすると予測開始" : ""}
       </p>
+      {/* 今日のノルマ (オンスケに必要な追加チェック)。1節=読了+説明の2チェック */}
+      {p.needed_today != null && p.target_date && (
+        <div className={`mt-1.5 rounded-lg px-2.5 py-1.5 ${p.needed_today === 0 ? "bg-emerald-500/10" : "bg-amber-500/10"}`}>
+          {p.needed_today === 0 ? (
+            <span className="text-[11px] font-semibold text-emerald-300">✓ 今日のノルマ達成 — オンスケです</span>
+          ) : (
+            <span className="text-[11px] text-amber-100">
+              オンスケまで <span className="font-semibold text-amber-300">今日あと{p.needed_today}チェック</span>
+              <span className="text-[10px] text-slate-400"> (≒{Math.ceil(p.needed_today / 2)}節を読了+説明)</span>
+            </span>
+          )}
+          {p.required_per_day != null && (
+            <div className="text-[9px] text-slate-500">
+              目標{fmt(p.target_date)}まで{p.days_left}日 · 必要ペース {p.required_per_day}チェック/日
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
