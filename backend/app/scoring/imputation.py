@@ -103,9 +103,13 @@ def _jst_date(ts) -> date_type:
     return (ts + timedelta(hours=9)).date()
 
 
-def _load_history(target: date_type) -> dict[str, Any]:
-    """過去 _HISTORY_DAYS 日 + target の特徴量・指標を JST 日単位で集約して返す。"""
-    start = target - timedelta(days=_HISTORY_DAYS)
+def _load_history(target: date_type, *, history_start: date_type | None = None) -> dict[str, Any]:
+    """[history_start..target] の特徴量・指標を JST 日単位で集約して返す。
+
+    history_start 省略時は target の _HISTORY_DAYS 日前。predict では範囲全体を1回で読むため
+    明示的に下限を渡す (各日を個別に再読み込みしない)。target は上限 (含む)。
+    """
+    start = history_start if history_start is not None else target - timedelta(days=_HISTORY_DAYS)
     # ts ベースのテーブルは JST 日付に丸めるため UTC 窓を少し広めに取る
     ts_lo = (start - timedelta(days=1))
     from datetime import datetime as _dt
