@@ -79,8 +79,16 @@ function ChapterRow({
   pending: boolean;
 }) {
   const [open, setOpen] = useState(isCurrent);
+  // 今日のノルマ帯で左ボーダーを色分け: 楽観(最低)=sky / 悲観(安全)=amber / その先=灰
+  const BAND_BORDER: Record<string, string> = {
+    min: "border-l-2 border-sky-400/70",
+    safe: "border-l-2 border-amber-400/70",
+    later: "border-l-2 border-slate-700/60",
+    done: "border-l-2 border-emerald-500/50",
+  };
+  const bandCls = ch.band ? BAND_BORDER[ch.band] ?? "" : "";
   return (
-    <div className={`rounded-lg ${isCurrent ? "bg-slate-800/80 ring-1 ring-emerald-500/40" : ""} ${ch.complete ? "opacity-60" : ""}`}>
+    <div className={`rounded-lg ${bandCls} ${isCurrent ? "bg-slate-800/80 ring-1 ring-emerald-500/40" : ""} ${ch.complete ? "opacity-60" : ""}`}>
       <button type="button" onClick={() => setOpen((v) => !v)}
         className="flex w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left">
         {open ? <ChevronUp size={12} className="shrink-0 text-slate-500" /> : <ChevronDown size={12} className="shrink-0 text-slate-500" />}
@@ -234,15 +242,20 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
         {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}チェック){p.done_units > 0 ? ` · 平均週${p.pace_per_week}チェック` : ""}
         {showProj ? ` → 標準${fmt(p.eta_normal)}頃 (好調${fmt(p.eta_best)}〜不調${fmt(p.eta_worst)})` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → チェックすると予測開始" : ""}
       </p>
-      {/* 今日のノルマ: 悲観ペース(×0.7)でも目標をクリアする到達点を具体表示 */}
-      {p.needed_today != null && p.target_date && p.target_today && (
-        <div className="mt-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
-          <div className="text-[11px] text-amber-100">
-            今日ここまで: <span className="font-semibold text-amber-300">{p.target_today.label}</span>
+      {/* 今日のノルマ 2 段階: 楽観ライン(最低) と 悲観ライン(安全)。両方オンスケ */}
+      {p.target_date && p.target_today_min && p.target_today_safe && (
+        <div className="mt-1.5 space-y-1 rounded-lg bg-slate-900/60 px-2.5 py-1.5">
+          <div className="text-[10px] text-slate-400">今日のノルマ (目標{fmt(p.target_date)}まで{p.days_left}日)</div>
+          <div className="flex items-baseline gap-1.5 text-[11px]">
+            <span className="shrink-0 rounded bg-sky-500/20 px-1 text-[9px] text-sky-300">楽観 最低</span>
+            <span className="min-w-0 flex-1 truncate text-sky-100">{p.target_today_min.label}</span>
           </div>
-          <div className="mt-0.5 text-[9px] text-slate-400">
-            あと{p.needed_today}チェック (悲観ペースでも目標内) · 目標{fmt(p.target_date)}まで{p.days_left}日
-            {p.required_per_day_safe != null ? ` · 安全ペース${p.required_per_day_safe}/日` : ""}
+          <div className="flex items-baseline gap-1.5 text-[11px]">
+            <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">悲観 安全</span>
+            <span className="min-w-0 flex-1 truncate text-amber-100">{p.target_today_safe.label}</span>
+          </div>
+          <div className="text-[9px] text-slate-500">
+            楽観なら好調維持で間に合う最低ライン / 悲観なら不調でも間に合う安全ライン
           </div>
         </div>
       )}
@@ -340,6 +353,14 @@ export function LearningCard() {
               <p className="mt-0.5 text-[11px] text-amber-400/90">{current.note}</p>
             )}
           </div>
+          {/* 章一覧の左ボーダー色 = 今日のノルマ帯 */}
+          {s.projection?.target_today_safe && (
+            <div className="flex flex-wrap gap-x-3 text-[9px] text-slate-500">
+              <span><span className="text-sky-400">▌</span>楽観ノルマ(最低)</span>
+              <span><span className="text-amber-400">▌</span>悲観ノルマ(安全)</span>
+              <span><span className="text-slate-600">▌</span>その先</span>
+            </div>
+          )}
           <div className="grid gap-1">
             {visible.map((ch) => (
               <ChapterRow

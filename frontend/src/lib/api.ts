@@ -730,6 +730,8 @@ export type LearningSection = {
   read: boolean;
   explained: boolean;
 };
+export type LearningBand = "done" | "min" | "safe" | "later" | null;
+export type LearningTarget = { units: number; chapter: number | null; section: string | null; label: string };
 export type LearningChapter = {
   chapter: number;
   title: string;
@@ -744,6 +746,8 @@ export type LearningChapter = {
   sections: LearningSection[];
   section_done: number;
   section_total: number;
+  seq_end?: number;
+  band?: LearningBand;
 };
 export type LearningState = {
   chapters: LearningChapter[];
@@ -779,10 +783,13 @@ export type LearningProjection = {
   target_date: string | null;
   on_track: boolean | null;
   goal_status: "safe" | "likely" | "at_risk" | "unlikely" | null;
-  needed_today: number | null;
+  needed_today_min: number | null;
+  needed_today_safe: number | null;
   required_per_day: number | null;
+  required_per_day_min: number | null;
   required_per_day_safe: number | null;
-  target_today: { units: number; chapter: number | null; section: string | null; label: string } | null;
+  target_today_min: LearningTarget | null;
+  target_today_safe: LearningTarget | null;
   days_left: number | null;
   confidence: "none" | "low" | "medium" | "high";
   series: { date: string; pct: number }[];

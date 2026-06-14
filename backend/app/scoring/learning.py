@@ -414,22 +414,32 @@ def projection(today: date_type) -> dict[str, Any] | None:
         else:
             goal_status = "unlikely"
 
-    # オンスケのノルマ。悲観ペース(×0.7)でも目標をクリアできるよう必要ペースに
-    # バッファを掛ける: 必要ペース_安全 = 残り / (残日数 × 0.7)。今日そのぶん進める。
-    # さらに「今日どの節まで到達すべきか」を具体ラベルで返す。
-    needed_today: int | None = None
-    required_per_day: float | None = None       # 標準: 残り/残日数
-    required_per_day_safe: float | None = None   # 悲観(×0.7)でもクリア
-    target_today: dict[str, Any] | None = None
+    # 今日のノルマ 2 段階 (どちらも目標日にオンスケになる達成点):
+    #   楽観ノルマ (min): 楽観ペース(÷0.7=好調)を維持すれば目標に届く最低ライン
+    #                     → 必要ペース = 残り × 0.7 / 残日数
+    #   悲観ノルマ (safe): 悲観ペース(×0.7=不調)でも目標に届く安全ライン
+    #                     → 必要ペース = 残り / (残日数 × 0.7)
+    # 各ノルマの「今日どの章/節まで到達すべきか」を具体ラベルで返す。
+    needed_today_min: int | None = None
+    needed_today_safe: int | None = None
+    required_per_day: float | None = None
+    required_per_day_min: float | None = None
+    required_per_day_safe: float | None = None
+    target_today_min: dict[str, Any] | None = None
+    target_today_safe: dict[str, Any] | None = None
     days_left: int | None = None
     if target_date and remaining > 0:
         days_left = (target_date - today).days
         if days_left > 0:
             required_per_day = round(remaining / days_left, 1)
-            safe = remaining / (days_left * 0.7)
-            required_per_day_safe = round(safe, 1)
-            needed_today = min(remaining, math.ceil(safe))
-            target_today = _check_target_label(done_units + needed_today)
+            pace_min = remaining * 0.7 / days_left
+            pace_safe = remaining / (days_left * 0.7)
+            required_per_day_min = round(pace_min, 1)
+            required_per_day_safe = round(pace_safe, 1)
+            needed_today_min = min(remaining, math.ceil(pace_min))
+            needed_today_safe = min(remaining, math.ceil(pace_safe))
+            target_today_min = _check_target_label(done_units + needed_today_min)
+            target_today_safe = _check_target_label(done_units + needed_today_safe)
 
     return {
         "started_on": started_on.isoformat(),
@@ -446,10 +456,13 @@ def projection(today: date_type) -> dict[str, Any] | None:
         "target_date": target_date.isoformat() if target_date else None,
         "on_track": on_track,
         "goal_status": goal_status,
-        "needed_today": needed_today,
+        "needed_today_min": needed_today_min,
+        "needed_today_safe": needed_today_safe,
         "required_per_day": required_per_day,
+        "required_per_day_min": required_per_day_min,
         "required_per_day_safe": required_per_day_safe,
-        "target_today": target_today,
+        "target_today_min": target_today_min,
+        "target_today_safe": target_today_safe,
         "days_left": days_left,
         "confidence": confidence,
         "series": series,
@@ -599,6 +612,24 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
         ).scalars().first()
         last_activity = last_row.date.isoformat() if last_row else None
 
+    # 各章にチェック累積末尾 (seq_end) と今日のノルマ帯 (band) を付与。
+    # band: done(完了) / min(楽観ノルマ内) / safe(悲観ノルマ内) / later(その先)。
+    proj = projection(d)
+    tmin = (proj.get("target_today_min") or {}).get("units") if proj else None
+    tsafe = (proj.get("target_today_safe") or {}).get("units") if proj else None
+    cum = 0
+    for chd in chapters:
+        cum += chd["section_total"] * 2 + (1 if chd["has_rustlings"] else 0)
+        chd["seq_end"] = cum
+        if chd["complete"]:
+            chd["band"] = "done"
+        elif tmin is not None and chd["seq_end"] <= tmin:
+            chd["band"] = "min"
+        elif tsafe is not None and chd["seq_end"] <= tsafe:
+            chd["band"] = "safe"
+        else:
+            chd["band"] = "later" if tsafe is not None else None
+
     return {
         "chapters": chapters,
         "current_chapter": current,  # 全章完了なら None
@@ -615,7 +646,7 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
         "section_total": TOTAL_SECTIONS,
         "check_done": check_done,
         "check_total": TOTAL_CHECKS,
-        "projection": projection(d),
+        "projection": proj,
     }
 
 
