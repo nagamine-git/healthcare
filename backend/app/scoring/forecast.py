@@ -39,13 +39,14 @@ def _migraine_forecast(now_jst: datetime) -> dict[str, Any] | None:
     tr = analyze_triggers(app_today())
     pf = next((f for f in tr.get("factors", []) if f["key"] == "pressure_drop"), None)
 
-    if pf is not None:
-        tier = pf["tier"]
-        conf = {"strong": "high", "suggestive": "medium"}.get(tier, "low")
+    # 個人閾値を使うのは「気圧変動が大きいほど頭痛 (誘発方向)」が検証できた時だけ。
+    # 方向が逆(抑制?)や未確立なら、誤って高リスクを出さず一般医学基準+低確度にする。
+    personal = pf is not None and pf.get("direction") == "誘発"
+    if personal:
+        conf = {"strong": "high", "suggestive": "medium"}.get(pf["tier"], "low")
         case_mean = pf.get("case_mean")
         control_mean = pf.get("control_mean")
     else:
-        # 気圧トリガー未確立: 予報は出すが低確度・絶対基準で判定
         conf = "low"
         case_mean = control_mean = None
 
@@ -89,7 +90,7 @@ def _migraine_forecast(now_jst: datetime) -> dict[str, Any] | None:
         "reliability": tr.get("reliability"),
         "buckets": buckets,
         "peak": peak,
-        "is_trigger_validated": pf is not None,
+        "is_trigger_validated": personal,
     }
 
 
