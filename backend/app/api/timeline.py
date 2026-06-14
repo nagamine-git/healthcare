@@ -503,7 +503,7 @@ def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list
     import math
 
     out: dict[str, list[dict[str, float]]] = {"body_battery": [], "heart_rate": []}
-    if now_off is None or now_off >= SPAN_H:
+    if now_off is None:
         return out
     step = 0.25
 
@@ -514,27 +514,31 @@ def _forecast_curves(g: dict[str, Any], now_off: float | None) -> dict[str, list
         denom = sum((p[0] - mx) ** 2 for p in pts)
         return sum((p[0] - mx) * (p[1] - my) for p in pts) / denom if denom else 0.0
 
-    # Body Battery: 直近2hのスロープで外挿
-    bb = [(p["h"], p["v"]) for p in (g.get("body_battery") or []) if now_off - 2 <= p["h"] <= now_off]
+    # 最後の実測点から窓終端 (SPAN_H) まで投影。データが古い(同期遅れ/未装着)場合は
+    # その欠損ギャップも含めて埋める = 現在の空白も未来も予測でつなぐ。
+    # Body Battery: 直近最大4点のスロープを線形外挿
+    bb = [(p["h"], p["v"]) for p in (g.get("body_battery") or [])]
     if len(bb) >= 3:
-        slope = ls_slope(bb)
-        v0 = bb[-1][1]
-        h = now_off
-        while h <= SPAN_H + 1e-6:
-            v = max(5.0, min(100.0, v0 + slope * (h - now_off)))
-            out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
-            h += step
+        slope = ls_slope(bb[-4:])
+        h0, v0 = bb[-1]
+        if h0 < SPAN_H:
+            h = h0
+            while h <= SPAN_H + 1e-6:
+                v = max(5.0, min(100.0, v0 + slope * (h - h0)))
+                out["body_battery"].append({"h": round(h, 2), "v": round(v, 1)})
+                h += step
 
-    # 心拍: 安静時心拍へ tau=1h で減衰
-    hr = [(h, v) for h, v in (g.get("_hr") or []) if now_off - 1 <= h <= now_off]
+    # 心拍: 最後の実測から安静時心拍へ tau=1h で指数減衰
+    hr = g.get("_hr") or []
     rest = g.get("_resting_hr")
     if hr and rest is not None:
-        v0 = hr[-1][1]
-        h = now_off
-        while h <= SPAN_H + 1e-6:
-            v = rest + (v0 - rest) * math.exp(-(h - now_off) / 1.0)
-            out["heart_rate"].append({"h": round(h, 2), "v": round(v, 1)})
-            h += step
+        h0, v0 = hr[-1]
+        if h0 < SPAN_H:
+            h = h0
+            while h <= SPAN_H + 1e-6:
+                v = rest + (v0 - rest) * math.exp(-(h - h0) / 1.0)
+                out["heart_rate"].append({"h": round(h, 2), "v": round(v, 1)})
+                h += step
     return out
 
 
