@@ -38,6 +38,29 @@ def test_start_when_active_returns_409(app_client):
     assert resp.status_code == 409
 
 
+def test_stale_open_episode_does_not_block_start(app_client):
+    """48h超で未終了の放置エピソードは active 扱いせず、新規開始を弾かない。"""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MigraineEpisode
+
+    old = datetime.utcnow() - timedelta(days=200)  # 200日前・未終了の放置レコード
+    with session_scope() as s:
+        s.add(MigraineEpisode(started_at=old, ended_at=None, severity=3))
+
+    resp = app_client.post("/api/migraine/start", json={"severity": 6})
+    assert resp.status_code == 200  # 409 にならない
+
+    with session_scope() as s:
+        stale = s.execute(
+            select(MigraineEpisode).where(MigraineEpisode.started_at == old)
+        ).scalar_one()
+        assert stale.ended_at is not None  # 放置レコードは finite 化
+
+
 def test_end_closes_active_episode(app_client):
     app_client.post("/api/migraine/start", json={"severity": 5})
     resp = app_client.post("/api/migraine/end", json={})

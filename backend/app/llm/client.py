@@ -1040,6 +1040,13 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     from app.scoring.bodyload import llm_summary as _bodyparts_summary
 
     today_payload["body_parts"] = _bodyparts_summary()
+    # 習慣ペース: いつもの今頃 vs 今日。遅れている項目は nudge に一言が入る
+    from app.scoring.habit_pace import state as _habit_pace_state
+
+    try:
+        today_payload["habit_pace"] = _habit_pace_state()
+    except Exception:  # 失敗しても助言生成は止めない
+        today_payload["habit_pace"] = None
     today_payload["physio"] = _gather_physio(target)
     today_payload["subjective"] = _gather_subjective(target)
     today_payload["advice_feedback_recent"] = _gather_advice_feedback(target)

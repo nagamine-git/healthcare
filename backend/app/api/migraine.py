@@ -47,6 +47,7 @@ async def start_migraine(body: MigraineStartIn) -> MigraineEpisodeOut:
     ts_utc = _resolve_ts(body.ts_iso)
 
     with session_scope() as session:
+        _resolve_stale_open(session)  # 放置された未終了レコードを掃除してから判定
         active = _find_active(session)
         if active is not None:
             raise HTTPException(
@@ -185,13 +186,35 @@ def _resolve_ts(ts_iso: str | None) -> datetime:
     return dt.astimezone(UTC).replace(tzinfo=None)
 
 
+# 開始からこの時間を超えて未終了のエピソードは「終了し忘れた放置レコード」とみなす。
+# 頭痛は通常数時間〜長くても 72h (status migrainosus) なので 48h を上限に。
+_ACTIVE_MAX_AGE_H = 48
+
+
 def _find_active(session) -> MigraineEpisode | None:
+    """直近に開始され、まだ終了していない (= 本当に進行中の) エピソードのみ返す。
+
+    48h を超えて未終了のものは終了し忘れの放置データなので active 扱いしない
+    (これが残ると新規記録が永久に 409 で弾かれる事故になる)。
+    """
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=_ACTIVE_MAX_AGE_H)
     return session.execute(
         select(MigraineEpisode)
-        .where(MigraineEpisode.ended_at.is_(None))
+        .where(MigraineEpisode.ended_at.is_(None), MigraineEpisode.started_at >= cutoff)
         .order_by(MigraineEpisode.started_at.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+def _resolve_stale_open(session) -> None:
+    """48h 超で未終了の放置エピソードを終了扱いにする (開始+8hで finite 化)。"""
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=_ACTIVE_MAX_AGE_H)
+    stale = session.execute(
+        select(MigraineEpisode)
+        .where(MigraineEpisode.ended_at.is_(None), MigraineEpisode.started_at < cutoff)
+    ).scalars().all()
+    for r in stale:
+        r.ended_at = r.started_at + timedelta(hours=8)  # 妥当な既定継続時間で finite 化
 
 
 def _to_out(row: MigraineEpisode, tz_name: str) -> MigraineEpisodeOut:

@@ -573,6 +573,21 @@ export type PredictSeries = {
   points: PredictPoint[];
 };
 
+export type HabitPaceItem = {
+  key: string;
+  label: string;
+  unit: string;
+  emoji: string;
+  expected: number | null;
+  actual: number;
+  n: number;
+  status: "behind" | "on_pace" | "ahead" | "high" | "low" | "normal" | "no_data";
+  nudge: string | null;
+  pct: number | null;
+  confidence: "high" | "medium" | "low";
+};
+export type HabitPaceState = { now: string; habits: HabitPaceItem[]; nudges: string[] };
+
 export type ForecastRisk = "high" | "elevated" | "low";
 export type MigraineForecastBucket = { label: string; start: string; swing_hpa: number; risk: ForecastRisk };
 export type ForecastState = {
@@ -972,6 +987,7 @@ export const api = {
   bodyLoad: () => request<BodyLoadState>("/api/bodyload"),
   bodyMap: () => request<BodyMapState>("/api/bodymap"),
   forecast: () => request<ForecastState>("/api/forecast"),
+  habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,

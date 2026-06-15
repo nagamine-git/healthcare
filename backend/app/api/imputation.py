@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.scoring import forecast as forecast_mod
+from app.scoring import habit_pace as habit_pace_mod
 from app.scoring import imputation
 from app.scoring import predict as predict_mod
 from app.scoring.timewindow import app_today
@@ -28,6 +29,12 @@ async def get_imputation(date: str | None = None) -> dict[str, Any]:
 async def get_forecast() -> dict[str, Any]:
     """未来予測 (片頭痛リスク / エネルギー推移 / 明日の指標)。"""
     return forecast_mod.forecast()
+
+
+@router.get("/api/habit-pace")
+async def get_habit_pace() -> dict[str, Any]:
+    """習慣ペース予測 (いつもの今頃 vs 今日。遅れていれば促す)。"""
+    return habit_pace_mod.state()
 
 
 @router.get("/api/predict/{metric}")
