@@ -209,41 +209,83 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
         }
         base[t["group"]].append(factor)
 
+    anchors = _anchors(rows)
+    base["anchors"] = anchors
     base["quality"].sort(key=lambda f: (f["q"], f["p"]))
     base["next_day"].sort(key=lambda f: (f["q"], f["p"]))
-    base["recommendations"] = _recommendations(base["quality"] + base["next_day"])
+    base["recommendations"] = _recommendations(base["quality"] + base["next_day"], anchors)
     base["status"] = "analyzed"
     base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
     return base
 
 
-# ドライバー → 「悪化(避ける)/改善(続ける)」時の具体アクション。
-_ACTION_AVOID = {
-    "irregular": "就寝・起床の時刻を一定に保つ（±30分以内）。就寝が乱れた夜ほど睡眠が悪化",
-    "midpoint": "今より早めに就寝する（夜更かしの日ほど睡眠が悪化）",
-    "caffeine_pm": "午後（およそ14時以降）のカフェインを減らす",
-    "alcohol_eve": "夜の飲酒を控える（特に就寝前）",
-    "stress": "就寝前にストレス対処（4-7-8呼吸・入浴など）",
-    "steps": "夜遅い高強度の活動を避ける",
-}
-_ACTION_KEEP = {
-    "exercise": "日中の運動を継続する（運動した日ほど深睡眠/翌朝が良い）",
-    "steps": "日中よく動く（活動量が多い日ほど良い）",
-    "duration": "睡眠時間をしっかり確保する",
-    "caffeine_pm": "今のカフェイン習慣は睡眠に悪影響なし（無理に変えなくてよい）",
-}
 _TIER_RANK = {"strong": 3, "suggestive": 2, "trend": 1, "weak": 0}
 
 
-def _recommendations(factors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _hhmm(h: float) -> str:
+    h = h % 24
+    hh = int(h)
+    mm = round((h - hh) * 60)
+    if mm == 60:
+        hh = (hh + 1) % 24
+        mm = 0
+    return f"{hh:02d}:{mm:02d}"
+
+
+def _anchors(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """就寝中央時刻から逆算した具体アンカー (就寝/カフェイン6h前/運動3h前/標準睡眠時間)。"""
+    mids = sorted(r["midpoint"] for r in rows if r.get("midpoint") is not None)
+    durs = sorted(r["duration"] for r in rows if r.get("duration") is not None)
+    if not mids or not durs:
+        return None
+    mid = mids[len(mids) // 2]      # 睡眠中点 (JST, 早朝は+24で連続化済)
+    dur = durs[len(durs) // 2]      # 睡眠時間 (分)
+    bedtime = mid - dur / 120.0     # 就寝 = 中点 - 半分
+    return {
+        "bedtime": _hhmm(bedtime),
+        "caffeine_cutoff": _hhmm(bedtime - 6),   # カフェイン半減期 ~5-6h
+        "exercise_cutoff": _hhmm(bedtime - 3),   # 就寝3h前以降の高強度は妨げる
+        "alcohol_cutoff": _hhmm(bedtime - 3),
+        "dur_h": round(dur / 60, 1),
+    }
+
+
+def _action_text(driver: str, direction: str, a: dict[str, Any] | None) -> str | None:
+    """ドライバー×方向 → 具体的な行動文 (アンカーで時刻を埋める)。"""
+    bt = a["bedtime"] if a else None
+    if direction == "悪化":  # 避ける
+        if driver == "irregular":
+            return f"就寝を {bt}±30分に揃える（就寝が乱れた夜ほど睡眠が悪化）" if a else "就寝・起床の時刻を ±30分 に揃える"
+        if driver == "midpoint":
+            return f"{bt} より早く就寝する（夜更かしの日ほど悪化）" if a else "今より早めに就寝する"
+        if driver == "caffeine_pm":
+            return f"{a['caffeine_cutoff']} 以降のカフェインを控える（就寝6h前まで）" if a else "夕方以降のカフェインを控える"
+        if driver == "alcohol_eve":
+            return f"{a['alcohol_cutoff']} 以降の飲酒を控える（就寝3h前まで）" if a else "就寝前の飲酒を控える"
+        if driver == "stress":
+            return "就寝1時間前から画面を切り、4-7-8呼吸 or 入浴で落ち着く"
+        if driver == "steps":
+            return f"{a['exercise_cutoff']} 以降の高強度運動を避ける（就寝3h前まで）" if a else "就寝3時間前以降の高強度運動を避ける"
+    else:  # 続ける
+        if driver == "exercise":
+            return f"運動は日中〜{a['exercise_cutoff']} までに済ませる（運動した日ほど深睡眠/翌朝が良い）" if a else "運動は日中〜夕方に済ませる"
+        if driver == "steps":
+            return "日中こまめに動く（活動量が多い日ほど良い）"
+        if driver == "duration":
+            return f"睡眠時間は {a['dur_h']} 時間前後を確保する" if a else "睡眠時間をしっかり確保する"
+        if driver == "caffeine_pm":
+            return "今のカフェイン習慣は睡眠に悪影響なし（無理に変えなくてよい）"
+    return None
+
+
+def _recommendations(factors: list[dict[str, Any]], anchors: dict[str, Any] | None) -> list[dict[str, Any]]:
     """有意な要因から「今夜やること」を具体アクションで最大3件。ドライバー単位で重複排除。"""
     recs: list[dict[str, Any]] = []
     seen: set[str] = set()
     for f in sorted(factors, key=lambda x: -_TIER_RANK.get(x["tier"], 0)):
         if f["tier"] == "weak" or f["driver"] in seen:
             continue
-        table = _ACTION_AVOID if f["direction"] == "悪化" else _ACTION_KEEP
-        text = table.get(f["driver"])
+        text = _action_text(f["driver"], f["direction"], anchors)
         if not text:
             continue
         seen.add(f["driver"])
