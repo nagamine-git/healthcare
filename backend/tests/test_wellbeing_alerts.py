@@ -203,6 +203,21 @@ def test_moh_mid_when_8_to_11(session):
     assert "moh_risk_mid" in codes
 
 
+def test_moh_high_at_ichd3_threshold_10_days(session):
+    """ICHD-3: カフェイン配合複合鎮痛薬は月10日が乱用域 → 10日でhigh (12日ではない)。"""
+    from app.models import CaffeineIntake
+
+    today = date(2026, 5, 23)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for i in range(10):
+        session.add(CaffeineIntake(
+            ts=now - timedelta(days=i), source="ibuquick", amount=2.0, unit="錠", mg=80.0))
+    session.flush()
+    codes = [a.code for a in evaluate_alerts(session, today)]
+    assert "moh_risk_high" in codes
+    assert "moh_risk_mid" not in codes
+
+
 def test_caffeine_dependency_cycle(session):
     from app.models import CaffeineIntake, SleepSession
 

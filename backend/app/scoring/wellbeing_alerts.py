@@ -39,6 +39,7 @@ from app.models import (
     SleepSession,
     WeightSample,
 )
+from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
 from app.scoring.timewindow import jst_window_start
 
 
@@ -267,11 +268,14 @@ def _check_weight_loss(
 def _check_moh_risk(session: Session, target: date) -> WellbeingAlert | None:
     """頭痛薬の服用「日数」で MOH (Medication Overuse Headache) リスクを警告。
 
-    国際頭痛分類 (ICHD-3): 複合鎮痛薬・トリプタン・NSAIDs は月 10 日以上、
-    単純鎮痛薬 (アセトアミノフェン単剤) は月 15 日以上の服用が 3 ヶ月以上 **かつ**
-    頭痛が月 15 日以上で MOH と診断される。ここでは服用日数だけを見るため
-    「診断」ではなく「乱用リスク域」として提示する。1 日に複数回飲んでも 1 日。
-    保守的に 8 日で warning、12 日で critical。
+    国際頭痛分類 (ICHD-3): 服用日数が月 10 日以上 (複合鎮痛薬・トリプタン・エルゴタミン・
+    オピオイド) または月 15 日以上 (単純鎮痛薬: アセトアミノフェン/NSAIDs/アスピリン単剤) が
+    **3 ヶ月以上** 続き、かつ頭痛が月 15 日以上で MOH と診断される。
+
+    対象薬 (イブクイック=イブプロフェン+カフェイン、バファリンプレミアム=アスピリン+
+    アセトアミノフェン+カフェイン) は **カフェイン配合の複合鎮痛薬** なので閾値は **月 10 日**
+    (単純鎮痛薬の 15 日ではない)。ここでは単月の服用日数だけを見るので「診断」ではなく
+    「乱用域到達/接近」のリスク提示。1 日に複数回飲んでも 1 日。
     """
     thirty_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
     # JST 日付ごとに distinct 集計 (同日複数回は 1 日)
@@ -279,27 +283,27 @@ def _check_moh_risk(session: Session, target: date) -> WellbeingAlert | None:
     days = session.execute(
         select(func.count(func.distinct(day_expr))).where(
             CaffeineIntake.ts >= thirty_days_ago,
-            CaffeineIntake.source.in_(("ibuquick", "bufferin_premium")),
+            CaffeineIntake.source.in_(tuple(MEDICATION_CAFFEINE_SOURCES)),
         )
     ).scalar()
     days = int(days or 0)
-    if days >= 12:
+    if days >= 10:  # ICHD-3: 複合/カフェイン配合鎮痛薬の乱用域 (月10日)
         return WellbeingAlert(
             code="moh_risk_high",
             severity="critical",
             title=f"鎮痛薬を 30 日で {days} 日服用",
             detail=(
-                "月 10 日以上の服用が続くと薬物乱用頭痛 (MOH) の乱用リスク域。"
-                "予防薬や頓挫薬の見直しを医師に相談する価値あり"
+                "ICHD-3 でカフェイン配合の複合鎮痛薬は月 10 日以上で薬物乱用頭痛 (MOH) の"
+                "乱用域。これが 3 ヶ月続くと MOH。予防薬や頓挫薬の見直しを医師に相談を"
             ),
             action="今月中に頭痛外来の予約を取る (神経内科 or 頭痛専門医)",
         )
-    if days >= 8:
+    if days >= 7:  # 乱用域(10日)に接近
         return WellbeingAlert(
             code="moh_risk_mid",
             severity="warning",
             title=f"鎮痛薬を 30 日で {days} 日",
-            detail="月 10 日が MOH の乱用域の目安。あと少しで検討ライン",
+            detail=f"あと {10 - days} 日で月 10 日 (カフェイン配合鎮痛薬の MOH 乱用域)。頓服の頻度に注意",
             action="頻発するなら頭痛専門医を一度受診し、予防薬の選択肢を相談",
         )
     return None
