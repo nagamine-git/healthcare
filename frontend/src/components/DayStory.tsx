@@ -350,7 +350,7 @@ export function DayStory() {
             floor={t.caffeine_alert_floor_mg} todayMg={t.caffeine_today_mg} dailyLimit={t.caffeine_daily_limit_mg}
             nowH={nowH} X={X} gridTicks={gridTicks} />
         )}
-        {t?.water && (t.water.intake_total_ml ?? 0) > 0 && (
+        {t?.water && ((t.water.intake_total_ml ?? 0) > 0 || (t.water.expected_curve?.length ?? 0) > 1) && (
           <WaterTrack water={t.water} nowH={nowH} X={X} gridTicks={gridTicks} />
         )}
         {t && (t.pressure_curve?.length ?? 0) > 1 && (
