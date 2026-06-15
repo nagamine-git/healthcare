@@ -18,6 +18,7 @@ from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.api import profile as profile_api
+from app.api import sleep_drivers as sleep_drivers_api
 from app.api import speech as speech_api
 from app.api import timeline as timeline_api
 from app.config import get_settings
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_api.router)
     app.include_router(caffeine_api.router)
     app.include_router(bodyload_api.router)
+    app.include_router(sleep_drivers_api.router)
     app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)
     app.include_router(advice_feedback_api.router)

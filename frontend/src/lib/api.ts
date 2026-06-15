@@ -574,6 +574,27 @@ export type PredictSeries = {
   points: PredictPoint[];
 };
 
+export type SleepDriverFactor = {
+  driver: string;
+  label: string;
+  outcome: string;
+  outcome_label: string;
+  direction: "改善" | "悪化";
+  diff: number;
+  p: number;
+  q: number;
+  tier: "strong" | "suggestive" | "trend" | "weak";
+  n: number;
+};
+export type SleepDriverState = {
+  status: "analyzed" | "accumulating" | "no_data";
+  n_nights: number;
+  reliability?: "high" | "medium" | "low";
+  remaining?: number;
+  quality: SleepDriverFactor[];
+  next_day: SleepDriverFactor[];
+};
+
 export type HabitPaceItem = {
   key: string;
   label: string;
@@ -989,6 +1010,7 @@ export const api = {
   bodyMap: () => request<BodyMapState>("/api/bodymap"),
   forecast: () => request<ForecastState>("/api/forecast"),
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
+  sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,

@@ -23,6 +23,7 @@ import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
+import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -329,6 +330,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         ]}
       />
       </div>
+
+      <SleepDriverPanel />
 
       {/* ============ 5. 記録 — 入力 ============ */}
       <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
