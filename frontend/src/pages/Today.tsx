@@ -22,7 +22,7 @@ import { LifeSection } from "../components/LifeSection";
 import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
-import { ForecastCard } from "../components/ForecastCard";
+import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -229,14 +229,14 @@ export function TodayPage({ onOpenDebug }: Props) {
         onRefresh={() => fullRefresh.mutate()}
       />
 
-      {/* ===== 🧭 今日の指針 (アラート + LLMアクションを一本化) ===== */}
-      {/* アラート = 決定的な安全網 (上)、LLMアクション = 最適化 (下)。
-          重複は prompt 側で抑止 (アラートと同じ内容は出さない)。 */}
+      {/* ============ 1. いま — 今すぐの判断 ============ */}
+      {/* アラート = 決定的な安全網 (上)、片頭痛リスク予報、LLMアクション = 最適化 (下)。 */}
       <div id="alerts-section">
-        <SectionHeader label="今日の指針" hint="アラート（安全網）+ LLMの推奨アクション" />
+        <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
         <div className="space-y-3">
           <DayPrediction />
           <WellbeingAlertsBanner alerts={data.alerts} />
+          <MigraineRiskBanner />
           <AdviceCard
             advice={data.advice}
             onRegenerate={() => regenerate.mutate()}
@@ -248,44 +248,12 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </div>
 
-      {/* ===== 🕐 今日の流れ (1日のマルチトラックタイムライン) ===== */}
+      {/* ============ 2. 今日 — 状態と流れ ============ */}
       <div id="timeline-section">
-        <SectionHeader label="今日の流れ" hint="直近24h / 今日を切替・同一時間軸" />
+        <SectionHeader label="今日の流れ" hint="直近24h / 今日を切替・予測込み" />
         <DayStory />
       </div>
 
-      {/* ===== 🔮 未来予測 ===== */}
-      <div id="forecast-section">
-        <SectionHeader label="未来予測" hint="片頭痛リスク・エネルギー・明日 — 確度で濃淡" />
-        <ForecastCard />
-      </div>
-
-      {/* ===== 🌱 ライフスコア (自己目標管理) ===== */}
-      <div id="life-section">
-        <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
-        <LifeSection />
-      </div>
-
-      {/* ===== 📖 学習 (The Rust Book 完走プラン) ===== */}
-      <div id="learning-section">
-        <SectionHeader label="学習" hint="The Book 完走プラン — 読了 / Rustlings / 説明できた の3点クリア" />
-        <LearningCard />
-      </div>
-      <PhysiqueTargetSection
-        current={
-          weight?.weight_kg != null && weight?.body_fat_pct != null
-            ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
-            : null
-        }
-      />
-
-      {/* ===== 💪 部位別ステータス ===== */}
-      <div id="bodyload-section">
-        <SectionHeader label="部位別ステータス" hint="筋負荷マップ + 統合HP — 人体図で自動表示" />
-        <BodyLoadCard />
-      </div>
-
-      {/* ===== 📊 今の状態 ===== */}
       <SectionHeader label="いまの状態" hint="主観の調子 + 集中力 + 環境" />
       <CheckinCard />
       <FocusPanel focus={data.focus} />
@@ -302,13 +270,37 @@ export function TodayPage({ onOpenDebug }: Props) {
           onClear: geo.clear,
         }}
       />
+      <NutritionPanel nutrition={data.nutrition} />
+      <TonightPlanPanel plan={data.tonight_plan} />
 
-      {/* ===== 📈 今日のスコア (24h 振り返り) ===== */}
+      {/* ============ 3. 目標 — 自己目標の進捗 ============ */}
+      <div id="life-section">
+        <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
+        <LifeSection />
+      </div>
+
+      <div id="learning-section">
+        <SectionHeader label="学習" hint="The Book 完走プラン — 読了 / Rustlings / 説明できた の3点クリア" />
+        <LearningCard />
+      </div>
+
+      {/* 身体 = 体型目標 + 部位別ステータス を隣接配置で統合 (各カードが自前ヘッダ) */}
+      <div id="bodyload-section" className="space-y-3">
+        <PhysiqueTargetSection
+          current={
+            weight?.weight_kg != null && weight?.body_fat_pct != null
+              ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
+              : null
+          }
+        />
+        <BodyLoadCard />
+      </div>
+
+      {/* ============ 4. 振り返り — スコアとトレンド ============ */}
       <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
       <ImputedNotice imputed={data.imputed} />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
 
-      {/* ===== 📈 トレンド (理想への接近度 + 今の各メトリクス) ===== */}
       <div id="trends-section">
       <TrendsSection
         hints={{
@@ -338,10 +330,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       />
       </div>
 
-      <NutritionPanel nutrition={data.nutrition} />
-      <TonightPlanPanel plan={data.tonight_plan} />
-
-      {/* ===== 📝 記録 (折りたたみ可) ===== */}
+      {/* ============ 5. 記録 — 入力 ============ */}
       <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
       <CaffeinePanel caffeine={data.caffeine} />
       <MigrainePanel />
