@@ -132,7 +132,7 @@ function ChapterRow({
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"}`}>
             <GraduationCap size={13} />
-            {ch.explained ? "口頭試問 合格済み — もう一度挑戦" : "口頭試問で「説明できた」を判定"}
+            {ch.explained ? "理解度クリア済み — もう一度挑戦" : "理解度テストで「説明できた」を判定"}
           </button>
         </div>
       )}

@@ -72,10 +72,9 @@ async def chapter_quiz(chapter: int, body: QuizIn) -> dict[str, Any]:
     except Exception:  # LLM 接続失敗は会話として穏便に返す
         return {
             "reply": "(試験官に接続できませんでした。少し待ってから再試行してください)",
-            "verdict": {"decided": False, "passed": None, "feedback": None},
-            "error": True,
+            "understanding": 0, "threshold": 80, "cleared": False, "error": True,
         }
-    if result["verdict"]["decided"] and result["verdict"]["passed"]:
+    if result.get("cleared"):
         result["state"] = learning.mark_chapter_explained(chapter)
     return result
 

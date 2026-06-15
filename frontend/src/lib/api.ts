@@ -824,7 +824,10 @@ export type BodyLoadState = {
 
 export type LearningQuizResult = {
   reply: string;
-  verdict: { decided: boolean; passed: boolean | null; feedback: string | null };
+  understanding: number;
+  threshold: number;
+  cleared: boolean;
+  comment?: string;
   state?: LearningState;
   error?: boolean;
 };

@@ -34,42 +34,55 @@ _SYSTEM_TEMPLATE = """\
 - 日本語。1 回の発話は 2〜4 文程度に抑え、一度に複数を問わない。コードは必要なら短く。
 - 励ましつつも甘くしない。「なんとなく合ってそう」では通さない。
 
-# 採点 (submit_verdict ツール)
-- 核心を自分の言葉で説明でき、主要な誤解が無いと**確信できたら** submit_verdict(passed=true)。
-  feedback には、良かった点と、補強するとさらに良い 1 点を簡潔に。
-- まだ判断材料が足りない/誤解が残るなら、ツールを呼ばず**次の質問を返す**。
-- 数ターン掘っても核心の誤解が解けない・説明できない場合のみ submit_verdict(passed=false)。
-  ただし即落とさず最低 3〜4 往復は粘る。落とす時も feedback で「次にどの節を読み直すべきか」を示す。
+# 採点 (毎ターン submit_assessment を必ず呼ぶ)
+毎ターン、直前の回答までを踏まえて理解度を 0〜100 で更新する。校正基準:
+- 0〜30: 読んだだけ/用語の丸暗記/核心を自分の言葉にできない。
+- 31〜55: 核心の輪郭は言えるが曖昧・部分的。なぜそうなるかが弱い。
+- 56〜79: 核心を自分の言葉で説明でき、簡単な例も出せる。ただし境界/反例/落とし穴に穴。
+- 80〜100: 核心を正確に説明し、なぜを述べ、反例や境界条件も外さない。主要な誤解なし。
+甘くしない。最初は低めから始め、根拠が示されるたびに上げ、誤解が露呈したら下げる。
+80 以上で「クリア」(バックエンドが自動判定) なので、確信なく 80 を付けない。
+
+next_question:
+- 80 未満なら、いま最も弱い部分 (なぜ/反例/境界) を突く次の質問を 1 つ入れる (2〜4文、日本語、ヒントで足場)。
+- 80 以上に達したと判断したら next_question は空文字。comment に良かった点+補強点1つを簡潔に。
 """
 
-VERDICT_TOOL: dict[str, Any] = {
-    "name": "submit_verdict",
+ASSESS_TOOL: dict[str, Any] = {
+    "name": "submit_assessment",
     "description": (
-        "口頭試問の合否を確定する。学習者がこの章の核心を自分の言葉で説明でき主要な誤解が"
-        "無いと確信できた時に passed=true。説明できない/誤解が解けない時のみ passed=false。"
-        "まだ判断できない間はこのツールを呼ばず質問を続けること。"
+        "毎ターン、現時点の理解度 (0-100) と次の質問を提出する。理解度は校正された推定で、"
+        "甘く付けない。80 未満なら next_question で最も弱い部分を掘る。"
+        "80 以上に達したと判断したら next_question は空にし comment に講評を書く。"
     ),
     "input_schema": {
         "type": "object",
-        "required": ["passed", "feedback"],
+        "required": ["understanding", "next_question", "comment"],
         "properties": {
-            "passed": {"type": "boolean", "description": "合格なら true。"},
-            "feedback": {
-                "type": "string",
-                "maxLength": 400,
-                "description": "日本語の講評。合格なら良かった点+補強点1つ。不合格なら読み直すべき節を示す。",
+            "understanding": {
+                "type": "integer", "minimum": 0, "maximum": 100,
+                "description": "現時点の理解度 (0-100)。校正基準に従い甘く付けない。",
+            },
+            "next_question": {
+                "type": "string", "maxLength": 500,
+                "description": "次の質問 (日本語2-4文)。80以上に達したと判断したら空文字。",
+            },
+            "comment": {
+                "type": "string", "maxLength": 300,
+                "description": "短い講評/フィードバック (任意、日本語)。クリア時は良かった点+補強点1つ。",
             },
         },
     },
 }
 
+CLEAR_THRESHOLD = 80  # この理解度以上でクリア (説明できた を付与)
 _OPENING = "準備OKです。試問を始めてください。"
 
 
 async def _anthropic_completion(
     system: list[dict[str, Any]], messages: list[dict[str, Any]], *, model: str, api_key: str
 ) -> dict[str, Any]:
-    """Anthropic を tool_choice=auto で呼び、{text, verdict} に正規化して返す。"""
+    """Anthropic を submit_assessment 強制で呼び、{understanding, next_question, comment} を返す。"""
     from anthropic import AsyncAnthropic
 
     client = AsyncAnthropic(api_key=api_key)
@@ -78,19 +91,15 @@ async def _anthropic_completion(
         max_tokens=1200,
         system=system,
         messages=messages,
-        tools=[VERDICT_TOOL],
+        tools=[ASSESS_TOOL],
+        tool_choice={"type": "tool", "name": "submit_assessment"},
     )
-    text_parts: list[str] = []
-    verdict: dict[str, Any] | None = None
     for block in resp.content:
-        btype = getattr(block, "type", None)
-        if btype == "tool_use" and getattr(block, "name", "") == "submit_verdict":
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_assessment":
             inp = block.input
             if isinstance(inp, dict):
-                verdict = inp
-        elif btype == "text":
-            text_parts.append(getattr(block, "text", ""))
-    return {"text": " ".join(t for t in text_parts if t).strip(), "verdict": verdict}
+                return inp
+    return {}
 
 
 # テストはこれを差し替える (ネットワーク非依存にするため)。
@@ -98,9 +107,9 @@ _completion = _anthropic_completion
 
 
 async def quiz_turn(chapter: int, messages: list[dict[str, Any]]) -> dict[str, Any]:
-    """口頭試問の 1 ターン。{reply, verdict:{decided,passed,feedback}} を返す。
+    """口頭試問の 1 ターン。理解度%を更新し {understanding, reply, cleared, comment} を返す。
 
-    messages が空なら試験官が最初の質問から始める。
+    messages が空なら試験官が最初の質問から始める。理解度 >= CLEAR_THRESHOLD でクリア。
     """
     info = next((c for c in CURRICULUM if c["chapter"] == chapter), None)
     if info is None:
@@ -123,12 +132,17 @@ async def quiz_turn(chapter: int, messages: list[dict[str, Any]]) -> dict[str, A
         system, convo, model=settings.llm_model, api_key=settings.anthropic_api_key or ""
     )
 
-    verdict = out.get("verdict")
-    if isinstance(verdict, dict) and "passed" in verdict:
-        passed = bool(verdict["passed"])
-        feedback = str(verdict.get("feedback") or "")
-        return {
-            "reply": feedback or out.get("text") or "",
-            "verdict": {"decided": True, "passed": passed, "feedback": feedback},
-        }
-    return {"reply": out.get("text") or "", "verdict": {"decided": False, "passed": None, "feedback": None}}
+    understanding = int(out.get("understanding") or 0)
+    understanding = max(0, min(100, understanding))
+    next_q = str(out.get("next_question") or "").strip()
+    comment = str(out.get("comment") or "").strip()
+    cleared = understanding >= CLEAR_THRESHOLD
+    # クリア時は講評を、未クリア時は次の質問を表示
+    reply = (comment or "理解度が基準に達しました。") if cleared else (next_q or comment)
+    return {
+        "understanding": understanding,
+        "threshold": CLEAR_THRESHOLD,
+        "cleared": cleared,
+        "comment": comment,
+        "reply": reply,
+    }

@@ -5,30 +5,40 @@ import { api } from "../lib/api";
 import type { LearningChapter } from "../lib/api";
 
 /**
- * 章の口頭試問 (Socratic oral exam) チャットモーダル。
+ * 章の口頭試問 (理解度テスト方式) チャットモーダル。
  *
- * 試験官 Claude がその章の核心を「自分の言葉で説明させる」 — retrieval practice。
- * 合格判定が出たら章の全節 explained が立ち、学習カードに即反映する。
+ * 試験官 Claude が毎ターン理解度を 0-100% で更新し、80% 以上でクリア → 章の全節
+ * explained が立つ。retrieval practice を定量化した動的テスト。
  * 会話履歴はこのコンポーネントが保持する単発セッション。
  */
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+function scoreColor(v: number, threshold: number): string {
+  if (v >= threshold) return "#34d399";
+  if (v >= threshold * 0.7) return "#fbbf24";
+  return "#fb7185";
+}
+
 export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () => void }) {
   const qc = useQueryClient();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [passed, setPassed] = useState<boolean | null>(null);
+  const [understanding, setUnderstanding] = useState(0);
+  const [threshold, setThreshold] = useState(80);
+  const [cleared, setCleared] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const turn = useMutation({
     mutationFn: (history: Msg[]) => api.learningQuiz(ch.chapter, history),
     onSuccess: (r) => {
       setMsgs((m) => [...m, { role: "assistant", content: r.reply }]);
-      if (r.verdict.decided) {
-        setPassed(r.verdict.passed);
-        if (r.verdict.passed && r.state) qc.setQueryData(["learning"], r.state);
-        if (r.verdict.passed) qc.invalidateQueries({ queryKey: ["life"] });
+      setUnderstanding(r.understanding);
+      setThreshold(r.threshold);
+      if (r.cleared) {
+        setCleared(true);
+        if (r.state) qc.setQueryData(["learning"], r.state);
+        qc.invalidateQueries({ queryKey: ["life"] });
       }
     },
   });
@@ -45,7 +55,7 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
 
   const send = () => {
     const text = input.trim();
-    if (!text || turn.isPending || passed) return;
+    if (!text || turn.isPending || cleared) return;
     const next = [...msgs, { role: "user" as const, content: text }];
     setMsgs(next);
     setInput("");
@@ -58,16 +68,29 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
         className="flex h-[85vh] w-full max-w-lg flex-col rounded-t-2xl bg-slate-900 sm:h-[80vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ヘッダ */}
-        <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-          <GraduationCap size={16} className="text-amber-300" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-slate-100">ch{ch.chapter} {ch.title} 口頭試問</div>
-            <div className="text-[10px] text-slate-500">自分の言葉で説明 — 合格でClaudeが「説明できた」を付与</div>
+        {/* ヘッダ + 理解度バー */}
+        <div className="border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <GraduationCap size={16} className="text-amber-300" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-slate-100">ch{ch.chapter} {ch.title} 理解度テスト</div>
+              <div className="text-[10px] text-slate-500">自分の言葉で説明 — 理解度{threshold}%でクリア</div>
+            </div>
+            <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800">
+              <X size={18} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800">
-            <X size={18} />
-          </button>
+          {/* 動的な理解度ゲージ (閾値マーカーつき) */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[10px] text-slate-400">理解度</span>
+            <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${understanding}%`, background: scoreColor(understanding, threshold) }} />
+              <div className="absolute top-0 h-full w-px bg-slate-400/70" style={{ left: `${threshold}%` }} />
+            </div>
+            <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums"
+              style={{ color: scoreColor(understanding, threshold) }}>{understanding}%</span>
+          </div>
         </div>
 
         {/* 会話 */}
@@ -90,21 +113,16 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
               <div className="rounded-2xl bg-slate-800 px-3 py-2 text-[13px] text-slate-500">…</div>
             </div>
           )}
-          {passed === true && (
+          {cleared && (
             <div className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500/15 px-3 py-2 text-[13px] text-emerald-300">
-              <Check size={16} /> 合格！「説明できた」を付与しました
-            </div>
-          )}
-          {passed === false && (
-            <div className="rounded-xl bg-rose-500/10 px-3 py-2 text-center text-[12px] text-rose-300">
-              今回は見送り。フィードバックを参考に読み直して再挑戦を
+              <Check size={16} /> クリア！理解度{understanding}% — 「説明できた」を付与しました
             </div>
           )}
         </div>
 
         {/* 入力 */}
         <div className="border-t border-slate-800 p-3">
-          {passed === true ? (
+          {cleared ? (
             <button type="button" onClick={onClose}
               className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white">
               閉じる
@@ -127,12 +145,6 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
                 <Send size={18} />
               </button>
             </div>
-          )}
-          {passed === false && (
-            <button type="button" onClick={() => { setPassed(null); setInput(""); }}
-              className="mt-2 w-full text-[11px] text-slate-500 hover:text-slate-300">
-              続けて説明する
-            </button>
           )}
         </div>
       </div>
