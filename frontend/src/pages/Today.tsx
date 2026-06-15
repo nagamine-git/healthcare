@@ -25,7 +25,8 @@ import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TodaySummary } from "../components/TodaySummary";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
 
@@ -45,8 +46,17 @@ type Props = {
   onOpenDebug?: () => void;
 };
 
+type Tab = "today" | "goals" | "review" | "log";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "today", label: "今日" },
+  { key: "goals", label: "目標" },
+  { key: "review", label: "振り返り" },
+  { key: "log", label: "記録" },
+];
+
 export function TodayPage({ onOpenDebug }: Props) {
   const qc = useQueryClient();
+  const [tab, setTab] = useState<Tab>("today");
   const geo = useGeolocation();
   const coords = geo.coords;
   const today = useQuery({
@@ -217,21 +227,43 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== 🚥 計器盤ランプ (ファーストビューの状態一覧) ===== */}
+      {/* ===== ファーストビュー: 計器盤ランプ + 今の要点サマリ (常設) ===== */}
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
       />
-
+      <TodaySummary
+        total={score?.total ?? null}
+        headline={data.advice?.payload?.headline}
+        subs={[
+          { label: "睡眠", value: score?.sleep ?? null },
+          { label: "自律神経", value: score?.hrv ?? null },
+          { label: "エネルギー", value: score?.body_battery ?? null },
+        ]}
+      />
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
         isRefreshing={fullRefresh.isPending}
         onRefresh={() => fullRefresh.mutate()}
       />
 
-      {/* ============ 1. いま — 今すぐの判断 ============ */}
-      {/* アラート = 決定的な安全網 (上)、片頭痛リスク予報、LLMアクション = 最適化 (下)。 */}
+      {/* ===== タブナビ (sticky) ===== */}
+      <div className="sticky top-0 z-20 -mx-1 bg-slate-950/80 py-1 backdrop-blur">
+        <div className="flex gap-1 rounded-xl bg-slate-900/70 p-1">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" onClick={() => setTab(t.key)}
+              className={`flex-1 rounded-lg py-1.5 text-[12px] font-medium transition-colors ${
+                tab === t.key ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ============ タブ: 今日 ============ */}
+      {tab === "today" && (
+      <div className="space-y-3">
       <div id="alerts-section">
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
         <div className="space-y-3">
@@ -249,7 +281,6 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </div>
 
-      {/* ============ 2. 今日 — 状態と流れ ============ */}
       <div id="timeline-section">
         <SectionHeader label="今日の流れ" hint="直近24h / 今日を切替・予測込み" />
         <DayStory />
@@ -273,8 +304,12 @@ export function TodayPage({ onOpenDebug }: Props) {
       />
       <NutritionPanel nutrition={data.nutrition} />
       <TonightPlanPanel plan={data.tonight_plan} />
+      </div>
+      )}
 
-      {/* ============ 3. 目標 — 自己目標の進捗 ============ */}
+      {/* ============ タブ: 目標 ============ */}
+      {tab === "goals" && (
+      <div className="space-y-3">
       <div id="life-section">
         <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
         <LifeSection />
@@ -285,7 +320,6 @@ export function TodayPage({ onOpenDebug }: Props) {
         <LearningCard />
       </div>
 
-      {/* 身体 = 体型目標 + 部位別ステータス を隣接配置で統合 (各カードが自前ヘッダ) */}
       <div id="bodyload-section" className="space-y-3">
         <PhysiqueTargetSection
           current={
@@ -296,8 +330,12 @@ export function TodayPage({ onOpenDebug }: Props) {
         />
         <BodyLoadCard />
       </div>
+      </div>
+      )}
 
-      {/* ============ 4. 振り返り — スコアとトレンド ============ */}
+      {/* ============ タブ: 振り返り ============ */}
+      {tab === "review" && (
+      <div className="space-y-3">
       <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
       <ImputedNotice imputed={data.imputed} />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
@@ -332,13 +370,19 @@ export function TodayPage({ onOpenDebug }: Props) {
       </div>
 
       <SleepDriverPanel />
+      </div>
+      )}
 
-      {/* ============ 5. 記録 — 入力 ============ */}
+      {/* ============ タブ: 記録 ============ */}
+      {tab === "log" && (
+      <div className="space-y-3">
       <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
       <CaffeinePanel caffeine={data.caffeine} />
       <MigrainePanel />
       <MigraineTriggerPanel />
       <AlcoholPanel />
+      </div>
+      )}
 
     </main>
   );

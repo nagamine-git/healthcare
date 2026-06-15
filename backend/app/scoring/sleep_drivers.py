@@ -211,6 +211,47 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
 
     base["quality"].sort(key=lambda f: (f["q"], f["p"]))
     base["next_day"].sort(key=lambda f: (f["q"], f["p"]))
+    base["recommendations"] = _recommendations(base["quality"] + base["next_day"])
     base["status"] = "analyzed"
     base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
     return base
+
+
+# ドライバー → 「悪化(避ける)/改善(続ける)」時の具体アクション。
+_ACTION_AVOID = {
+    "irregular": "就寝・起床の時刻を一定に保つ（±30分以内）。就寝が乱れた夜ほど睡眠が悪化",
+    "midpoint": "今より早めに就寝する（夜更かしの日ほど睡眠が悪化）",
+    "caffeine_pm": "午後（およそ14時以降）のカフェインを減らす",
+    "alcohol_eve": "夜の飲酒を控える（特に就寝前）",
+    "stress": "就寝前にストレス対処（4-7-8呼吸・入浴など）",
+    "steps": "夜遅い高強度の活動を避ける",
+}
+_ACTION_KEEP = {
+    "exercise": "日中の運動を継続する（運動した日ほど深睡眠/翌朝が良い）",
+    "steps": "日中よく動く（活動量が多い日ほど良い）",
+    "duration": "睡眠時間をしっかり確保する",
+    "caffeine_pm": "今のカフェイン習慣は睡眠に悪影響なし（無理に変えなくてよい）",
+}
+_TIER_RANK = {"strong": 3, "suggestive": 2, "trend": 1, "weak": 0}
+
+
+def _recommendations(factors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """有意な要因から「今夜やること」を具体アクションで最大3件。ドライバー単位で重複排除。"""
+    recs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for f in sorted(factors, key=lambda x: -_TIER_RANK.get(x["tier"], 0)):
+        if f["tier"] == "weak" or f["driver"] in seen:
+            continue
+        table = _ACTION_AVOID if f["direction"] == "悪化" else _ACTION_KEEP
+        text = table.get(f["driver"])
+        if not text:
+            continue
+        seen.add(f["driver"])
+        recs.append({
+            "text": text, "driver": f["driver"],
+            "basis": f"{f['outcome_label']}に{f['tier']}（{f['direction']}）",
+            "tier": f["tier"],
+        })
+        if len(recs) >= 3:
+            break
+    return recs

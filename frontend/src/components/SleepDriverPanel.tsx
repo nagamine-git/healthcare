@@ -58,6 +58,19 @@ export function SleepDriverPanel() {
         </span>
       </div>
 
+      {/* 今夜やること (具体アクション) */}
+      {(s.recommendations?.length ?? 0) > 0 && (
+        <div className="space-y-1 rounded-xl bg-indigo-500/10 p-2.5">
+          <div className="text-[10px] font-semibold text-indigo-200">今夜やること</div>
+          {s.recommendations!.map((r, i) => (
+            <div key={i} className="flex items-baseline gap-1.5 text-[12px] text-slate-100">
+              <span className="text-indigo-300">✓</span>
+              <span className="min-w-0 flex-1">{r.text}<span className="ml-1 text-[9px] text-slate-500">（{r.basis}）</span></span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!anyStrong && (
         <p className="text-[10px] text-amber-300/80">まだ確かな要因は出ていません（傾向どまり）。下記は弱い示唆として薄く表示。</p>
       )}

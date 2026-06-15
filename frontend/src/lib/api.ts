@@ -586,6 +586,7 @@ export type SleepDriverFactor = {
   tier: "strong" | "suggestive" | "trend" | "weak";
   n: number;
 };
+export type SleepRecommendation = { text: string; driver: string; basis: string; tier: string };
 export type SleepDriverState = {
   status: "analyzed" | "accumulating" | "no_data";
   n_nights: number;
@@ -593,6 +594,7 @@ export type SleepDriverState = {
   remaining?: number;
   quality: SleepDriverFactor[];
   next_day: SleepDriverFactor[];
+  recommendations?: SleepRecommendation[];
 };
 
 export type HabitPaceItem = {
