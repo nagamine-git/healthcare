@@ -629,8 +629,15 @@ async def day_timeline(
     pressure_curve = _pressure_curve(start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
+    water_expected = _habit_expected_curve("garmin_hydration_ml", est_date, off)
     if water is not None:
-        water["expected_curve"] = _habit_expected_curve("garmin_hydration_ml", est_date, off)
+        water["expected_curve"] = water_expected
+    elif water_expected:
+        # 今日まだ飲んでなくても「いつものペース」線は出す (一番促したい場面)
+        water = {
+            "intake_curve": [], "expected_curve": water_expected, "intake_total_ml": 0,
+            "goal_ml": None, "sweat_ml": 0, "source": None,
+        }
     prediction_text = _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx)
     _fc = _forecast_curves(g, now_off)
 
