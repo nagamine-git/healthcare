@@ -27,6 +27,7 @@ from app.models import (
     MigraineEpisode,
     SleepSession,
 )
+from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
 from app.scoring.circadian import circular_mean_hour
 from app.scoring.migraine_stats import benjamini_hochberg, onset_profile, permutation_test
 from app.scoring.timewindow import JST
@@ -80,8 +81,13 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
                 select(HrvDaily.date, HrvDaily.last_night_avg).where(HrvDaily.date >= since.date())
             ).all()
         }
+        # 食事性カフェインのみ。頭痛薬カフェイン(イブクイック等)は頭痛の「治療」として
+        # 服用するため、トリガー曝露に混ぜると逆因果の交絡になる → 除外。
         caffeine_rows = session.execute(
-            select(CaffeineIntake.ts, CaffeineIntake.mg).where(CaffeineIntake.ts >= since - window)
+            select(CaffeineIntake.ts, CaffeineIntake.mg).where(
+                CaffeineIntake.ts >= since - window,
+                CaffeineIntake.source.notin_(MEDICATION_CAFFEINE_SOURCES),
+            )
         ).all()
         alcohol_rows = session.execute(
             select(AlcoholIntake.ts, AlcoholIntake.grams).where(AlcoholIntake.ts >= since - window)

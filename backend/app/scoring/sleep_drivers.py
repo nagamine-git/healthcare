@@ -28,6 +28,7 @@ from app.models import (
     SubjectiveCheckin,
     Workout,
 )
+from app.scoring.caffeine import is_dietary_caffeine
 from app.scoring.migraine_stats import benjamini_hochberg, permutation_test
 from app.scoring.timewindow import app_today
 
@@ -49,7 +50,8 @@ _OUTCOMES: list[tuple[str, str, str]] = [
 _DRIVERS: list[tuple[str, str]] = [
     ("midpoint", "就寝が遅い"),
     ("irregular", "就寝時刻の乱れ"),
-    ("caffeine_pm", "午後以降のカフェイン"),
+    ("caffeine_pm", "午後以降のカフェイン(食事性)"),
+    ("medication", "頭痛薬の使用"),
     ("alcohol_eve", "夜の飲酒"),
     ("exercise", "運動量(負荷)"),
     ("steps", "日中の活動量"),
@@ -105,9 +107,13 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         ):
             if v is not None:
                 midpoint[_jst(ts).date()] = float(v)
-        caf = [(_jst(ts), float(mg)) for ts, mg in s.execute(
-            select(CaffeineIntake.ts, CaffeineIntake.mg).where(CaffeineIntake.ts >= lo, CaffeineIntake.ts < hi)
+        caf_rows = [(_jst(ts), float(mg), src) for ts, mg, src in s.execute(
+            select(CaffeineIntake.ts, CaffeineIntake.mg, CaffeineIntake.source)
+            .where(CaffeineIntake.ts >= lo, CaffeineIntake.ts < hi)
         ) if mg is not None]
+        # 食事性カフェイン (コーヒー/茶) と頭痛薬カフェインを分離 (交絡対策)
+        caf = [(t, mg) for t, mg, src in caf_rows if is_dietary_caffeine(src)]
+        med = [(t, mg) for t, mg, src in caf_rows if not is_dietary_caffeine(src)]
         alc = [(_jst(ts), float(g)) for ts, g in s.execute(
             select(AlcoholIntake.ts, AlcoholIntake.grams).where(AlcoholIntake.ts >= lo, AlcoholIntake.ts < hi)
         ) if g is not None]
@@ -127,8 +133,13 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         # 夜の窓 [prev 12:00 → d 04:00] JST で評価する行動
         w_lo = datetime.combine(prev, datetime.min.time()).replace(hour=12)
         w_hi = datetime.combine(d, datetime.min.time()).replace(hour=4)
-        caf_pm = sum(mg for t, mg in caf if w_lo <= t <= w_hi)
+        caf_pm = sum(mg for t, mg in caf if w_lo <= t <= w_hi)  # 食事性のみ
         alc_eve = sum(g for t, g in alc if w_lo <= t <= w_hi)
+        # 頭痛薬カフェインは「その日に頭痛薬を使ったか」のマーカー (頭痛日の代理)
+        med_day = sum(
+            mg for t, mg in med
+            if datetime.combine(prev, datetime.min.time()) <= t <= datetime.combine(d, datetime.min.time()).replace(hour=6)
+        )
         load = sum(ld for t, ld in loads if prev <= t.date() <= d)
         mid = midpoint.get(d)
         rows.append({
@@ -140,6 +151,7 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
             "midpoint": (mid + 24 if mid is not None and mid < 12 else mid),
             "irregular": (abs(mid - mid_med) if mid is not None and mid_med is not None else None),
             "caffeine_pm": caf_pm, "alcohol_eve": alc_eve, "exercise": load,
+            "medication": med_day,
             "steps": steps.get(prev), "stress": checkin.get(prev, {}).get("stress"),
             "duration": total,
         })

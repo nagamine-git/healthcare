@@ -1,5 +1,11 @@
 """カフェイン薬物動態モデルと「今飲める量」の推定。
 
+# カフェイン源の分類 (交絡対策)
+カフェイン入り頭痛薬 (イブクイック・バファリンプレミアム等) は、頭痛の日に「治療として」
+服用するため、食事性カフェイン (コーヒー/茶) と混ぜて分析すると逆因果の交絡を生む
+(例:「カフェイン→調子が良い」が実は「頭痛薬で頭痛が治った」)。また MOH (薬剤乱用頭痛)
+の主要因なので別管理が医学的に正しい。`MEDICATION_CAFFEINE_SOURCES` で分類する。
+
 # モデル
 1-コンパートメント、即時吸収・1次消失 (典型的な急性カフェイン薬物動態の近似)。
 
@@ -29,6 +35,14 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+
+# カフェイン入り頭痛薬/鎮痛薬の source。食事性カフェインと分けて扱う (交絡・MOH 対策)。
+MEDICATION_CAFFEINE_SOURCES: frozenset[str] = frozenset({"ibuquick", "bufferin_premium"})
+
+
+def is_dietary_caffeine(source: str | None) -> bool:
+    """食事性カフェイン (コーヒー/茶/エナジー等) なら True。頭痛薬等は False。"""
+    return source not in MEDICATION_CAFFEINE_SOURCES
 
 
 def half_life_decay(dose_mg: float, hours_elapsed: float, *, half_life_h: float = 5.0) -> float:
