@@ -85,14 +85,15 @@ def _cumulative_by_time(metric: str, now_jst: datetime) -> tuple[float | None, i
 
 
 def intraday_profile(
-    metric: str, ref_date: Any, *, days: int = _HISTORY_DAYS, step_h: float = 0.5
+    metric: str, ref_date: Any, *, days: int = _HISTORY_DAYS, step_h: float = 0.5,
+    spread: tuple[float, float] = (7.0, 22.0),
 ) -> list[dict[str, float]]:
-    """終日の「いつもの累積カーブ」。各時刻 (hour-of-day) での過去 days 日の累積中央値。
+    """終日の「いつものペース」累積カーブ [{h: 時刻, v: 累積}]。
 
-    タイムラインに「いつものペース」線を重ねるための予測カーブ。[{h: 時刻, v: 累積}]。
+    過去 days 日の **日次総量の中央値** を、起床帯 (spread, 既定 7-22時) に均等配分して
+    滑らかなランプにする。Garmin の水分等はログ時刻が実飲水時刻と一致しない(一括記録)
+    ことがあるため、実時刻ベースより「均等ペース」の方が直感的で頑健。
     """
-    from collections import defaultdict
-
     start_date = ref_date - timedelta(days=days)
     lo = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
     hi = datetime.combine(ref_date, datetime.min.time())  # 今日は除く (履歴のみ)
@@ -109,23 +110,23 @@ def intraday_profile(
                 .where(MetricSample.metric_key == metric, MetricSample.ts >= lo, MetricSample.ts < hi)
             ).all()
 
-    by_day: dict[Any, list[tuple[float, float]]] = defaultdict(list)
+    daily: dict[Any, float] = {}
     for ts, v in rows:
         if v is None:
             continue
-        jst = ts + timedelta(hours=9)
-        if jst.date() < start_date:
-            continue
-        by_day[jst.date()].append((jst.hour + jst.minute / 60, float(v)))
+        d = (ts + timedelta(hours=9)).date()
+        if d >= start_date:
+            daily[d] = daily.get(d, 0.0) + float(v)
 
-    if len(by_day) < _MIN_DAYS:
+    if len(daily) < _MIN_DAYS:
         return []
+    total = statistics.median(daily.values())
+    w_lo, w_hi = spread
     marks = [i * step_h for i in range(int(24 / step_h) + 1)]
-    profile: list[dict[str, float]] = []
-    for m in marks:
-        day_vals = [sum(val for hod, val in lst if hod <= m) for lst in by_day.values()]
-        profile.append({"h": round(m, 2), "v": round(statistics.median(day_vals), 1)})
-    return profile
+    return [
+        {"h": round(m, 2), "v": round(total * max(0.0, min(1.0, (m - w_lo) / (w_hi - w_lo))), 1)}
+        for m in marks
+    ]
 
 
 def state(*, now_jst: datetime | None = None) -> dict[str, Any]:
