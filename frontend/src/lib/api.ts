@@ -376,6 +376,7 @@ export type DayTimelineData = {
   recovery_bands: { start_h: number; end_h: number }[];
   water: {
     intake_curve: { h: number; ml: number }[];
+    expected_curve?: { h: number; v: number }[];
     intake_total_ml: number | null;
     goal_ml: number | null;
     sweat_ml: number;

@@ -23,7 +23,6 @@ import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { ForecastCard } from "../components/ForecastCard";
-import { HabitPaceCard } from "../components/HabitPaceCard";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef } from "react";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -248,9 +247,6 @@ export function TodayPage({ onOpenDebug }: Props) {
           />
         </div>
       </div>
-
-      {/* ===== 📊 今のペース (習慣の遅れナッジ) ===== */}
-      <HabitPaceCard />
 
       {/* ===== 🕐 今日の流れ (1日のマルチトラックタイムライン) ===== */}
       <div id="timeline-section">

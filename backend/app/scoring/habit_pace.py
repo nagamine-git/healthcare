@@ -84,6 +84,50 @@ def _cumulative_by_time(metric: str, now_jst: datetime) -> tuple[float | None, i
     return expected, len(vals), today_actual
 
 
+def intraday_profile(
+    metric: str, ref_date: Any, *, days: int = _HISTORY_DAYS, step_h: float = 0.5
+) -> list[dict[str, float]]:
+    """終日の「いつもの累積カーブ」。各時刻 (hour-of-day) での過去 days 日の累積中央値。
+
+    タイムラインに「いつものペース」線を重ねるための予測カーブ。[{h: 時刻, v: 累積}]。
+    """
+    from collections import defaultdict
+
+    start_date = ref_date - timedelta(days=days)
+    lo = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
+    hi = datetime.combine(ref_date, datetime.min.time())  # 今日は除く (履歴のみ)
+
+    with session_scope() as s:
+        if metric == "__caffeine__":
+            rows = s.execute(
+                select(CaffeineIntake.ts, CaffeineIntake.mg)
+                .where(CaffeineIntake.ts >= lo, CaffeineIntake.ts < hi)
+            ).all()
+        else:
+            rows = s.execute(
+                select(MetricSample.ts, MetricSample.value)
+                .where(MetricSample.metric_key == metric, MetricSample.ts >= lo, MetricSample.ts < hi)
+            ).all()
+
+    by_day: dict[Any, list[tuple[float, float]]] = defaultdict(list)
+    for ts, v in rows:
+        if v is None:
+            continue
+        jst = ts + timedelta(hours=9)
+        if jst.date() < start_date:
+            continue
+        by_day[jst.date()].append((jst.hour + jst.minute / 60, float(v)))
+
+    if len(by_day) < _MIN_DAYS:
+        return []
+    marks = [i * step_h for i in range(int(24 / step_h) + 1)]
+    profile: list[dict[str, float]] = []
+    for m in marks:
+        day_vals = [sum(val for hod, val in lst if hod <= m) for lst in by_day.values()]
+        profile.append({"h": round(m, 2), "v": round(statistics.median(day_vals), 1)})
+    return profile
+
+
 def state(*, now_jst: datetime | None = None) -> dict[str, Any]:
     now_jst = now_jst or _now_jst()
     habits: list[dict[str, Any]] = []

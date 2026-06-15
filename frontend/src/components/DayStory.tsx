@@ -601,16 +601,28 @@ function WaterTrack({ water, nowH, X, gridTicks }: {
     : "";
   const deficit = goal - total;
   const src = water.source === "garmin" ? " · Garmin" : water.source === "hae" ? " · Health" : "";
+  // 「いつもの今頃」= 予測カーブの現在位置
+  const expNow = nowH != null && water.expected_curve?.length
+    ? water.expected_curve.reduce((a, p) => (Math.abs(p.h - nowH) < Math.abs(a.h - nowH) ? p : a)).v
+    : null;
+  const behind = expNow != null && expNow > 0 && total < expNow * 0.6;
   return (
     <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="水分摂取の累積">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       <line x1={0} y1={y(goal)} x2={SUB_W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
+      {/* いつものペース(過去の同時刻累積中央値) = 予測。破線で重ねる */}
+      {(water.expected_curve?.length ?? 0) > 1 && (
+        <polyline points={water.expected_curve!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")}
+          fill="none" stroke="#fbbf24" strokeWidth={1.4} strokeDasharray="4 3" opacity={0.9} strokeLinejoin="round" />
+      )}
       {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
       {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
       {water.intake_curve.map((p, i) => (<circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />))}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill={deficit > 500 ? "#fcd34d" : "#94a3b8"}>
-        水分 {total}/{goal}mL{src}{water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}{deficit > 0 ? ` · あと${(deficit / 1000).toFixed(1)}L` : " · 達成"}
+      <text x={4} y={9} fontSize={10} fill={behind ? "#fbbf24" : deficit > 500 ? "#fcd34d" : "#94a3b8"}>
+        水分 {total}/{goal}mL{src}
+        {expNow != null ? <tspan fill="#fbbf24"> · いつも今頃{Math.round(expNow)}{behind ? " → 飲もう！" : ""}</tspan> : null}
+        {water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}
       </text>
     </svg>
   );

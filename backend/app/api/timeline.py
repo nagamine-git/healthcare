@@ -586,6 +586,25 @@ def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     return events
 
 
+def _habit_expected_curve(metric: str, target, off) -> list[dict[str, float]]:
+    """習慣の「いつもの累積カーブ」を窓オフセットにマップ (前後日も繋いで日次リセット)。"""
+    from app.scoring.habit_pace import intraday_profile
+
+    prof = intraday_profile(metric, target)
+    if not prof:
+        return []
+    out: list[dict[str, float]] = []
+    for day_off in (-1, 0, 1):
+        base = datetime.combine(target + timedelta(days=day_off), datetime.min.time())
+        for p in prof:
+            jst_dt = base + timedelta(hours=p["h"])
+            h = off(jst_dt - timedelta(hours=9))  # JST→UTC naive
+            if -0.01 <= h <= SPAN_H + 0.01:
+                out.append({"h": round(h, 2), "v": p["v"]})
+    out.sort(key=lambda x: x["h"])
+    return out
+
+
 @router.get("/api/timeline")
 async def day_timeline(
     date: str | None = Query(default=None),
@@ -610,6 +629,8 @@ async def day_timeline(
     pressure_curve = _pressure_curve(start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
+    if water is not None:
+        water["expected_curve"] = _habit_expected_curve("garmin_hydration_ml", est_date, off)
     prediction_text = _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx)
     _fc = _forecast_curves(g, now_off)
 
