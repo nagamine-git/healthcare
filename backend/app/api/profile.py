@@ -6,10 +6,11 @@ UI の理想体型シルエットで決めた目標体重・体脂肪率を user
 
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db import session_scope
 from app.models import UserProfile
@@ -43,7 +44,7 @@ async def get_profile() -> dict[str, Any]:
 # UI で編集可能なフィールドと対応する UserProfile の生カラム。
 # overrides[field] が None = 「自動 (config デフォルト / 派生)」、非 None = ユーザー明示。
 _EDITABLE_FIELDS = (
-    "age", "resting_hr", "max_hr",
+    "birth_date", "age", "resting_hr", "max_hr",
     "caffeine_smoker", "caffeine_oral_contraceptives", "caffeine_pregnant",
     "caffeine_sensitivity", "caffeine_half_life_override_h",
     "wake_time", "sleep_need_min", "chronotype",
@@ -61,10 +62,14 @@ def _settings_dict() -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(UserProfile, 1)
         overrides = {f: getattr(row, f, None) if row is not None else None for f in _EDITABLE_FIELDS}
+    # date は ISO 文字列で返す (JSON 一貫性)
+    if overrides.get("birth_date") is not None:
+        overrides["birth_date"] = overrides["birth_date"].isoformat()
     return {
         "overrides": overrides,
         "sex": p.sex,
-        "age": p.age,
+        "birth_date": p.birth_date.isoformat() if p.birth_date else None,
+        "age": p.age,  # birth_date があれば都度算出
         "height_cm": p.height_cm,
         # 心拍
         "resting_hr": p.resting_hr,
@@ -100,6 +105,7 @@ class SettingsIn(BaseModel):
     未指定 (キー無し) のフィールドは現状維持。
     """
 
+    birth_date: _date | None = None  # "YYYY-MM-DD"。設定時は age より優先 (都度算出)
     age: int | None = Field(default=None, ge=10, le=100)
     resting_hr: int | None = Field(default=None, ge=30, le=120)
     max_hr: int | None = Field(default=None, ge=120, le=220)
@@ -114,10 +120,23 @@ class SettingsIn(BaseModel):
     protein_g_per_kg: float | None = Field(default=None, ge=0.5, le=3.0)
     water_ml_per_kg: float | None = Field(default=None, ge=20, le=60)
 
+    @field_validator("birth_date")
+    @classmethod
+    def _check_birth_date(cls, v: _date | None) -> _date | None:
+        if v is None:
+            return v
+        today = _date.today()
+        if v > today:
+            raise ValueError("生年月日が未来です")
+        age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
+        if not (10 <= age <= 100):
+            raise ValueError("生年月日から算出した年齢が範囲外 (10-100)")
+        return v
 
-# bool/None を区別したいフィールド (None 明示=NULL 化) と、それ以外
+
+# 送信されたキーだけ反映するフィールド (None 明示=NULL 化 = 自動に戻す)
 _SETTINGS_FIELDS = (
-    "age", "resting_hr", "max_hr",
+    "birth_date", "age", "resting_hr", "max_hr",
     "caffeine_smoker", "caffeine_oral_contraceptives", "caffeine_pregnant",
     "caffeine_sensitivity", "caffeine_half_life_override_h",
     "wake_time", "sleep_need_min", "chronotype",

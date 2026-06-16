@@ -411,7 +411,8 @@ export type ProfileAssessment = { level: "ok" | "warning" | "blocked"; warnings:
 /** 個人差ファクター設定 (計算直結)。派生値 (caffeine_half_life_h 等) は読み取り専用。 */
 export type SettingsDto = {
   sex: "male" | "female";
-  age: number;
+  birth_date: string | null; // "YYYY-MM-DD"。設定時は age を都度算出
+  age: number; // 派生 (birth_date があればそこから)
   height_cm: number;
   resting_hr: number;
   max_hr: number; // 派生 (override or Tanaka 式)
@@ -430,6 +431,7 @@ export type SettingsDto = {
   source: "db" | "default";
   /** 生の上書き値。null = ユーザー未設定 (= 自動: 派生/デフォルトを使用)。 */
   overrides: {
+    birth_date: string | null;
     age: number | null;
     resting_hr: number | null;
     max_hr: number | null;
@@ -446,6 +448,7 @@ export type SettingsDto = {
   };
 };
 export type SettingsUpdate = Partial<{
+  birth_date: string | null;
   age: number | null;
   resting_hr: number | null;
   max_hr: number | null;

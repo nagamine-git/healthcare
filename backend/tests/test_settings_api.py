@@ -32,6 +32,38 @@ def test_get_settings_returns_defaults(app_client):
     assert all(v is None for v in body["overrides"].values())
 
 
+def test_birth_date_derives_age_each_time(app_client):
+    from datetime import date
+
+    today = date.today()
+    # 1/1 生まれ → 今年の誕生日は必ず過ぎている (1/1 当日含む) ので満年齢は確定
+    bd = date(today.year - 33, 1, 1)
+    body = app_client.put("/api/settings", json={"birth_date": bd.isoformat()}).json()
+    assert body["overrides"]["birth_date"] == bd.isoformat()
+    assert body["age"] == 33  # 都度算出
+    # birth_date は age 上書きより優先
+    body2 = app_client.put("/api/settings", json={"age": 50}).json()
+    assert body2["age"] == 33
+
+
+def test_birth_date_future_rejected(app_client):
+    from datetime import date, timedelta
+
+    future = (date.today() + timedelta(days=1)).isoformat()
+    assert app_client.put("/api/settings", json={"birth_date": future}).status_code == 422
+
+
+def test_birth_date_clear_falls_back_to_default(app_client):
+    from datetime import date
+
+    bd = date(date.today().year - 40, 1, 1)
+    app_client.put("/api/settings", json={"birth_date": bd.isoformat()})
+    app_client.put("/api/settings", json={"birth_date": None})
+    body = app_client.get("/api/settings").json()
+    assert body["overrides"]["birth_date"] is None
+    assert body["age"] == 30  # config デフォルト
+
+
 def test_overrides_reflect_set_then_clear(app_client):
     app_client.put("/api/settings", json={"age": 40})
     body = app_client.get("/api/settings").json()

@@ -236,7 +236,9 @@ class UserProfile(Base):
     ffmi_normalized: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # --- 個人差ファクター (計算直結。NULL は config デフォルトにフォールバック) ---
-    age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 生年月日。設定されていれば年齢は都度ここから算出する (age 列より優先)。
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    age: Mapped[int | None] = mapped_column(Integer, nullable=True)  # birth_date 無し時のみ使用
     resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Karvonen 用上書き
     max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 実測上書き (無ければ式)
     # カフェイン消失半減期に効く CYP1A2 修飾因子 (トグル)

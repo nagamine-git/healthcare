@@ -106,6 +106,7 @@ def _apply_lightweight_migrations() -> None:
             ("explained_at", "DATETIME"),
         ],
         "user_profile": [
+            ("birth_date", "DATE"),
             ("age", "INTEGER"),
             ("resting_hr", "INTEGER"),
             ("max_hr", "INTEGER"),

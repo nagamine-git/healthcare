@@ -57,9 +57,10 @@ export function SettingsTab({
       {/* 身体・基礎 */}
       <Group icon={<User size={14} className="text-emerald-300" />} title="身体・基礎"
         summary={`${d.age}歳 / ${d.height_cm}cm`}>
-        <NumberField label="年齢" value={d.age} auto={isAuto("age")} unit="歳" min={10} max={100}
-          hint="BMR・最大心拍の算出に使用"
-          onSave={(v) => set({ age: v })} onClear={() => set({ age: null })} />
+        <DateField label="生年月日" value={d.birth_date} auto={isAuto("birth_date")}
+          hint="入れておくと年齢を都度自動計算 (BMR・最大心拍に反映)"
+          onSave={(v) => set({ birth_date: v })} onClear={() => set({ birth_date: null })} />
+        <Derived label="年齢 (自動算出)" value={`${d.age} 歳`} />
         <div className="pt-1 text-[11px] text-slate-500">
           身長・性別・目標体型は下のセクションで設定します。
         </div>
@@ -244,6 +245,23 @@ function NumberField({
         }`}
       />
       {unit && <span className="w-12 text-[10px] text-slate-500">{unit}</span>}
+      <AutoTrailing auto={auto} onClear={onClear} />
+    </FieldShell>
+  );
+}
+
+function DateField({ label, value, auto, hint, onSave, onClear }: {
+  label: string; value: string | null; auto: boolean; hint?: string;
+  onSave: (v: string) => void; onClear: () => void;
+}) {
+  return (
+    <FieldShell label={label} hint={hint}>
+      <input type="date" value={value ?? ""} max={new Date().toISOString().slice(0, 10)}
+        onChange={(e) => { if (e.target.value) onSave(e.target.value); }}
+        className={`rounded border bg-slate-900 px-2 py-1 text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
+          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        }`}
+      />
       <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );

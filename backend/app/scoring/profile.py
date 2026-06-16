@@ -11,6 +11,7 @@ resolve_profile() を経由して「有効なプロファイル」を読む。
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date as date_type
 
 from app.config import get_settings
 from app.db import session_scope
@@ -57,6 +58,13 @@ def derive_max_hr(override: int | None, age: int) -> int:
     return round(208 - 0.7 * age)
 
 
+def derive_age(birth_date: date_type, today: date_type) -> int:
+    """生年月日と当日から満年齢を算出する。"""
+    return today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+
+
 @dataclass(frozen=True)
 class ResolvedProfile:
     height_cm: float
@@ -66,7 +74,8 @@ class ResolvedProfile:
     body_fat_tolerance_pct: float
     ffmi_normalized: float | None
     # 個人差ファクター
-    age: int
+    birth_date: date_type | None
+    age: int  # birth_date があれば都度算出、無ければ age 上書き or デフォルト
     resting_hr: int
     max_hr: int  # 派生 (override or 式)
     caffeine_smoker: bool
@@ -100,7 +109,13 @@ def resolve_profile() -> ResolvedProfile:
             v = getattr(row, attr, None)
             return v if v is not None else default
 
-        age = int(pick("age", s.user_age))
+        # 年齢: 生年月日があれば都度算出 (陳腐化しない)。無ければ age 上書き or デフォルト。
+        birth_date = pick("birth_date", None)
+        if birth_date is not None:
+            from app.scoring.timewindow import app_today
+            age = derive_age(birth_date, app_today())
+        else:
+            age = int(pick("age", s.user_age))
         caffeine_smoker = bool(pick("caffeine_smoker", False))
         caffeine_oc = bool(pick("caffeine_oral_contraceptives", False))
         caffeine_pregnant = bool(pick("caffeine_pregnant", False))
@@ -115,6 +130,7 @@ def resolve_profile() -> ResolvedProfile:
             target_body_fat_pct=pick("target_body_fat_pct", s.target_body_fat_pct),
             body_fat_tolerance_pct=pick("body_fat_tolerance_pct", s.body_fat_tolerance_pct),
             ffmi_normalized=row.ffmi_normalized if row is not None else None,
+            birth_date=birth_date,
             age=age,
             resting_hr=int(pick("resting_hr", s.user_resting_hr)),
             max_hr=derive_max_hr(max_hr_override, age),
