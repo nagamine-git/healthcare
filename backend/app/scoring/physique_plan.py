@@ -149,8 +149,11 @@ def _today_actions(
 
     # 1) タンパク質 (最優先の基質)
     if avg_protein is None:
-        actions.append({"key": "protein", "status": "todo", "title": "タンパク質を記録",
-            "detail": f"目安 {protein_target} g/日。まず食事を記録すると不足分が分かる"})
+        per_meal = round(protein_target / 3)
+        actions.append({"key": "protein", "status": "todo",
+            "title": f"タンパク質 {protein_target} g/日 を狙う",
+            "detail": (f"3食で割ると1食 ~{per_meal}g (鶏むね150g≈35g / 卵2個≈12g+プロテイン1杯≈20g)。"
+                       "食事を記録すると不足分を自動で出せる")})
     else:
         gap = protein_target - avg_protein
         if gap > 15:
@@ -166,8 +169,15 @@ def _today_actions(
 
     # 2) カロリー収支 (方向で意味が変わる)
     if avg_kcal is None:
-        actions.append({"key": "calorie", "status": "todo", "title": "摂取カロリーを記録",
-            "detail": f"目標 {calorie_target} kcal/日。記録すると黒字/赤字が見える"})
+        if direction == "lean_bulk":
+            tip = ("手軽な +200kcal の黒字: お菓子をプロテインバー(~200kcal/タンパク質20g)に置換、"
+                   "or おにぎり1個+ゆで卵。大きすぎる黒字は脂肪になるので“もう一品”程度に")
+        elif direction == "cut":
+            tip = "間食を1つ減らす/高カロリー飲料をやめるのが楽。運動で同じ赤字は時間効率が悪い"
+        else:
+            tip = "目標付近をキープ。記録すると過不足が見える"
+        actions.append({"key": "calorie", "status": "todo",
+            "title": f"カロリー {calorie_target} kcal/日 を狙う", "detail": tip})
     else:
         gap = calorie_target - avg_kcal  # >0: もっと食べる(増量) / <0: 減らす(減量)
         if direction in ("lean_bulk",) and gap > 120:
