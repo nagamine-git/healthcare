@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  Clock,
+  CalendarCheck,
+  CheckCircle2,
+  Circle,
   Dumbbell,
   Flame,
   Target,
@@ -35,19 +37,44 @@ export function PhysiqueGapPlan() {
   return (
     <section className="space-y-4 rounded-2xl bg-gradient-to-b from-slate-900/80 to-slate-900/40 p-4 sm:p-5 ring-1 ring-slate-800">
       {/* ヘッダ */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Target size={16} className={dirColor} />
-          <h3 className="text-sm tracking-wide text-slate-100">ギャップを埋めるには</h3>
-        </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-          <Clock size={12} />
-          <span>到達目安 {p.timeline.eta_label}</span>
-        </div>
+      <div className="flex items-center gap-2">
+        <Target size={16} className={dirColor} />
+        <h3 className="text-sm tracking-wide text-slate-100">ギャップを埋めるには</h3>
       </div>
 
       {/* 方針 */}
       <div className={`text-lg font-semibold ${dirColor}`}>{p.direction_label}</div>
+
+      {/* 12週ブロック: 持続できる単位の達成目標を主役に */}
+      {p.block && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-600/30 bg-emerald-950/25 p-3">
+          <CalendarCheck size={20} className="shrink-0 text-emerald-300" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-emerald-100">{p.block.label}</div>
+            <div className="text-[10px] text-emerald-200/60">
+              人が集中を保てる単位。まずここを完走 → 積み重ねで全体へ（全体目安 {p.timeline.eta_label}）
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 今日やること: 平均実績からの具体行動 */}
+      {p.today_actions.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">今日やること</div>
+          {p.today_actions.map((a) => (
+            <div key={a.key} className="flex items-start gap-2 rounded-lg bg-slate-950/40 px-3 py-2">
+              {a.status === "ok"
+                ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+                : <Circle size={15} className="mt-0.5 shrink-0 text-amber-400" />}
+              <div className="min-w-0">
+                <div className={`text-xs font-medium ${a.status === "ok" ? "text-slate-400" : "text-slate-100"}`}>{a.title}</div>
+                <div className="text-[10px] leading-tight text-slate-500">{a.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 現在 → 目標 */}
       <div className="flex items-center gap-3 rounded-xl bg-slate-950/40 p-3 text-xs">
@@ -68,7 +95,7 @@ export function PhysiqueGapPlan() {
 
       {/* 結局やること = 優先度 */}
       <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500">結局やること (効果の優先度)</div>
+        <div className="text-[10px] uppercase tracking-wider text-slate-500">なぜそれが効くか (効果の優先度)</div>
         {p.levers.map((l) => (
           <div key={l.name} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2 text-xs">

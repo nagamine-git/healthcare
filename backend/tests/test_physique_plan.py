@@ -10,6 +10,8 @@ from app.scoring.physique_plan import (
     _kcal_per_min_shadowbox,
     _levers,
     _macros,
+    _muscle_rate_pct_month,
+    _weeks_to_gain_lean,
 )
 
 # ----- 純粋な数理 -----
@@ -42,6 +44,22 @@ def test_eta_label_done():
     assert "到達" in _eta_label(0)
     assert "週" in _eta_label(4)
     assert "ヶ月" in _eta_label(20)
+
+
+def test_muscle_rate_higher_when_ffmi_low():
+    # FFMI が低い(伸びしろ大) ほど速い。天井近くは遅い。
+    low = _muscle_rate_pct_month(16.0, "male")
+    high = _muscle_rate_pct_month(24.0, "male")
+    assert low > high
+    assert low == pytest.approx(1.0)  # baseline 以下は rate_max にクランプ
+    assert high < 0.2  # 天井近くは僅か
+
+
+def test_weeks_to_gain_decelerates():
+    # 同じ +6kg でも、開始 FFMI が高い方が(天井に近く)時間がかかる
+    fast = _weeks_to_gain_lean(45.0, 51.0, 54.0, 170, "male")  # FFMI ~低
+    slow = _weeks_to_gain_lean(63.0, 69.0, 78.0, 170, "male")  # FFMI ~高
+    assert 0 < fast < slow
 
 
 # ----- API 統合 (実データ経路) -----
@@ -114,6 +132,12 @@ def test_physique_plan_lean_bulk_needs_surplus(app_client):
     assert r["energy"]["calorie_target"] > r["energy"]["tdee"]
     assert r["energy"]["delta_kcal"] > 0
     assert "黒字" in r["diet_vs_exercise"]["headline"]
+    # 12週ブロックと今日の具体行動が出る
+    assert r["block"] is not None
+    assert r["block"]["expected_lean_kg"] > 0
+    assert 0 < r["block"]["pct_of_goal"] <= 100
+    keys = {a["key"] for a in r["today_actions"]}
+    assert {"protein", "calorie", "training"} <= keys
 
 
 def test_physique_plan_no_weight(app_client):

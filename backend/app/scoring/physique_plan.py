@@ -73,6 +73,44 @@ def _kcal_per_min_shadowbox(weight_kg: float) -> float:
     return SHADOWBOX_MET * 3.5 * weight_kg / 200.0
 
 
+# --- 筋増レートを FFMI ヘッドルームから動的推定 (筋トレ歴を聞かずに体型から) ---
+# 自然な FFMI 天井 ~25 (男) / ~22 (女) (Kouri 1995)。未トレ平均 ~18 (男)/~15 (女)。
+# 天井に近いほど伸びしろが小さく筋増は遅い (初心者ボーナス → 上級者の停滞)。
+
+
+def _ffmi_normalized(lean_kg: float, height_cm: float) -> float:
+    h = height_cm / 100.0
+    return lean_kg / (h * h) + 6.1 * (1.8 - h)
+
+
+def _muscle_rate_pct_month(ffmi: float, sex: str) -> float:
+    """月間の筋増率 (%体重)。FFMI が天井から離れているほど速い。"""
+    female = sex.lower().startswith("f")
+    ceiling, baseline, rate_max = (22.0, 15.0, 0.5) if female else (25.0, 18.0, 1.0)
+    frac = (ceiling - ffmi) / (ceiling - baseline)
+    return max(0.05, min(rate_max, rate_max * frac))
+
+
+def _weeks_to_gain_lean(lm_now: float, lm_tgt: float, w_now: float, height_cm: float, sex: str) -> float:
+    """除脂肪量 lm_now→lm_tgt に要する週数。筋増に伴い FFMI が上がりレートが
+    鈍化するのを月次で積分する (= 減速を反映した正直な ETA)。"""
+    if lm_tgt <= lm_now:
+        return 0.0
+    lean, weight, weeks = lm_now, w_now, 0.0
+    for _ in range(160):  # 上限 ~13年
+        if lean >= lm_tgt:
+            break
+        ffmi = _ffmi_normalized(lean, height_cm)
+        gain_month = _muscle_rate_pct_month(ffmi, sex) / 100.0 * weight
+        if gain_month <= 0.001:
+            break
+        step = min(gain_month, lm_tgt - lean)
+        lean += step
+        weight += step  # 筋ぶん体重も増える
+        weeks += 4.345 * (step / gain_month)
+    return weeks
+
+
 def _macros(calorie_target: float, weight_kg: float, protein_g_per_kg: float) -> dict[str, Any]:
     protein_g = protein_g_per_kg * weight_kg
     protein_kcal = protein_g * 4.0
@@ -90,6 +128,74 @@ def _macros(calorie_target: float, weight_kg: float, protein_g_per_kg: float) ->
         "carb_g": round(carb_kcal / 4.0),
         "protein_g_per_kg": round(protein_g_per_kg, 2),
     }
+
+
+def _today_actions(
+    target: date_type, *, direction: str, protein_target: int, calorie_target: int,
+) -> list[dict[str, Any]]:
+    """直近14日の平均実績と目標の差を「今日の具体行動」に翻訳する。
+
+    平均が無い指標は記録を促すのみ (推測で誤った助言をしない)。
+    タンパク質換算: プロテイン1杯≈20g, ゆで卵1個≈6g, ギリシャヨーグルト1個≈15g。
+    プロテインバー ≈ 200kcal / タンパク質20g。
+    """
+    from app.scoring.nutrition import _avg_daily
+
+    with session_scope() as session:
+        avg_protein, _ = _avg_daily(session, "protein_g", target, 14, min_value=5.0)
+        avg_kcal, _ = _avg_daily(session, "kcal_intake", target, 14, min_value=200.0)
+
+    actions: list[dict[str, Any]] = []
+
+    # 1) タンパク質 (最優先の基質)
+    if avg_protein is None:
+        actions.append({"key": "protein", "status": "todo", "title": "タンパク質を記録",
+            "detail": f"目安 {protein_target} g/日。まず食事を記録すると不足分が分かる"})
+    else:
+        gap = protein_target - avg_protein
+        if gap > 15:
+            scoops = max(1, round(gap / 20))
+            actions.append({"key": "protein", "status": "todo",
+                "title": f"タンパク質を あと {round(gap)} g",
+                "detail": (f"平均 {round(avg_protein)} g/日 → 目標 {protein_target}。"
+                           f"プロテイン {scoops} 杯(~{scoops*20}g) か、ゆで卵2個+ギリシャヨーグルトで埋まる")})
+        else:
+            actions.append({"key": "protein", "status": "ok",
+                "title": f"タンパク質 OK (平均 {round(avg_protein)} g)",
+                "detail": f"目標 {protein_target} g にほぼ到達。維持を"})
+
+    # 2) カロリー収支 (方向で意味が変わる)
+    if avg_kcal is None:
+        actions.append({"key": "calorie", "status": "todo", "title": "摂取カロリーを記録",
+            "detail": f"目標 {calorie_target} kcal/日。記録すると黒字/赤字が見える"})
+    else:
+        gap = calorie_target - avg_kcal  # >0: もっと食べる(増量) / <0: 減らす(減量)
+        if direction in ("lean_bulk",) and gap > 120:
+            actions.append({"key": "calorie", "status": "todo",
+                "title": f"あと +{round(gap)} kcal の小さな黒字",
+                "detail": (f"平均 {round(avg_kcal)} → 目標 {calorie_target}。お菓子をプロテインバー"
+                           "(~200kcal/タンパク質20g)に置換するとカロリーとタンパク質を同時に補える")})
+        elif direction in ("cut",) and gap < -120:
+            actions.append({"key": "calorie", "status": "todo",
+                "title": f"あと {round(-gap)} kcal 減らす",
+                "detail": (f"平均 {round(avg_kcal)} → 目標 {calorie_target}。間食を1つ減らす/"
+                           "高カロリー飲料をやめるのが楽 (運動で同じ赤字は時間効率が悪い)")})
+        elif abs(gap) <= 120:
+            actions.append({"key": "calorie", "status": "ok",
+                "title": f"カロリー OK (平均 {round(avg_kcal)})",
+                "detail": f"目標 {calorie_target} 付近。黒字/赤字を作りすぎない"})
+        else:  # bulk なのに食べ過ぎ等
+            actions.append({"key": "calorie", "status": "todo",
+                "title": "黒字が大きすぎないか確認",
+                "detail": (f"平均 {round(avg_kcal)} は目標 {calorie_target} と差が大きい。"
+                           "増量でも黒字は小さく(+目安)に。超過は脂肪になりやすい")})
+
+    # 3) 筋トレ (筋増の必須刺激)。今日 or 今週の実行を促す
+    actions.append({"key": "training", "status": "todo",
+        "title": "今日 or 今週、筋トレ1回",
+        "detail": ("大筋群の複合種目 (スクワット/腕立て/懸垂など) を、前回より1回でも多く"
+                   "(漸進性過負荷)。これが筋増の必須スイッチ")})
+    return actions
 
 
 def _levers(direction: str, protein_g: int, ex_min: int) -> list[dict[str, Any]]:
@@ -223,13 +329,30 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
 
     levers = _levers(direction, macros["protein_g"], ex_min)
 
-    # タイムライン (持続可能レートでの所要週数)
+    # タイムライン: 筋増レートは FFMI ヘッドルームから動的算出し、減速を積分する。
     weeks_fat = abs(d_fat) / (0.0075 * w_now) if (has_bf and d_fat is not None and d_fat < 0) else 0.0
-    # 筋増レート: 中級 0.5%/月、女性は半分 → 週換算
-    musc_month_pct = 0.005 * (0.5 if prof.sex.lower().startswith("f") else 1.0)
-    r_musc_kg_wk = musc_month_pct * w_now / 4.345
-    weeks_musc = (d_lean / r_musc_kg_wk) if (has_bf and d_lean is not None and d_lean > 0 and r_musc_kg_wk > 0) else 0.0
+    weeks_musc = 0.0
+    block: dict[str, Any] | None = None
+    if has_bf and d_lean is not None and d_lean > 0:
+        weeks_musc = _weeks_to_gain_lean(lm_now, lm_tgt, w_now, prof.height_cm, prof.sex)
+        # 12週ブロック: 現在の FFMI に基づく近未来レート (最も速い局面) で達成可能な塊
+        rate_now_kg_wk = _muscle_rate_pct_month(
+            _ffmi_normalized(lm_now, prof.height_cm), prof.sex) / 100.0 * w_now / 4.345
+        block_weeks = 12
+        block_lean = round(rate_now_kg_wk * block_weeks, 1)
+        block = {
+            "weeks": block_weeks,
+            "expected_lean_kg": block_lean,
+            "pct_of_goal": round(block_lean / d_lean * 100) if d_lean > 0 else None,
+            "label": (f"まず {block_weeks} 週: 筋 +{block_lean}kg"
+                      f"（目標筋増の {round(block_lean / d_lean * 100)}%）"),
+        }
     eta_weeks = max(weeks_fat, weeks_musc)
+
+    today_actions = _today_actions(
+        target, direction=direction,
+        protein_target=macros["protein_g"], calorie_target=round(calorie_target),
+    )
 
     notes: list[str] = []
     if not tdee_measured:
@@ -240,6 +363,9 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
         notes.append("リコンプは筋増の速度が律速。脂肪減は早く見えても筋増はゆっくり=焦らない。")
     if weeks_musc > weeks_fat and weeks_musc > 0:
         notes.append("ボトルネックは筋増。タンパク質と漸進性過負荷を最優先に。")
+    if block is not None:
+        notes.append("筋増レートは体型(FFMI)から動的推定。今は伸びしろが大きい=速い局面。"
+                     "筋が付くほど自然に鈍化する(生物学的上限)ので、まず12週ブロックに集中。")
 
     return {
         "available": True,
@@ -289,6 +415,8 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
                 "筋トレを優先し、シャドーは別日 or 筋トレ後・週2–3回に。"
             ),
         },
+        "today_actions": today_actions,
+        "block": block,
         "timeline": {
             "weeks_fat": round(weeks_fat, 1),
             "weeks_muscle": round(weeks_musc, 1),

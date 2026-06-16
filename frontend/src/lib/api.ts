@@ -420,6 +420,8 @@ export type PhysiquePlan =
       energy: { bmr: number; tdee: number; tdee_measured: boolean; calorie_target: number; delta_kcal: number };
       macros: { protein_g: number; protein_kcal: number; fat_g: number; carb_g: number; protein_g_per_kg: number };
       diet_vs_exercise: { daily_deficit_kcal: number; shadowbox_min_equiv: number; headline: string; note: string };
+      today_actions: { key: string; status: "todo" | "ok"; title: string; detail: string }[];
+      block: { weeks: number; expected_lean_kg: number; pct_of_goal: number | null; label: string } | null;
       levers: { name: string; share_pct: number; why: string }[];
       training: { resistance_sessions_per_week: number; primary: string; shadowboxing: string; interference: string };
       timeline: { weeks_fat: number; weeks_muscle: number; eta_weeks: number; eta_label: string };
