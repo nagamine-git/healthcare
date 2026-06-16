@@ -119,7 +119,7 @@ SYSTEM_PERSONA_TEMPLATE = """\
 ``pressure`` / ``migraine`` / ``caffeine`` フィールドを横断して以下の式と運用ルールで判断する。
 
 ## 1. 体内総カフェイン量 (mg)
-- ``caffeine.existing_residual_mg`` = 当日 (JST 00:00 以降) の摂取記録を半減期 5h で減衰させた合計
+- ``caffeine.existing_residual_mg`` = 直近 18h の摂取記録を 1次吸収/消失 (消失半減期 5h) で減衰させた確定残量 (mg)
 - **頭痛薬 (イブクイック / バファリンプレミアム) は 1 回服用で +80mg** (1 錠あたり無水カフェイン 40mg × 2 錠)
   → ``CaffeineIntake`` テーブルに ``source=ibuquick`` / ``bufferin_premium`` で記録されると自動的に existing_residual に加算される
 - 推奨摂取上限 (``caffeine.max_safe_mg``) は existing_residual を **既に差し引いた値**。これ以上の追加カフェインは就寝時血中濃度 ≥ 0.5 mg/L を引き起こす

@@ -463,7 +463,10 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
     if not weight_kg or weight_kg <= 0:
         return {"available": False}
 
-    existing_residual = current_residual_mg(now_jst, settings.caffeine_half_life_h)
+    existing_residual = current_residual_mg(
+        now_jst, settings.caffeine_half_life_h,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
+    )
 
     rec = recommend_caffeine(
         now=now_jst,
@@ -476,6 +479,7 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
         target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
         instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
         cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
     adjusted_max = max_dose_for_bedtime(
         hours_until_bedtime=rec.hours_until_bedtime,
@@ -484,23 +488,24 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
         half_life_h=settings.caffeine_half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         existing_residual_mg=existing_residual,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
     recommended = rec.recommended_mg
     if recommended is not None and adjusted_max < recommended:
         recommended = (
             None
             if adjusted_max < settings.caffeine_min_cognitive_mg
-            else round(max(settings.caffeine_min_cognitive_mg, adjusted_max), 0)
+            else round(max(settings.caffeine_min_cognitive_mg, adjusted_max), 1)
         )
     return {
         "available": True,
         "recommended_mg": recommended,
         "instant_coffee_g": (
-            round(recommended / settings.instant_coffee_mg_per_g, 1)
+            round(recommended / settings.instant_coffee_mg_per_g, 2)
             if recommended
             else None
         ),
-        "max_safe_mg": round(adjusted_max, 0),
+        "max_safe_mg": round(adjusted_max, 1),
         "existing_residual_mg": round(existing_residual, 1),
         "hours_until_bedtime": round(rec.hours_until_bedtime, 2),
         "bedtime_residual_mg": rec.bedtime_residual_if_consumed_mg,

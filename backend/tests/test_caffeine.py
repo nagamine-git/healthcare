@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.scoring.caffeine import (
+    DEFAULT_ABSORPTION_HALF_LIFE_H,
+    absorption_factor,
+    amount_in_body,
     blood_concentration,
     half_life_decay,
     max_dose_for_bedtime,
@@ -32,16 +36,46 @@ def test_half_life_decay_negative_dose():
     assert half_life_decay(0, 1) == 0.0
 
 
-def test_blood_concentration_formula():
-    # 100mg, t=0, BW=56kg, Vd=0.5L/kg → C = 100 / (0.5*56) = 3.57 mg/L
+def test_blood_concentration_zero_at_intake():
+    # 1次吸収モデル: t=0 ではまだ血中に移行しておらず濃度 0
     c = blood_concentration(100, 0, body_weight_kg=56, vd_l_per_kg=0.5)
-    assert c == pytest.approx(100 / 28, abs=0.05)
+    assert c == pytest.approx(0.0, abs=1e-9)
 
 
-def test_blood_concentration_decays():
-    c0 = blood_concentration(100, 0, body_weight_kg=56)
-    c5 = blood_concentration(100, 5, body_weight_kg=56, half_life_h=5.0)
-    assert c5 == pytest.approx(c0 / 2, abs=0.05)
+def test_blood_concentration_rises_to_peak_then_falls():
+    # tmax≈45min 付近で頂値、その後減衰 (即時吸収近似のような t=0 頂値ではない)
+    cs = [blood_concentration(100, h, body_weight_kg=56) for h in (0.0, 0.25, 0.75, 2.0, 5.0)]
+    assert cs[0] < cs[1] < cs[2]  # 立ち上がり相
+    assert cs[2] > cs[3] > cs[4]  # 減衰相
+
+
+def test_blood_concentration_terminal_matches_amplified_decay():
+    # 吸収完了後 (終末相) は (D/Vd)·factor·exp(-ke*t) に収束する
+    t = 6.0
+    c = blood_concentration(100, t, body_weight_kg=56, half_life_h=5.0)
+    factor = absorption_factor(5.0, DEFAULT_ABSORPTION_HALF_LIFE_H)
+    expected = (100 / 28) * factor * math.exp(-math.log(2) * t / 5.0)
+    assert c == pytest.approx(expected, rel=1e-3)
+
+
+def test_blood_concentration_halves_over_half_life_in_terminal():
+    # 終末相では消失半減期ぶんで半分になる
+    c_a = blood_concentration(100, 6, body_weight_kg=56, half_life_h=5.0)
+    c_b = blood_concentration(100, 11, body_weight_kg=56, half_life_h=5.0)
+    assert c_b == pytest.approx(c_a / 2, rel=1e-3)
+
+
+def test_amount_in_body_falls_back_to_instantaneous_when_no_absorption():
+    # absorption_half_life_h=None → 即時吸収 (純消失) に縮退
+    assert amount_in_body(
+        100, 5.0, half_life_h=5.0, absorption_half_life_h=None
+    ) == pytest.approx(50.0, abs=0.1)
+
+
+def test_absorption_factor_is_small_amplification():
+    # 既定パラメータ (5h / 0.14h) では ~1.03 倍
+    factor = absorption_factor(5.0, DEFAULT_ABSORPTION_HALF_LIFE_H)
+    assert 1.0 < factor < 1.06
 
 
 # ----- 最大安全量 -----
@@ -59,11 +93,13 @@ def test_max_dose_scales_with_remaining_time():
 
 
 def test_max_dose_subtracts_existing_residual():
+    # 既存残量 E は吸収済み (factor 補正不要) なので、新規許容量は (許容-E)/factor だけ減る
     base = max_dose_for_bedtime(hours_until_bedtime=4, body_weight_kg=56)
     with_residual = max_dose_for_bedtime(
         hours_until_bedtime=4, body_weight_kg=56, existing_residual_mg=20
     )
-    assert with_residual == pytest.approx(base - 20, abs=0.1)
+    factor = absorption_factor(5.0, DEFAULT_ABSORPTION_HALF_LIFE_H)
+    assert base - with_residual == pytest.approx(20 / factor, abs=0.1)
 
 
 # ----- 推奨ロジック -----
@@ -145,7 +181,7 @@ def test_recommend_instant_coffee_g_uses_setting():
 # ----- 減衰カーブ -----
 
 
-def test_predict_decay_curve_is_monotonic_decreasing():
+def test_predict_decay_curve_rises_then_decays():
     intake = datetime(2026, 5, 19, 9, 0, tzinfo=JST)
     bed = datetime(2026, 5, 19, 22, 30, tzinfo=JST)
     curve = predict_decay_curve(
@@ -153,8 +189,15 @@ def test_predict_decay_curve_is_monotonic_decreasing():
     )
     assert len(curve) > 0
     concentrations = [p["concentration_mg_per_l"] for p in curve]
-    for i in range(1, len(concentrations)):
-        assert concentrations[i] <= concentrations[i - 1] + 1e-6
+    assert concentrations[0] == pytest.approx(0.0, abs=1e-6)  # t=0 は未吸収
+    peak_idx = concentrations.index(max(concentrations))
+    assert peak_idx >= 1  # 立ち上がり相が存在する
+    # 頂値まで単調増加
+    for i in range(1, peak_idx + 1):
+        assert concentrations[i] >= concentrations[i - 1] - 1e-9
+    # 頂値以降は単調減少
+    for i in range(peak_idx + 1, len(concentrations)):
+        assert concentrations[i] <= concentrations[i - 1] + 1e-9
 
 
 def test_predict_decay_curve_empty_when_zero_dose():

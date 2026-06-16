@@ -155,10 +155,13 @@ class Settings(BaseSettings):
     # 摂取カロリー目標は TDEE (= 当日の active + basal energy 合計、Apple Health から推定) を基準にする
 
     # --- カフェイン薬物動態パラメータ ---
-    # 1コンパートメント、即時吸収・1次消失モデルで「就寝時血中濃度」を逆算する。
+    # 1コンパートメント・1次吸収/1次消失 (Bateman) モデルで「就寝時血中濃度」を逆算する。
     # 個人差: CYP1A2 遺伝多型・喫煙 (誘導↑) ・経口避妊薬 (阻害↓) で T_half は 2-12h と幅がある。
     # 既定値は健常成人の平均 (Statland 1980, Carrillo 2000)。.env で個別調整可。
     caffeine_half_life_h: float = 5.0
+    # 吸収半減期。カフェインは経口で速やかに吸収され ka≈4.9/h (吸収 T_half≈8.5min≈0.14h)、
+    # tmax≈45min (Blanchard 1983, Newton 1981)。これで立ち上がり相を正しくモデル化する。
+    caffeine_absorption_half_life_h: float = 0.14
     caffeine_vd_l_per_kg: float = 0.5
     # 就寝時の血中濃度がこれを下回れば睡眠への影響を最小化できる (Roehrs & Roth 2008)
     caffeine_bedtime_threshold_mg_per_l: float = 0.5

@@ -550,7 +550,10 @@ def _build_caffeine(
     now_jst = datetime.now(tz)
 
     # 本日の摂取記録からの現時点残量
-    existing_residual = current_residual_mg(now_jst, settings.caffeine_half_life_h)
+    existing_residual = current_residual_mg(
+        now_jst, settings.caffeine_half_life_h,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
+    )
 
     rec = recommend_caffeine(
         now=now_jst,
@@ -563,6 +566,7 @@ def _build_caffeine(
         target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
         instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
         cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
     # max_safe を existing_residual で減算 (recommend_caffeine 経由で渡せないので
     # 上書きする形)
@@ -575,6 +579,7 @@ def _build_caffeine(
         half_life_h=settings.caffeine_half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         existing_residual_mg=existing_residual,
+        absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
     # 既存残量を考慮した再計算が必要なケース (adjusted_max_safe < 現推奨 mg)
     recommended_mg = rec.recommended_mg
@@ -583,7 +588,7 @@ def _build_caffeine(
         if adjusted_max_safe < settings.caffeine_min_cognitive_mg:
             recommended_mg = None
         else:
-            recommended_mg = round(max(settings.caffeine_min_cognitive_mg, adjusted_max_safe), 0)
+            recommended_mg = round(max(settings.caffeine_min_cognitive_mg, adjusted_max_safe), 1)
 
     # 就寝時刻 datetime (今夜)
     bh, _, bm = tonight_plan["bedtime"].partition(":")
@@ -601,20 +606,21 @@ def _build_caffeine(
             body_weight_kg=weight_kg,
             half_life_h=settings.caffeine_half_life_h,
             vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+            absorption_half_life_h=settings.caffeine_absorption_half_life_h,
         )
 
     # 既存残量が反映された coffee_g とサマリ
     instant_coffee_g = (
-        round(recommended_mg / settings.instant_coffee_mg_per_g, 1)
+        round(recommended_mg / settings.instant_coffee_mg_per_g, 2)
         if recommended_mg
         else None
     )
     final_reason = rec.reason
     if existing_residual > 0 and recommended_mg != rec.recommended_mg:
         final_reason = (
-            f"既に体内に {existing_residual:.0f}mg 残存。"
+            f"既に体内に {existing_residual:.1f}mg 残存。"
             + (
-                f"安全上限を更新 → {round(adjusted_max_safe):.0f}mg"
+                f"安全上限を更新 → {adjusted_max_safe:.1f}mg"
                 if recommended_mg
                 else "追加摂取は非推奨"
             )
@@ -624,7 +630,7 @@ def _build_caffeine(
         "available": True,
         "recommended_mg": recommended_mg,
         "instant_coffee_g": instant_coffee_g,
-        "max_safe_mg": round(adjusted_max_safe, 0),
+        "max_safe_mg": round(adjusted_max_safe, 1),
         "min_cognitive_mg": rec.min_cognitive_mg,
         "hours_until_bedtime": round(rec.hours_until_bedtime, 2),
         "bedtime": tonight_plan["bedtime"],
@@ -638,8 +644,9 @@ def _build_caffeine(
         "reason": final_reason,
         "decay_curve": decay_curve,
         "disclaimer": (
-            "1コンパートメント薬物動態モデルによる推定。"
-            "個人差 (CYP1A2 遺伝多型・喫煙・経口避妊薬) で半減期は 2-12h と幅があります。"
+            "1コンパートメント・1次吸収/消失 (Bateman) モデルによる推定。算術的には 0.1mg "
+            "精度ですが、律速は消失半減期で、個人差 (CYP1A2 遺伝多型・喫煙↓・経口避妊薬↑) "
+            "により 2-12h と幅があり、これが mg 換算の不確実性を支配します。"
         ),
     }
 

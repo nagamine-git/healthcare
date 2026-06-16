@@ -211,15 +211,27 @@ async def caffeine_presets() -> dict[str, Any]:
     return out
 
 
-def current_residual_mg(now_jst: datetime, half_life_h: float) -> float:
-    """摂取記録から現時点での体内残量を計算する。
+def current_residual_mg(
+    now_jst: datetime,
+    half_life_h: float,
+    *,
+    absorption_half_life_h: float | None = None,
+) -> float:
+    """摂取記録から現時点での体内残量を計算する (1次吸収/消失 Bateman)。
 
-    過去 18 時間 (≒半減期5hで3.5回 = 残量 ~9%) の摂取を対象に半減期で減衰合計。
+    過去 18 時間 (≒半減期5hで3.5回 = 残量 ~9%) の摂取を対象に減衰合計。
     「今日のJST 0時以降」だと深夜に飲んだカフェインが日付をまたいだ瞬間に
     残量から消えてしまうため、ローリング窓で見る。
-    """
-    from app.scoring.caffeine import half_life_decay
 
+    ここで返すのは「就寝時の安全計算に効く確定済み (committed) 残量」。摂取直後は
+    まだ血漿に移行していない (Bateman では ~0) が、就寝までには必ず吸収され寄与する
+    ため、未吸収ぶんも満額カウントする (= 安全側)。これは終末相の
+    ``absorption_factor × half_life_decay`` に等しく、吸収済みの過去用量では
+    Bateman の体内量と一致する。
+    """
+    from app.scoring.caffeine import absorption_factor, half_life_decay
+
+    factor = absorption_factor(half_life_h, absorption_half_life_h)
     now_utc = now_jst.astimezone(UTC)
     start_utc = (now_utc - timedelta(hours=18)).replace(tzinfo=None)
 
@@ -235,7 +247,7 @@ def current_residual_mg(now_jst: datetime, half_life_h: float) -> float:
             if elapsed_h < 0:
                 continue
             total += half_life_decay(r.mg, elapsed_h, half_life_h=half_life_h)
-    return total
+    return total * factor
 
 
 def _to_out(row: CaffeineIntake, tz_name: str) -> CaffeineIntakeOut:

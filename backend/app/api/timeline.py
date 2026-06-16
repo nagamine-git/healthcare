@@ -199,11 +199,12 @@ def _caffeine_curve(origin_utc, start_utc, end_utc, off):
     閾値 = 就寝時に血中濃度 0.5mg/L を超えない残量 (mg) = threshold * Vd * 体重。
     """
     from app.config import get_settings
-    from app.scoring.caffeine import half_life_decay
+    from app.scoring.caffeine import amount_in_body
     from app.scoring.profile import resolve_profile
 
     s = get_settings()
     half_life = s.caffeine_half_life_h
+    absorption = s.caffeine_absorption_half_life_h
     lookback = (start_utc - timedelta(hours=18))
     with session_scope() as session:
         intakes = session.execute(
@@ -221,7 +222,10 @@ def _caffeine_curve(origin_utc, start_utc, end_utc, off):
         for ts, mg in intakes:
             elapsed_h = (cur - ts).total_seconds() / 3600
             if elapsed_h >= 0:
-                total += half_life_decay(float(mg), elapsed_h, half_life_h=half_life)
+                total += amount_in_body(
+                    float(mg), elapsed_h,
+                    half_life_h=half_life, absorption_half_life_h=absorption,
+                )
         points.append({"h": off(cur), "mg": round(total, 1)})
         cur += step
 

@@ -7,12 +7,19 @@
 の主要因なので別管理が医学的に正しい。`MEDICATION_CAFFEINE_SOURCES` で分類する。
 
 # モデル
-1-コンパートメント、即時吸収・1次消失 (典型的な急性カフェイン薬物動態の近似)。
+1-コンパートメント・**1次吸収/1次消失** (Bateman 関数)。即時吸収近似より正確で、
+摂取直後の立ち上がり相 (tmax≈45min) を正しく表現し、終末相の系統バイアスを除去する。
 
-    C(t) = (D / Vd) * exp(-k * t)
-    k     = ln(2) / T_half
+    C(t) = (D * ka) / (Vd * (ka - ke)) * (exp(-ke*t) - exp(-ka*t))
+    ke    = ln(2) / T_half_elim   (消失)
+    ka    = ln(2) / T_half_abs    (吸収, ≈4.9/h → T_half_abs≈0.14h)
     Vd    ≈ 0.5 L/kg  (Tang-Liu 1983, Kaplan 1997)
-    T_half = 5h (健常成人の平均、個人差 2-12h、CYP1A2 遺伝多型・喫煙・経口避妊薬で変動)
+    T_half_elim = 5h (健常成人の平均、個人差 2-12h、CYP1A2 遺伝多型・喫煙・経口避妊薬で変動)
+
+即時吸収近似 (C=D/Vd·exp(-ke*t)) は終末相で実濃度を ka/(ka-ke) ぶん (既定で約3%)
+過小評価し、安全側に倒れない系統バイアスを生む。Bateman ならこれを除去できる。
+就寝は常にカットオフ (≥6h) 先なので、その時点では吸収相は完了し
+C ≈ D·[ka/(ka-ke)]·exp(-ke*t)/Vd の終末形に収束する。
 
 # 安全閾値
 就寝時血中カフェイン濃度が **0.5 mg/L 未満** になるように設計。
@@ -45,11 +52,62 @@ def is_dietary_caffeine(source: str | None) -> bool:
     return source not in MEDICATION_CAFFEINE_SOURCES
 
 
-def half_life_decay(dose_mg: float, hours_elapsed: float, *, half_life_h: float = 5.0) -> float:
-    """摂取量 dose_mg が hours_elapsed 後に体内に残る量 (mg)。"""
+# 既定の吸収半減期 (h)。ka≈4.9/h, tmax≈45min (Blanchard 1983)。config から上書き可。
+DEFAULT_ABSORPTION_HALF_LIFE_H = 0.14
+
+
+def _rate(half_life_h: float) -> float:
+    return math.log(2) / half_life_h
+
+
+def absorption_factor(half_life_h: float, absorption_half_life_h: float | None) -> float:
+    """終末相における吸収による増幅係数 ka/(ka-ke)。
+
+    1次吸収では、吸収が完了した後 (t ≫ 1/ka) の濃度は瞬時吸収近似の
+    ``ka/(ka-ke)`` 倍になる。既定パラメータ (T_half_elim=5h, T_half_abs=0.14h) では
+    約 1.03。即時吸収近似が終末相で濃度を過小評価する分の補正。
+    """
+    if not absorption_half_life_h or absorption_half_life_h <= 0:
+        return 1.0
+    ke = _rate(half_life_h)
+    ka = _rate(absorption_half_life_h)
+    if abs(ka - ke) < 1e-9:
+        return 1.0
+    return ka / (ka - ke)
+
+
+def amount_in_body(
+    dose_mg: float,
+    hours_elapsed: float,
+    *,
+    half_life_h: float = 5.0,
+    absorption_half_life_h: float | None = DEFAULT_ABSORPTION_HALF_LIFE_H,
+) -> float:
+    """摂取量 dose_mg が hours_elapsed 後に中央コンパートメントに在る量 (mg)。
+
+    1次吸収/1次消失 (Bateman)。``absorption_half_life_h`` が None/0 なら即時吸収
+    (純消失 D·exp(-ke*t)) に縮退する。
+    """
     if dose_mg <= 0 or hours_elapsed < 0:
         return 0.0
-    return dose_mg * math.exp(-math.log(2) * hours_elapsed / half_life_h)
+    ke = _rate(half_life_h)
+    if not absorption_half_life_h or absorption_half_life_h <= 0:
+        return dose_mg * math.exp(-ke * hours_elapsed)
+    ka = _rate(absorption_half_life_h)
+    if abs(ka - ke) < 1e-9:  # flip-flop 退化ケース (既定では発生しない)
+        return dose_mg * ke * hours_elapsed * math.exp(-ke * hours_elapsed)
+    factor = ka / (ka - ke)
+    return dose_mg * factor * (math.exp(-ke * hours_elapsed) - math.exp(-ka * hours_elapsed))
+
+
+def half_life_decay(dose_mg: float, hours_elapsed: float, *, half_life_h: float = 5.0) -> float:
+    """純消失 (吸収済みとみなした) の残量 (mg)。後方互換の素朴近似。
+
+    立ち上がり相を含めた正確な体内量は `amount_in_body` を使うこと。
+    """
+    if dose_mg <= 0 or hours_elapsed < 0:
+        return 0.0
+    return dose_mg * math.exp(-_rate(half_life_h) * hours_elapsed)
 
 
 def blood_concentration(
@@ -59,12 +117,16 @@ def blood_concentration(
     body_weight_kg: float,
     half_life_h: float = 5.0,
     vd_l_per_kg: float = 0.5,
+    absorption_half_life_h: float | None = DEFAULT_ABSORPTION_HALF_LIFE_H,
 ) -> float:
-    """t 時間後の推定血中カフェイン濃度 (mg/L)。"""
+    """t 時間後の推定血中カフェイン濃度 (mg/L)。Bateman モデル。"""
     if body_weight_kg <= 0:
         return 0.0
-    remaining = half_life_decay(dose_mg, hours_elapsed, half_life_h=half_life_h)
-    return remaining / (vd_l_per_kg * body_weight_kg)
+    amt = amount_in_body(
+        dose_mg, hours_elapsed,
+        half_life_h=half_life_h, absorption_half_life_h=absorption_half_life_h,
+    )
+    return amt / (vd_l_per_kg * body_weight_kg)
 
 
 def max_dose_for_bedtime(
@@ -75,22 +137,28 @@ def max_dose_for_bedtime(
     half_life_h: float = 5.0,
     vd_l_per_kg: float = 0.5,
     existing_residual_mg: float = 0.0,
+    absorption_half_life_h: float | None = DEFAULT_ABSORPTION_HALF_LIFE_H,
 ) -> float:
     """就寝時に血中濃度 ≤ bedtime_threshold_mg_per_l を満たす最大新規摂取量 (mg)。
 
     `existing_residual_mg` は今までに摂取済みカフェインのうち「今この瞬間」体内に
-    残っている量。これも同じ消失曲線で就寝時に減衰する想定。
+    残っている量 (= 吸収済みの中央コンパートメント量)。就寝時には純消失で減衰する。
+
+    就寝は常にカットオフ (≥6h) 先なので、今飲む新規用量 D は就寝時には吸収が完了し、
+    その濃度寄与は終末形 ``D·factor·exp(-ke*t)/(Vd·BW)`` (factor=ka/(ka-ke)) になる。
+    既存残量 E は既に吸収済みなので ``E·exp(-ke*t)/(Vd·BW)``。両者の和を閾値以下にする:
+
+        (D·factor + E)·exp(-ke*t) / (Vd·BW) ≤ threshold
+        ⟹  D ≤ (threshold·Vd·BW·exp(+ke*t) − E) / factor
     """
     if hours_until_bedtime <= 0:
         return 0.0
 
-    decay = math.exp(-math.log(2) * hours_until_bedtime / half_life_h)
-    # 就寝時残量 (mg) = (D_new + existing) * decay
-    # これを Vd * BW で割って bedtime_threshold 以下にしたい:
-    #   (D_new + existing) * decay / (Vd * BW) ≤ threshold
-    #   D_new ≤ threshold * Vd * BW / decay - existing
+    ke = _rate(half_life_h)
+    decay = math.exp(-ke * hours_until_bedtime)
+    factor = absorption_factor(half_life_h, absorption_half_life_h)
     allowable_total_now = bedtime_threshold_mg_per_l * vd_l_per_kg * body_weight_kg / decay
-    return max(0.0, allowable_total_now - existing_residual_mg)
+    return max(0.0, (allowable_total_now - existing_residual_mg) / factor)
 
 
 @dataclass(frozen=True)
@@ -119,6 +187,7 @@ def recommend_caffeine(
     instant_coffee_mg_per_g: float = 60.0,
     existing_residual_mg: float = 0.0,
     cutoff_hours_before_bed: float = 6.0,
+    absorption_half_life_h: float | None = DEFAULT_ABSORPTION_HALF_LIFE_H,
 ) -> CaffeineRecommendation:
     """現時点でのカフェイン摂取の最適提案を返す。
 
@@ -143,6 +212,7 @@ def recommend_caffeine(
         half_life_h=half_life_h,
         vd_l_per_kg=vd_l_per_kg,
         existing_residual_mg=existing_residual_mg,
+        absorption_half_life_h=absorption_half_life_h,
     )
 
     target = target_dose_mg_per_kg * body_weight_kg
@@ -150,25 +220,27 @@ def recommend_caffeine(
     # 推奨ロジック
     if hours_until_bed < cutoff_hours_before_bed:
         # 就寝が近い → カフェインは推奨しない (代替: テアニン / 短ナップ / 軽運動)
-        residual_if_target = half_life_decay(
-            target, hours_until_bed, half_life_h=half_life_h
+        residual_if_target = amount_in_body(
+            target, hours_until_bed,
+            half_life_h=half_life_h, absorption_half_life_h=absorption_half_life_h,
         )
         conc = blood_concentration(
             target, hours_until_bed, body_weight_kg=body_weight_kg,
             half_life_h=half_life_h, vd_l_per_kg=vd_l_per_kg,
+            absorption_half_life_h=absorption_half_life_h,
         )
         return CaffeineRecommendation(
             recommended_mg=None,
             instant_coffee_g=None,
-            max_safe_mg=max_safe,
+            max_safe_mg=round(max_safe, 1),
             min_cognitive_mg=min_cognitive_mg,
             hours_until_bedtime=hours_until_bed,
-            bedtime_residual_if_consumed_mg=residual_if_target,
-            blood_concentration_at_bedtime_mg_per_l=conc,
+            bedtime_residual_if_consumed_mg=round(residual_if_target, 1),
+            blood_concentration_at_bedtime_mg_per_l=round(conc, 3),
             half_life_h=half_life_h,
             reason=(
                 f"就寝まで {hours_until_bed:.1f}h ＜ カットオフ {cutoff_hours_before_bed:.0f}h。"
-                f"今飲むと就寝時血中濃度 ~{conc:.2f} mg/L で睡眠分断リスク"
+                f"今飲むと就寝時血中濃度 ~{conc:.3f} mg/L で睡眠分断リスク"
             ),
         )
 
@@ -177,14 +249,14 @@ def recommend_caffeine(
         return CaffeineRecommendation(
             recommended_mg=None,
             instant_coffee_g=None,
-            max_safe_mg=max_safe,
+            max_safe_mg=round(max_safe, 1),
             min_cognitive_mg=min_cognitive_mg,
             hours_until_bedtime=hours_until_bed,
             bedtime_residual_if_consumed_mg=0.0,
             blood_concentration_at_bedtime_mg_per_l=0.0,
             half_life_h=half_life_h,
             reason=(
-                f"就寝時の安全上限 {max_safe:.0f}mg ＜ 認知効果の最低有効量 {min_cognitive_mg:.0f}mg。"
+                f"就寝時の安全上限 {max_safe:.1f}mg ＜ 認知効果の最低有効量 {min_cognitive_mg:.0f}mg。"
                 "今からは飲まずに過ごす方が ROI 高い"
             ),
         )
@@ -194,20 +266,24 @@ def recommend_caffeine(
     recommended = min(recommended, max_safe)  # 念のため上限再適用
 
     coffee_g = recommended / instant_coffee_mg_per_g
-    residual = half_life_decay(recommended, hours_until_bed, half_life_h=half_life_h)
+    residual = amount_in_body(
+        recommended, hours_until_bed,
+        half_life_h=half_life_h, absorption_half_life_h=absorption_half_life_h,
+    )
     conc = blood_concentration(
         recommended, hours_until_bed, body_weight_kg=body_weight_kg,
         half_life_h=half_life_h, vd_l_per_kg=vd_l_per_kg,
+        absorption_half_life_h=absorption_half_life_h,
     )
 
     return CaffeineRecommendation(
-        recommended_mg=round(recommended, 0),
-        instant_coffee_g=round(coffee_g, 1),
-        max_safe_mg=round(max_safe, 0),
+        recommended_mg=round(recommended, 1),
+        instant_coffee_g=round(coffee_g, 2),
+        max_safe_mg=round(max_safe, 1),
         min_cognitive_mg=min_cognitive_mg,
         hours_until_bedtime=hours_until_bed,
         bedtime_residual_if_consumed_mg=round(residual, 1),
-        blood_concentration_at_bedtime_mg_per_l=round(conc, 2),
+        blood_concentration_at_bedtime_mg_per_l=round(conc, 3),
         half_life_h=half_life_h,
         reason=_build_reason(
             recommended_mg=recommended,
@@ -229,17 +305,17 @@ def _build_reason(
 ) -> str:
     if recommended_mg >= target_mg - 1:
         return (
-            f"就寝まで {hours_until_bed:.1f}h あり、目標 {target_mg:.0f}mg (1mg/kg) を "
+            f"就寝まで {hours_until_bed:.1f}h あり、目標 {target_mg:.1f}mg (1mg/kg) を "
             "睡眠リスク内で摂取可能"
         )
     if recommended_mg <= min_cog + 1:
         return (
-            f"就寝まで {hours_until_bed:.1f}h なので、睡眠を守る上限 {max_safe_mg:.0f}mg まで。"
+            f"就寝まで {hours_until_bed:.1f}h なので、睡眠を守る上限 {max_safe_mg:.1f}mg まで。"
             f"認知効果の最低有効量 {min_cog:.0f}mg で抑える"
         )
     return (
-        f"就寝まで {hours_until_bed:.1f}h で安全上限 {max_safe_mg:.0f}mg。"
-        f"目標 {target_mg:.0f}mg から削って提案"
+        f"就寝まで {hours_until_bed:.1f}h で安全上限 {max_safe_mg:.1f}mg。"
+        f"目標 {target_mg:.1f}mg から削って提案"
     )
 
 
@@ -252,8 +328,13 @@ def predict_decay_curve(
     half_life_h: float = 5.0,
     vd_l_per_kg: float = 0.5,
     step_min: int = 30,
+    absorption_half_life_h: float | None = DEFAULT_ABSORPTION_HALF_LIFE_H,
 ) -> list[dict[str, float | str]]:
-    """摂取時点から bedtime までの血中濃度カーブ (30 分刻み)。"""
+    """摂取時点から bedtime までの血中濃度カーブ (30 分刻み)。
+
+    1次吸収モデルなので tmax (≈45min) までは立ち上がり、その後減衰する
+    (即時吸収近似のような t=0 頂値ではない)。
+    """
     if dose_mg <= 0 or bedtime <= intake_time:
         return []
     points: list[dict[str, float | str]] = []
@@ -265,8 +346,12 @@ def predict_decay_curve(
             body_weight_kg=body_weight_kg,
             half_life_h=half_life_h,
             vd_l_per_kg=vd_l_per_kg,
+            absorption_half_life_h=absorption_half_life_h,
         )
-        residual = half_life_decay(dose_mg, h, half_life_h=half_life_h)
+        residual = amount_in_body(
+            dose_mg, h,
+            half_life_h=half_life_h, absorption_half_life_h=absorption_half_life_h,
+        )
         points.append(
             {
                 "time": cur.strftime("%H:%M"),
