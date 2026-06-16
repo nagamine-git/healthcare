@@ -428,21 +428,37 @@ export type SettingsDto = {
   protein_g_per_kg: number;
   water_ml_per_kg: number;
   source: "db" | "default";
+  /** 生の上書き値。null = ユーザー未設定 (= 自動: 派生/デフォルトを使用)。 */
+  overrides: {
+    age: number | null;
+    resting_hr: number | null;
+    max_hr: number | null;
+    caffeine_smoker: boolean | null;
+    caffeine_oral_contraceptives: boolean | null;
+    caffeine_pregnant: boolean | null;
+    caffeine_sensitivity: "high" | "normal" | "low" | null;
+    caffeine_half_life_override_h: number | null;
+    wake_time: string | null;
+    sleep_need_min: number | null;
+    chronotype: "morning" | "intermediate" | "evening" | null;
+    protein_g_per_kg: number | null;
+    water_ml_per_kg: number | null;
+  };
 };
 export type SettingsUpdate = Partial<{
-  age: number;
-  resting_hr: number;
+  age: number | null;
+  resting_hr: number | null;
   max_hr: number | null;
-  caffeine_smoker: boolean;
-  caffeine_oral_contraceptives: boolean;
-  caffeine_pregnant: boolean;
-  caffeine_sensitivity: "high" | "normal" | "low";
+  caffeine_smoker: boolean | null;
+  caffeine_oral_contraceptives: boolean | null;
+  caffeine_pregnant: boolean | null;
+  caffeine_sensitivity: "high" | "normal" | "low" | null;
   caffeine_half_life_override_h: number | null;
-  wake_time: string;
-  sleep_need_min: number;
-  chronotype: "morning" | "intermediate" | "evening";
-  protein_g_per_kg: number;
-  water_ml_per_kg: number;
+  wake_time: string | null;
+  sleep_need_min: number | null;
+  chronotype: "morning" | "intermediate" | "evening" | null;
+  protein_g_per_kg: number | null;
+  water_ml_per_kg: number | null;
 }>;
 export type ProfileUpdate = {
   height_cm?: number;

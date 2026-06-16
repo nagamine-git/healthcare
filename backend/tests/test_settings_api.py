@@ -28,6 +28,20 @@ def test_get_settings_returns_defaults(app_client):
     assert body["caffeine_half_life_h"] == pytest.approx(5.0)
     assert body["caffeine_target_mg_per_kg"] == 1.0
     assert body["max_hr"] == 187  # 208 - 0.7*30 (既定 age=30)
+    # 全フィールドが未設定 = 自動 (overrides は全 None)
+    assert all(v is None for v in body["overrides"].values())
+
+
+def test_overrides_reflect_set_then_clear(app_client):
+    app_client.put("/api/settings", json={"age": 40})
+    body = app_client.get("/api/settings").json()
+    assert body["overrides"]["age"] == 40  # 明示設定
+    assert body["age"] == 40
+    # クリア (null) で自動に戻る
+    app_client.put("/api/settings", json={"age": None})
+    body2 = app_client.get("/api/settings").json()
+    assert body2["overrides"]["age"] is None
+    assert body2["age"] == 30  # config デフォルト
 
 
 def test_put_smoker_shortens_half_life(app_client):

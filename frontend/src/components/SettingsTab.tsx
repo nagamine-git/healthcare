@@ -15,8 +15,11 @@ import { PhysiqueTargetSection } from "./PhysiqueTargetSection";
 
 /**
  * 個人差ファクター設定タブ。計算に直結する因子だけをグループ別の開閉式
- * セクションに集約する。各因子に「効く計算」のヒントを添え、派生値
- * (有効半減期・最大心拍・目標 mg/kg) はライブ表示する。
+ * セクションに集約する。
+ *
+ * 「わからない / 自動で考えてほしい」項目は、自動計算値 (派生/デフォルト) を
+ * グレーで表示する (= 自動モード)。明示的に値を入れると通常色になり、× で
+ * いつでも自動に戻せる。auto 判定は overrides[field] == null。
  */
 export function SettingsTab({
   current,
@@ -40,20 +43,23 @@ export function SettingsTab({
     return <div className="rounded-2xl bg-slate-900/40 p-4 text-xs text-slate-500">読込中…</div>;
   }
   const d = s.data;
+  const ov = d.overrides;
   const set = (body: SettingsUpdate) => save.mutate(body);
+  const isAuto = (f: keyof SettingsDto["overrides"]) => ov[f] == null;
 
   return (
     <div className="space-y-3">
       <p className="px-1 text-[11px] leading-relaxed text-slate-500">
-        ここで設定した値は採点・カフェイン提案・睡眠計画・栄養目標などの計算に直接反映されます。
-        空欄/未設定の項目は既定値が使われます。
+        計算に効く体質・生活パラメータ。<span className="text-slate-400">グレーの値は自動</span>
+        （派生・デフォルト）で、迷ったらそのままでOK。値を入れると個人設定になり、× で自動に戻せます。
       </p>
 
       {/* 身体・基礎 */}
       <Group icon={<User size={14} className="text-emerald-300" />} title="身体・基礎"
         summary={`${d.age}歳 / ${d.height_cm}cm`}>
-        <NumberField label="年齢" value={d.age} unit="歳" min={10} max={100}
-          hint="BMR・最大心拍の算出に使用" onSave={(v) => set({ age: v })} />
+        <NumberField label="年齢" value={d.age} auto={isAuto("age")} unit="歳" min={10} max={100}
+          hint="BMR・最大心拍の算出に使用"
+          onSave={(v) => set({ age: v })} onClear={() => set({ age: null })} />
         <div className="pt-1 text-[11px] text-slate-500">
           身長・性別・目標体型は下のセクションで設定します。
         </div>
@@ -63,41 +69,46 @@ export function SettingsTab({
       {/* 心拍ゾーン */}
       <Group icon={<HeartPulse size={14} className="text-rose-300" />} title="心拍ゾーン"
         summary={`安静${d.resting_hr} / 最大${d.max_hr}`}>
-        <NumberField label="安静時心拍" value={d.resting_hr} unit="bpm" min={30} max={120}
-          hint="Karvonen 心拍ゾーンの下限" onSave={(v) => set({ resting_hr: v })} />
-        <NumberField label="最大心拍 (実測)" value={d.max_hr}
-          unit="bpm" min={120} max={220} nullable
-          hint={`実測値を入れると上書き。× で式 (208−0.7×年齢=${Math.round(208 - 0.7 * d.age)}) に戻す`}
+        <NumberField label="安静時心拍" value={d.resting_hr} auto={isAuto("resting_hr")} unit="bpm"
+          min={30} max={120} hint="Karvonen 心拍ゾーンの下限"
+          onSave={(v) => set({ resting_hr: v })} onClear={() => set({ resting_hr: null })} />
+        <NumberField label="最大心拍" value={d.max_hr} auto={isAuto("max_hr")} unit="bpm"
+          min={120} max={220}
+          hint={`自動は Tanaka 式 (208−0.7×年齢=${Math.round(208 - 0.7 * d.age)})。実測があれば上書き`}
           onSave={(v) => set({ max_hr: v })} onClear={() => set({ max_hr: null })} />
       </Group>
 
       {/* カフェイン PK */}
       <Group icon={<Coffee size={14} className="text-amber-300" />} title="カフェイン体質"
         summary={`半減期 ${d.caffeine_half_life_h.toFixed(1)}h`}>
-        <Toggle label="喫煙している" checked={d.caffeine_smoker}
+        <Toggle label="喫煙している" checked={d.caffeine_smoker} auto={isAuto("caffeine_smoker")}
           hint="CYP1A2 誘導で半減期が短くなる (×0.6)"
-          onChange={(v) => set({ caffeine_smoker: v })} />
+          onChange={(v) => set({ caffeine_smoker: v })} onClear={() => set({ caffeine_smoker: null })} />
         {d.sex === "female" && (
           <>
             <Toggle label="経口避妊薬を服用" checked={d.caffeine_oral_contraceptives}
-              hint="阻害で半減期が延びる (×1.8)"
-              onChange={(v) => set({ caffeine_oral_contraceptives: v })} />
-            <Toggle label="妊娠中" checked={d.caffeine_pregnant}
+              auto={isAuto("caffeine_oral_contraceptives")} hint="阻害で半減期が延びる (×1.8)"
+              onChange={(v) => set({ caffeine_oral_contraceptives: v })}
+              onClear={() => set({ caffeine_oral_contraceptives: null })} />
+            <Toggle label="妊娠中" checked={d.caffeine_pregnant} auto={isAuto("caffeine_pregnant")}
               hint="後期は強い阻害で半減期が延びる (×2.6)"
-              onChange={(v) => set({ caffeine_pregnant: v })} />
+              onChange={(v) => set({ caffeine_pregnant: v })}
+              onClear={() => set({ caffeine_pregnant: null })} />
           </>
         )}
-        <Segmented label="感受性" value={d.caffeine_sensitivity}
+        <Segmented label="感受性" value={d.caffeine_sensitivity} auto={isAuto("caffeine_sensitivity")}
           hint="効きやすさ → 目標摂取量 mg/kg を調整"
           options={[
             { value: "high", label: "高い" },
             { value: "normal", label: "普通" },
             { value: "low", label: "低い" },
           ]}
-          onChange={(v) => set({ caffeine_sensitivity: v as SettingsDto["caffeine_sensitivity"] })} />
-        <NumberField label="半減期を直接指定 (上級)" value={d.caffeine_half_life_override_h ?? null}
-          unit="h" min={2} max={12} step={0.1} nullable
-          hint="実測した人向け。指定すると上のトグルより優先 (2–12h)"
+          onChange={(v) => set({ caffeine_sensitivity: v as SettingsDto["caffeine_sensitivity"] })}
+          onClear={() => set({ caffeine_sensitivity: null })} />
+        <NumberField label="半減期を直接指定 (上級)"
+          value={ov.caffeine_half_life_override_h ?? d.caffeine_half_life_h}
+          auto={isAuto("caffeine_half_life_override_h")} unit="h" min={2} max={12} step={0.1}
+          hint="自動は喫煙等の因子から算出。実測した人は直接指定 (2–12h、トグルより優先)"
           onSave={(v) => set({ caffeine_half_life_override_h: v })}
           onClear={() => set({ caffeine_half_life_override_h: null })} />
         <div className="grid grid-cols-2 gap-2 pt-1">
@@ -109,28 +120,33 @@ export function SettingsTab({
       {/* 睡眠 */}
       <Group icon={<Moon size={14} className="text-indigo-300" />} title="睡眠"
         summary={`起床 ${d.wake_time} / ${(d.sleep_need_min / 60).toFixed(1)}h`}>
-        <TimeField label="起床時刻" value={d.wake_time}
-          hint="就寝逆算・サーカディアンの基準" onSave={(v) => set({ wake_time: v })} />
-        <NumberField label="必要睡眠量" value={d.sleep_need_min} unit="分" min={240} max={660} step={15}
+        <TimeField label="起床時刻" value={d.wake_time} auto={isAuto("wake_time")}
+          hint="就寝逆算・サーカディアンの基準"
+          onSave={(v) => set({ wake_time: v })} onClear={() => set({ wake_time: null })} />
+        <NumberField label="必要睡眠量" value={d.sleep_need_min} auto={isAuto("sleep_need_min")}
+          unit="分" min={240} max={660} step={15}
           hint={`睡眠不足判定の基準 (= ${(d.sleep_need_min / 60).toFixed(1)}h)`}
-          onSave={(v) => set({ sleep_need_min: v })} />
-        <Segmented label="クロノタイプ" value={d.chronotype}
+          onSave={(v) => set({ sleep_need_min: v })} onClear={() => set({ sleep_need_min: null })} />
+        <Segmented label="クロノタイプ" value={d.chronotype} auto={isAuto("chronotype")}
           hint="睡眠/光曝露アドバイスの個人化 (LLM)"
           options={[
             { value: "morning", label: "朝型" },
             { value: "intermediate", label: "中間" },
             { value: "evening", label: "夜型" },
           ]}
-          onChange={(v) => set({ chronotype: v as SettingsDto["chronotype"] })} />
+          onChange={(v) => set({ chronotype: v as SettingsDto["chronotype"] })}
+          onClear={() => set({ chronotype: null })} />
       </Group>
 
       {/* 栄養 */}
       <Group icon={<Utensils size={14} className="text-lime-300" />} title="栄養目標"
         summary={`P ${d.protein_g_per_kg}g/kg · 水 ${d.water_ml_per_kg}mL/kg`}>
-        <NumberField label="タンパク質" value={d.protein_g_per_kg} unit="g/kg" min={0.5} max={3} step={0.1}
-          hint="体重あたりのタンパク質目標" onSave={(v) => set({ protein_g_per_kg: v })} />
-        <NumberField label="水分" value={d.water_ml_per_kg} unit="mL/kg" min={20} max={60} step={1}
-          hint="体重あたりの水分目標・ペース予測" onSave={(v) => set({ water_ml_per_kg: v })} />
+        <NumberField label="タンパク質" value={d.protein_g_per_kg} auto={isAuto("protein_g_per_kg")}
+          unit="g/kg" min={0.5} max={3} step={0.1} hint="体重あたりのタンパク質目標"
+          onSave={(v) => set({ protein_g_per_kg: v })} onClear={() => set({ protein_g_per_kg: null })} />
+        <NumberField label="水分" value={d.water_ml_per_kg} auto={isAuto("water_ml_per_kg")}
+          unit="mL/kg" min={20} max={60} step={1} hint="体重あたりの水分目標・ペース予測"
+          onSave={(v) => set({ water_ml_per_kg: v })} onClear={() => set({ water_ml_per_kg: null })} />
       </Group>
 
       {save.isError && (
@@ -143,10 +159,7 @@ export function SettingsTab({
 // ---- 部品 ----
 
 function Group({
-  icon,
-  title,
-  summary,
-  children,
+  icon, title, summary, children,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -180,90 +193,129 @@ function FieldShell({ label, hint, children }: { label: string; hint?: string; c
   );
 }
 
+/** 自動モードの「自動」バッジ。明示設定時はクリア (×) ボタンを出す。 */
+function AutoTrailing({ auto, onClear }: { auto: boolean; onClear: () => void }) {
+  if (auto) {
+    return (
+      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+        自動
+      </span>
+    );
+  }
+  return (
+    <button type="button" onClick={onClear} title="自動に戻す"
+      className="rounded px-1 text-xs text-slate-500 hover:text-rose-400">
+      ×
+    </button>
+  );
+}
+
 function NumberField({
-  label, value, unit, min, max, step = 1, hint, nullable, onSave, onClear,
+  label, value, auto, unit, min, max, step = 1, hint, onSave, onClear,
 }: {
   label: string;
-  value: number | null;
+  value: number;
+  auto: boolean;
   unit?: string;
   min?: number;
   max?: number;
   step?: number;
   hint?: string;
-  nullable?: boolean;
   onSave: (v: number) => void;
-  onClear?: () => void;
+  onClear: () => void;
 }) {
-  const [str, setStr] = useState(value == null ? "" : String(value));
-  useEffect(() => setStr(value == null ? "" : String(value)), [value]);
+  const [str, setStr] = useState(String(value));
+  useEffect(() => setStr(String(value)), [value]);
   const commit = () => {
     const v = parseFloat(str);
     if (Number.isFinite(v) && v !== value) onSave(v);
-    else if (str === "" && value != null && nullable && onClear) onClear();
+    else setStr(String(value));
   };
   return (
     <FieldShell label={label} hint={hint}>
       <input
         type="number" inputMode="decimal" min={min} max={max} step={step}
         value={str}
-        placeholder={nullable ? "自動" : ""}
         onChange={(e) => setStr(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-right text-xs text-slate-200 tabular-nums focus:border-amber-500 focus:outline-none"
+        className={`w-20 rounded border bg-slate-900 px-2 py-1 text-right text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
+          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        }`}
       />
       {unit && <span className="w-12 text-[10px] text-slate-500">{unit}</span>}
-      {nullable && value != null && onClear && (
-        <button type="button" onClick={onClear} title="自動に戻す"
-          className="text-slate-500 hover:text-rose-400">×</button>
-      )}
+      <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );
 }
 
-function TimeField({ label, value, hint, onSave }: {
-  label: string; value: string; hint?: string; onSave: (v: string) => void;
+function TimeField({ label, value, auto, hint, onSave, onClear }: {
+  label: string; value: string; auto: boolean; hint?: string;
+  onSave: (v: string) => void; onClear: () => void;
 }) {
   return (
     <FieldShell label={label} hint={hint}>
       <input type="time" value={value}
         onChange={(e) => { if (e.target.value) onSave(e.target.value); }}
-        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 tabular-nums focus:border-amber-500 focus:outline-none"
+        className={`rounded border bg-slate-900 px-2 py-1 text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
+          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        }`}
       />
+      <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );
 }
 
-function Toggle({ label, checked, hint, onChange }: {
-  label: string; checked: boolean; hint?: string; onChange: (v: boolean) => void;
+function Toggle({ label, checked, auto, hint, onChange, onClear }: {
+  label: string; checked: boolean; auto: boolean; hint?: string;
+  onChange: (v: boolean) => void; onClear: () => void;
 }) {
+  // 自動時はオフ扱いだがミュート表示。クリックで明示 ON/OFF になる。
+  const on = checked && !auto;
   return (
     <FieldShell label={label} hint={hint}>
       <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-emerald-500/80" : "bg-slate-700"}`}>
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+        className={`relative h-5 w-9 rounded-full transition-colors ${
+          auto ? "bg-slate-800 ring-1 ring-slate-700" : on ? "bg-emerald-500/80" : "bg-slate-700"
+        }`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full transition-transform ${
+          auto ? "translate-x-0.5 bg-slate-600" : on ? "translate-x-4 bg-white" : "translate-x-0.5 bg-white"
+        }`} />
       </button>
+      <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );
 }
 
-function Segmented({ label, value, options, hint, onChange }: {
+function Segmented({ label, value, auto, options, hint, onChange, onClear }: {
   label: string;
   value: string;
+  auto: boolean;
   options: { value: string; label: string }[];
   hint?: string;
   onChange: (v: string) => void;
+  onClear: () => void;
 }) {
   return (
     <FieldShell label={label} hint={hint}>
       <div className="flex rounded-lg bg-slate-800/70 p-0.5">
-        {options.map((o) => (
-          <button key={o.value} onClick={() => onChange(o.value)}
-            className={`rounded-md px-2.5 py-1 text-xs ${value === o.value ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
-            {o.label}
-          </button>
-        ))}
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <button key={o.value} onClick={() => onChange(o.value)}
+              className={`rounded-md px-2.5 py-1 text-xs ${
+                active
+                  ? auto
+                    ? "bg-slate-700/60 italic text-slate-400"
+                    : "bg-slate-600 text-slate-100"
+                  : "text-slate-400"
+              }`}>
+              {o.label}
+            </button>
+          );
+        })}
       </div>
+      <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );
 }

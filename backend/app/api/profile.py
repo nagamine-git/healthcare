@@ -40,10 +40,29 @@ async def get_profile() -> dict[str, Any]:
 # ----- 個人差ファクター設定 (計算直結) -----
 
 
+# UI で編集可能なフィールドと対応する UserProfile の生カラム。
+# overrides[field] が None = 「自動 (config デフォルト / 派生)」、非 None = ユーザー明示。
+_EDITABLE_FIELDS = (
+    "age", "resting_hr", "max_hr",
+    "caffeine_smoker", "caffeine_oral_contraceptives", "caffeine_pregnant",
+    "caffeine_sensitivity", "caffeine_half_life_override_h",
+    "wake_time", "sleep_need_min", "chronotype",
+    "protein_g_per_kg", "water_ml_per_kg",
+)
+
+
 def _settings_dict() -> dict[str, Any]:
-    """全個人差ファクター + 派生値 + 由来を返す (設定 UI 用)。"""
+    """全個人差ファクター + 派生値 + 由来 + 生の上書き値を返す (設定 UI 用)。
+
+    ``overrides[field]`` が None なら「ユーザー未設定 = 自動」。フロントは自動の
+    フィールドを解決値 (派生/デフォルト) でグレー表示し、明示設定だけ × でクリアできる。
+    """
     p = resolve_profile()
+    with session_scope() as session:
+        row = session.get(UserProfile, 1)
+        overrides = {f: getattr(row, f, None) if row is not None else None for f in _EDITABLE_FIELDS}
     return {
+        "overrides": overrides,
         "sex": p.sex,
         "age": p.age,
         "height_cm": p.height_cm,
