@@ -85,6 +85,11 @@ def _migraine_forecast(now_jst: datetime) -> dict[str, Any] | None:
         return None
     rank = {"high": 2, "elevated": 1, "low": 0}
     peak = max(buckets, key=lambda x: rank[x["risk"]])
+    # ピークが「低」= どの 12h バケットも誘発域に届かない場合は予報を出さない。
+    # 気圧の日内変動は通常 ±2-3hPa あり、その程度の揺れで毎回警告すると狼少年になる。
+    # (個人検証済みなら mid 未満、未検証なら <5hPa が「低」)
+    if peak["risk"] == "low":
+        return None
     return {
         "confidence": conf,
         "reliability": tr.get("reliability"),

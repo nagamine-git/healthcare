@@ -35,6 +35,17 @@ def test_migraine_forecast_flags_pressure_swing(db_engine, monkeypatch):
     assert out["migraine"]["peak"]["swing_hpa"] >= 5
 
 
+def test_migraine_forecast_suppressed_when_swing_low(db_engine, monkeypatch):
+    """気圧変動が日内変動レベル (~3hPa) なら予報を出さない (狼少年回避)。"""
+    now = datetime(2026, 6, 14, 10, 0)
+    base = now - timedelta(hours=24)
+    # 1013〜1016 を緩く往復 = 24h ウィンドウの変動幅 ~3hPa → 全バケット「低」
+    series = [(base + timedelta(hours=i), 1013.0 + (i % 4)) for i in range(72)]
+    monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: series)
+    out = fc.forecast(now_jst=now)
+    assert out["migraine"] is None
+
+
 def test_energy_projection_from_bb_slope(db_engine, monkeypatch):
     monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: [])
     now = datetime(2026, 6, 14, 15, 0)
