@@ -407,6 +407,43 @@ export type UserProfileDto = {
   source: "db" | "default";
 };
 export type ProfileAssessment = { level: "ok" | "warning" | "blocked"; warnings: string[] };
+
+/** 個人差ファクター設定 (計算直結)。派生値 (caffeine_half_life_h 等) は読み取り専用。 */
+export type SettingsDto = {
+  sex: "male" | "female";
+  age: number;
+  height_cm: number;
+  resting_hr: number;
+  max_hr: number; // 派生 (override or Tanaka 式)
+  caffeine_smoker: boolean;
+  caffeine_oral_contraceptives: boolean;
+  caffeine_pregnant: boolean;
+  caffeine_sensitivity: "high" | "normal" | "low";
+  caffeine_half_life_override_h: number | null;
+  caffeine_half_life_h: number; // 派生
+  caffeine_target_mg_per_kg: number; // 派生
+  wake_time: string;
+  sleep_need_min: number;
+  chronotype: "morning" | "intermediate" | "evening";
+  protein_g_per_kg: number;
+  water_ml_per_kg: number;
+  source: "db" | "default";
+};
+export type SettingsUpdate = Partial<{
+  age: number;
+  resting_hr: number;
+  max_hr: number | null;
+  caffeine_smoker: boolean;
+  caffeine_oral_contraceptives: boolean;
+  caffeine_pregnant: boolean;
+  caffeine_sensitivity: "high" | "normal" | "low";
+  caffeine_half_life_override_h: number | null;
+  wake_time: string;
+  sleep_need_min: number;
+  chronotype: "morning" | "intermediate" | "evening";
+  protein_g_per_kg: number;
+  water_ml_per_kg: number;
+}>;
 export type ProfileUpdate = {
   height_cm?: number;
   sex?: "male" | "female";
@@ -959,6 +996,12 @@ export const api = {
   getProfile: () => request<UserProfileDto>("/api/profile"),
   putProfile: (body: ProfileUpdate) =>
     request<UserProfileDto & { assessment: ProfileAssessment }>("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  getSettings: () => request<SettingsDto>("/api/settings"),
+  putSettings: (body: SettingsUpdate) =>
+    request<SettingsDto>("/api/settings", {
       method: "PUT",
       body: JSON.stringify(body),
     }),

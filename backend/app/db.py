@@ -105,6 +105,21 @@ def _apply_lightweight_migrations() -> None:
             ("rustlings_at", "DATETIME"),
             ("explained_at", "DATETIME"),
         ],
+        "user_profile": [
+            ("age", "INTEGER"),
+            ("resting_hr", "INTEGER"),
+            ("max_hr", "INTEGER"),
+            ("caffeine_smoker", "BOOLEAN"),
+            ("caffeine_oral_contraceptives", "BOOLEAN"),
+            ("caffeine_pregnant", "BOOLEAN"),
+            ("caffeine_sensitivity", "VARCHAR(8)"),
+            ("caffeine_half_life_override_h", "REAL"),
+            ("wake_time", "VARCHAR(5)"),
+            ("sleep_need_min", "INTEGER"),
+            ("chronotype", "VARCHAR(12)"),
+            ("protein_g_per_kg", "REAL"),
+            ("water_ml_per_kg", "REAL"),
+        ],
     }
     with engine.begin() as conn:
         for table, cols in expected.items():

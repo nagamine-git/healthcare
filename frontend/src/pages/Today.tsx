@@ -19,7 +19,7 @@ import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
 import { DayPrediction } from "../components/DayPrediction";
 import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
-import { PhysiqueTargetSection } from "../components/PhysiqueTargetSection";
+import { SettingsTab } from "../components/SettingsTab";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
@@ -46,12 +46,13 @@ type Props = {
   onOpenDebug?: () => void;
 };
 
-type Tab = "today" | "goals" | "review" | "log";
+type Tab = "today" | "goals" | "review" | "log" | "settings";
 const TABS: { key: Tab; label: string }[] = [
   { key: "today", label: "今日" },
   { key: "goals", label: "目標" },
   { key: "review", label: "振り返り" },
   { key: "log", label: "記録" },
+  { key: "settings", label: "設定" },
 ];
 
 export function TodayPage({ onOpenDebug }: Props) {
@@ -321,15 +322,25 @@ export function TodayPage({ onOpenDebug }: Props) {
       </div>
 
       <div id="bodyload-section" className="space-y-3">
-        <PhysiqueTargetSection
+        <BodyLoadCard />
+        <p className="px-1 text-[11px] text-slate-500">
+          目標体型・体組成は「設定」タブの身体セクションで調整できます。
+        </p>
+      </div>
+      </div>
+      )}
+
+      {/* ============ タブ: 設定 ============ */}
+      {tab === "settings" && (
+      <div className="space-y-3">
+        <SectionHeader label="個人差ファクター" hint="計算に効く体質・生活パラメータを自己最適化" />
+        <SettingsTab
           current={
             weight?.weight_kg != null && weight?.body_fat_pct != null
               ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
               : null
           }
         />
-        <BodyLoadCard />
-      </div>
       </div>
       )}
 

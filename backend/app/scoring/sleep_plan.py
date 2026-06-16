@@ -43,16 +43,21 @@ def compute_tonight_plan(
     s = get_settings()
     tz = ZoneInfo(s.app_tz)
 
-    wake_t = _parse_hhmm(s.target_wake_time)
+    # 起床時刻・必要睡眠量は個人設定 (resolve_profile) を優先
+    from app.scoring.profile import resolve_profile
+    prof = resolve_profile()
+    target_sleep_min = prof.sleep_need_min
+
+    wake_t = _parse_hhmm(prof.wake_time)
     # wake は target + 1 day で作る (今日の夜→明朝)
     wake_dt = datetime.combine(target + timedelta(days=1), wake_t, tz)
-    bedtime_dt = wake_dt - timedelta(minutes=s.target_sleep_min)
+    bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
     bath_dt = bedtime_dt - timedelta(minutes=s.bath_to_bed_lead_min)
     dinner_dt = bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min)
 
     notes: list[str] = []
     compressed = False
-    sleep_min = s.target_sleep_min
+    sleep_min = target_sleep_min
 
     # 当日のトレーニング終了時刻が bath_dt より遅い場合、現実的な bedtime を再計算
     if last_training_end_jst is not None:
@@ -64,12 +69,12 @@ def compute_tonight_plan(
             if new_bedtime > bedtime_dt:
                 bedtime_dt = new_bedtime
                 actual_sleep = (wake_dt - bedtime_dt).total_seconds() / 60
-                if actual_sleep < s.target_sleep_min:
+                if actual_sleep < target_sleep_min:
                     compressed = True
                     sleep_min = int(actual_sleep)
                     notes.append(
                         f"トレーニング終了 ({last_training_end_jst.strftime('%H:%M')}) を考慮すると "
-                        f"理想睡眠 {s.target_sleep_min} 分は確保できません。"
+                        f"理想睡眠 {target_sleep_min} 分は確保できません。"
                         f"現実的には {sleep_min} 分程度。"
                     )
 
@@ -78,7 +83,7 @@ def compute_tonight_plan(
         "bedtime": bedtime_dt.strftime("%H:%M"),
         "bath": bath_dt.strftime("%H:%M"),
         "dinner_cutoff": dinner_dt.strftime("%H:%M"),
-        "target_sleep_min": s.target_sleep_min,
+        "target_sleep_min": target_sleep_min,
         "estimated_sleep_min": sleep_min,
         "compressed": compressed,
         "notes": notes,

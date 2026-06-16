@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -233,6 +234,25 @@ class UserProfile(Base):
     target_body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     body_fat_tolerance_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     ffmi_normalized: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # --- 個人差ファクター (計算直結。NULL は config デフォルトにフォールバック) ---
+    age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Karvonen 用上書き
+    max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 実測上書き (無ければ式)
+    # カフェイン消失半減期に効く CYP1A2 修飾因子 (トグル)
+    caffeine_smoker: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    caffeine_oral_contraceptives: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    caffeine_pregnant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # 感受性 "high"|"normal"|"low" → 目標 mg/kg。half_life override は直接 2-12h を指定
+    caffeine_sensitivity: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    caffeine_half_life_override_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 睡眠
+    wake_time: Mapped[str | None] = mapped_column(String(5), nullable=True)  # "HH:MM"
+    sleep_need_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chronotype: Mapped[str | None] = mapped_column(String(12), nullable=True)  # morning|intermediate|evening
+    # 栄養 (per kg 目標)
+    protein_g_per_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    water_ml_per_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class AdviceFeedback(Base):

@@ -542,16 +542,19 @@ def _build_caffeine(
         return {"available": False, "reason": "tonight_plan が未計算"}
 
     from app.scoring.profile import resolve_profile
-    weight_kg = current_weight_kg if current_weight_kg else resolve_profile().target_weight_kg
+    prof = resolve_profile()
+    weight_kg = current_weight_kg if current_weight_kg else prof.target_weight_kg
     if not weight_kg or weight_kg <= 0:
         return {"available": False, "reason": "体重データなし"}
 
     tz = ZoneInfo(settings.app_tz)
     now_jst = datetime.now(tz)
+    # 個人化された消失半減期・目標 mg/kg (喫煙/避妊薬/妊娠/感受性を反映)
+    half_life_h = prof.caffeine_half_life_h
 
     # 本日の摂取記録からの現時点残量
     existing_residual = current_residual_mg(
-        now_jst, settings.caffeine_half_life_h,
+        now_jst, half_life_h,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
 
@@ -559,11 +562,11 @@ def _build_caffeine(
         now=now_jst,
         bedtime_jst_hhmm=tonight_plan["bedtime"],
         body_weight_kg=weight_kg,
-        half_life_h=settings.caffeine_half_life_h,
+        half_life_h=half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
         min_cognitive_mg=settings.caffeine_min_cognitive_mg,
-        target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
+        target_dose_mg_per_kg=prof.caffeine_target_mg_per_kg,
         instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
         cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
@@ -576,7 +579,7 @@ def _build_caffeine(
         hours_until_bedtime=rec.hours_until_bedtime,
         body_weight_kg=weight_kg,
         bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
-        half_life_h=settings.caffeine_half_life_h,
+        half_life_h=half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         existing_residual_mg=existing_residual,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
@@ -604,7 +607,7 @@ def _build_caffeine(
             intake_time=now_jst,
             bedtime=bedtime_dt,
             body_weight_kg=weight_kg,
-            half_life_h=settings.caffeine_half_life_h,
+            half_life_h=half_life_h,
             vd_l_per_kg=settings.caffeine_vd_l_per_kg,
             absorption_half_life_h=settings.caffeine_absorption_half_life_h,
         )

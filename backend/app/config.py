@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     user_sex: str = "male"  # "male" | "female"
     user_height_cm: float = 170.0
     user_resting_hr: int = 60  # 安静時心拍 (Karvonen 法の心拍ゾーン算出に使用)
+    user_max_hr: int | None = None  # 実測最大心拍。None なら Tanaka 式 (208-0.7*age)
+    user_chronotype: str = "intermediate"  # morning|intermediate|evening (睡眠/光曝露の助言)
     target_weight_kg: float = 65.0
     target_body_fat_pct: float = 18.0
     body_fat_tolerance_pct: float = 1.5
@@ -169,6 +171,8 @@ class Settings(BaseSettings):
     caffeine_min_cognitive_mg: float = 60.0
     # 目標摂取量 (mg/kg)。1.0 が標準、0.5-0.75 は感受性高い人 / 妊娠中
     caffeine_target_mg_per_kg: float = 1.0
+    # カフェイン感受性 "high"|"normal"|"low" → 目標 mg/kg を派生 (UI 上書き可)
+    caffeine_sensitivity: str = "normal"
     # 就寝何時間前以降は推奨しない (Drake 2013)
     caffeine_cutoff_hours_before_bed: float = 6.0
     # インスタントコーヒー 1g あたりカフェイン量 (AGF/Nescafe/UCC 平均 ≈ 60mg)

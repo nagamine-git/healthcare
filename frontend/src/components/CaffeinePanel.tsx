@@ -245,7 +245,7 @@ function ParamGrid({ caffeine }: { caffeine: Caffeine }) {
         label="安全上限"
         value={
           caffeine.max_safe_mg != null
-            ? `${Math.round(caffeine.max_safe_mg)} mg`
+            ? `${caffeine.max_safe_mg.toFixed(1)} mg`
             : "--"
         }
         hint="就寝時 0.5 mg/L 未満"
@@ -263,7 +263,7 @@ function ParamGrid({ caffeine }: { caffeine: Caffeine }) {
         label="体内残量"
         value={
           caffeine.existing_residual_mg != null
-            ? `${Math.round(caffeine.existing_residual_mg)} mg`
+            ? `${caffeine.existing_residual_mg.toFixed(1)} mg`
             : "0 mg"
         }
         hint={

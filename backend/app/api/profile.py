@@ -37,6 +37,103 @@ async def get_profile() -> dict[str, Any]:
     return _profile_dict()
 
 
+# ----- 個人差ファクター設定 (計算直結) -----
+
+
+def _settings_dict() -> dict[str, Any]:
+    """全個人差ファクター + 派生値 + 由来を返す (設定 UI 用)。"""
+    p = resolve_profile()
+    return {
+        "sex": p.sex,
+        "age": p.age,
+        "height_cm": p.height_cm,
+        # 心拍
+        "resting_hr": p.resting_hr,
+        "max_hr": p.max_hr,  # 派生 (override or Tanaka 式)
+        # カフェイン
+        "caffeine_smoker": p.caffeine_smoker,
+        "caffeine_oral_contraceptives": p.caffeine_oral_contraceptives,
+        "caffeine_pregnant": p.caffeine_pregnant,
+        "caffeine_sensitivity": p.caffeine_sensitivity,
+        "caffeine_half_life_override_h": p.caffeine_half_life_override_h,
+        "caffeine_half_life_h": round(p.caffeine_half_life_h, 2),  # 派生
+        "caffeine_target_mg_per_kg": p.caffeine_target_mg_per_kg,  # 派生
+        # 睡眠
+        "wake_time": p.wake_time,
+        "sleep_need_min": p.sleep_need_min,
+        "chronotype": p.chronotype,
+        # 栄養
+        "protein_g_per_kg": p.protein_g_per_kg,
+        "water_ml_per_kg": p.water_ml_per_kg,
+        "source": p.source,
+    }
+
+
+@router.get("/api/settings")
+async def get_settings_profile() -> dict[str, Any]:
+    return _settings_dict()
+
+
+class SettingsIn(BaseModel):
+    """個人差ファクターの部分更新。指定したフィールドだけ上書きする。
+
+    None を明示送信すると「config デフォルトに戻す」(NULL 化) を意味する。
+    未指定 (キー無し) のフィールドは現状維持。
+    """
+
+    age: int | None = Field(default=None, ge=10, le=100)
+    resting_hr: int | None = Field(default=None, ge=30, le=120)
+    max_hr: int | None = Field(default=None, ge=120, le=220)
+    caffeine_smoker: bool | None = None
+    caffeine_oral_contraceptives: bool | None = None
+    caffeine_pregnant: bool | None = None
+    caffeine_sensitivity: str | None = Field(default=None, pattern="^(high|normal|low)$")
+    caffeine_half_life_override_h: float | None = Field(default=None, ge=2.0, le=12.0)
+    wake_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    sleep_need_min: int | None = Field(default=None, ge=240, le=660)
+    chronotype: str | None = Field(default=None, pattern="^(morning|intermediate|evening)$")
+    protein_g_per_kg: float | None = Field(default=None, ge=0.5, le=3.0)
+    water_ml_per_kg: float | None = Field(default=None, ge=20, le=60)
+
+
+# bool/None を区別したいフィールド (None 明示=NULL 化) と、それ以外
+_SETTINGS_FIELDS = (
+    "age", "resting_hr", "max_hr",
+    "caffeine_smoker", "caffeine_oral_contraceptives", "caffeine_pregnant",
+    "caffeine_sensitivity", "caffeine_half_life_override_h",
+    "wake_time", "sleep_need_min", "chronotype",
+    "protein_g_per_kg", "water_ml_per_kg",
+)
+
+
+@router.put("/api/settings")
+async def put_settings_profile(body: SettingsIn) -> dict[str, Any]:
+    # model_fields_set でクライアントが「実際に送ったキー」だけを反映する
+    # (送られていないフィールドは触らない / 明示 None は NULL 化)
+    sent = body.model_fields_set
+    with session_scope() as session:
+        row = session.get(UserProfile, 1)
+        if row is None:
+            row = UserProfile(id=1)
+            session.add(row)
+        for f in _SETTINGS_FIELDS:
+            if f in sent:
+                setattr(row, f, getattr(body, f))
+
+    # 個人差が変わったので当日スコアを再計算
+    try:
+        from datetime import datetime
+
+        from app.scoring.recompute import recompute_day
+        from app.scoring.timewindow import JST
+
+        recompute_day(datetime.now(JST).date())
+    except Exception:
+        pass
+
+    return _settings_dict()
+
+
 class ProfileIn(BaseModel):
     height_cm: float | None = Field(default=None, gt=50, lt=250)
     sex: str | None = Field(default=None, pattern="^(male|female)$")

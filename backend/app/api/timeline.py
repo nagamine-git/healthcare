@@ -203,7 +203,7 @@ def _caffeine_curve(origin_utc, start_utc, end_utc, off):
     from app.scoring.profile import resolve_profile
 
     s = get_settings()
-    half_life = s.caffeine_half_life_h
+    half_life = resolve_profile().caffeine_half_life_h  # 個人化された消失半減期
     absorption = s.caffeine_absorption_half_life_h
     lookback = (start_utc - timedelta(hours=18))
     with session_scope() as session:
@@ -267,13 +267,11 @@ def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
     """同一時間軸に重ねる「文脈ウィンドウ」: 集中ピーク窓 / 就寝(メラトニン)窓 / 回復ゾーン。"""
     from datetime import time as _time
 
-    from app.config import get_settings
     from app.models import HrvDaily
     from app.scoring.focus import extract_peak_windows, predict_today_curve
     from app.scoring.recompute import _hrv_baseline
     from app.scoring.sleep_plan import compute_tonight_plan
 
-    s = get_settings()
     now_jst = datetime.now(JST)
     out: dict[str, Any] = {"focus_windows": [], "sleep_window": None, "recovery_bands": []}
 
@@ -297,7 +295,8 @@ def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
             baseline = _hrv_baseline(session, target)
         wake_t = None
         try:
-            h, _, m = s.target_wake_time.partition(":")
+            from app.scoring.profile import resolve_profile
+            h, _, m = resolve_profile().wake_time.partition(":")
             wake_t = _time(int(h), int(m))
         except Exception:
             wake_t = None
@@ -426,8 +425,6 @@ def _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx) -> 
     """予測可能な系列 (カフェイン消失・気圧3h・集中窓) を 1-2 文の予測文に。"""
     import math
 
-    from app.config import get_settings
-
     now_jst = datetime.now(JST)
     parts: list[str] = []
 
@@ -437,8 +434,8 @@ def _prediction_text(now_off, caffeine_curve, caf_info, pressure_curve, ctx) -> 
         now_mg = near["mg"]
         safe = caf_info.get("bedtime_safe_mg")
         if safe and now_mg > safe:
-            s = get_settings()
-            t_h = s.caffeine_half_life_h * math.log2(now_mg / safe)
+            from app.scoring.profile import resolve_profile
+            t_h = resolve_profile().caffeine_half_life_h * math.log2(now_mg / safe)
             if 0 < t_h <= 14:
                 clk = now_jst + timedelta(hours=t_h)
                 parts.append(f"カフェインは{clk.strftime('%H:%M')}頃に就寝安全域へ")

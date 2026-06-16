@@ -326,20 +326,19 @@ training/cardio の action では **必ず ``exercises`` 配列を埋める**。
 """
 
 
-def _karvonen_zones(age: int, resting_hr: int) -> str:
-    """年齢と安静時心拍から Karvonen 法 (心拍予備能 HRR) で心拍ゾーンを算出する。
+def _karvonen_zones(max_hr: int, resting_hr: int) -> str:
+    """最大心拍と安静時心拍から Karvonen 法 (心拍予備能 HRR) で心拍ゾーンを算出する。
 
-    target_hr = resting_hr + intensity * (max_hr - resting_hr), max_hr = 220 - age。
-    個人の安静時心拍と年齢に追従するので、誰が使っても自分の bpm が出る。
+    target_hr = resting_hr + intensity * (max_hr - resting_hr)。max_hr は
+    実測上書きがあればそれ、無ければ Tanaka 式 (208-0.7*age) を resolve 層で算出。
     """
-    max_hr = 220 - age
     hrr = max_hr - resting_hr
 
     def hr(intensity: float) -> int:
         return round(resting_hr + intensity * hrr)
 
     return (
-        f"- 利用者の心拍ゾーン (年齢 {age}y / 安静時心拍 {resting_hr} から Karvonen 法で算出):\n"
+        f"- 利用者の心拍ゾーン (最大心拍 {max_hr} / 安静時心拍 {resting_hr} から Karvonen 法で算出):\n"
         f"  - 軽強度 (会話余裕、回復ペース) = **心拍 {hr(0.50)} bpm**\n"
         f"  - 中強度 (会話可能だが息やや弾む、有酸素ベースのメイン) = **心拍 {hr(0.65)} bpm**\n"
         f"  - 中-高強度 (テンポ、会話途切れる) = **心拍 {hr(0.75)} bpm**\n"
@@ -356,7 +355,7 @@ def _format_persona() -> str:
     prof = resolve_profile()
     starting = "\n".join(f"- {k}: {v}" for k, v in s.user_starting_weights.items())
     return SYSTEM_PERSONA_TEMPLATE.format(
-        user_age=s.user_age,
+        user_age=prof.age,
         user_sex={"male": "男性", "female": "女性"}.get(prof.sex, prof.sex),
         user_height_cm=prof.height_cm,
         target_weight_kg=prof.target_weight_kg,
@@ -369,7 +368,7 @@ def _format_persona() -> str:
         weekly_target_hint=s.user_weekly_target_hint,
         starting_weights=starting,
         progression_rule=s.user_progression_rule,
-        heart_rate_zones=_karvonen_zones(s.user_age, s.user_resting_hr),
+        heart_rate_zones=_karvonen_zones(prof.max_hr, prof.resting_hr),
     )
 
 

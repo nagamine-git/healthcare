@@ -13,7 +13,6 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models import MetricSample
 from app.scoring.timewindow import jst_day_bounds, jst_window_start
 
@@ -129,7 +128,6 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
     使わない。
     """
     from app.scoring.profile import resolve_profile
-    settings = get_settings()
     prof = resolve_profile()
     out: dict[str, Any] = {}
 
@@ -138,7 +136,7 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
     bmr = _bmr_mifflin(
         prof.target_weight_kg,
         prof.height_cm,
-        settings.user_age,
+        prof.age,
         prof.sex,
     )
 
@@ -244,7 +242,7 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
         ),
         "protein_g": {
             "min": round(weight_kg * 1.6, 1),
-            "ideal": round(weight_kg * settings.target_protein_g_per_kg, 1),
+            "ideal": round(weight_kg * prof.protein_g_per_kg, 1),
             "max": round(weight_kg * 2.5, 1),
             "unit": "g",
             "kind": "minimum",  # 多くて困らない (上限緩い)
@@ -268,7 +266,7 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
         },
         "water_ml": {
             "min": round(weight_kg * 30),
-            "ideal": round(weight_kg * settings.target_water_ml_per_kg),
+            "ideal": round(weight_kg * prof.water_ml_per_kg),
             "max": None,
             "unit": "mL",
             "kind": "minimum",

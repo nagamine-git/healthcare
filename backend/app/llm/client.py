@@ -395,7 +395,8 @@ def _gather_focus(target: date_type) -> dict[str, Any]:
         from datetime import time as _time
 
         try:
-            h, _, m = settings.target_wake_time.partition(":")
+            from app.scoring.profile import resolve_profile
+            h, _, m = resolve_profile().wake_time.partition(":")
             wake_t: _time | None = _time(int(h), int(m))
         except Exception:
             wake_t = None
@@ -463,8 +464,12 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
     if not weight_kg or weight_kg <= 0:
         return {"available": False}
 
+    from app.scoring.profile import resolve_profile
+    prof = resolve_profile()
+    half_life_h = prof.caffeine_half_life_h  # 個人化された消失半減期
+
     existing_residual = current_residual_mg(
-        now_jst, settings.caffeine_half_life_h,
+        now_jst, half_life_h,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
     )
 
@@ -472,11 +477,11 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
         now=now_jst,
         bedtime_jst_hhmm=tonight["bedtime"],
         body_weight_kg=weight_kg,
-        half_life_h=settings.caffeine_half_life_h,
+        half_life_h=half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
         min_cognitive_mg=settings.caffeine_min_cognitive_mg,
-        target_dose_mg_per_kg=settings.caffeine_target_mg_per_kg,
+        target_dose_mg_per_kg=prof.caffeine_target_mg_per_kg,
         instant_coffee_mg_per_g=settings.instant_coffee_mg_per_g,
         cutoff_hours_before_bed=settings.caffeine_cutoff_hours_before_bed,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
@@ -485,7 +490,7 @@ def _gather_caffeine(target: date_type) -> dict[str, Any]:
         hours_until_bedtime=rec.hours_until_bedtime,
         body_weight_kg=weight_kg,
         bedtime_threshold_mg_per_l=settings.caffeine_bedtime_threshold_mg_per_l,
-        half_life_h=settings.caffeine_half_life_h,
+        half_life_h=half_life_h,
         vd_l_per_kg=settings.caffeine_vd_l_per_kg,
         existing_residual_mg=existing_residual,
         absorption_half_life_h=settings.caffeine_absorption_half_life_h,
