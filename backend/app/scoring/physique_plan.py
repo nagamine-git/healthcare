@@ -152,6 +152,16 @@ def _today_actions(
             if avg_kcal is None:
                 avg_kcal = usual["estimate"].get("kcal")
 
+    # 食事記録が無ければ「普段の食事パターン」からの推定で埋める (記録ゼロでも具体化)
+    if avg_protein is None or avg_kcal is None:
+        from app.scoring.meal_estimate import estimate_usual_macros
+        usual = estimate_usual_macros(target)
+        if usual["source"] == "pattern" and usual["estimate"]:
+            if avg_protein is None:
+                avg_protein = usual["estimate"].get("protein_g")
+            if avg_kcal is None:
+                avg_kcal = usual["estimate"].get("kcal")
+
     actions: list[dict[str, Any]] = []
 
     # 1) タンパク質 (最優先の基質)
