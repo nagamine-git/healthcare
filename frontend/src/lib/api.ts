@@ -419,7 +419,7 @@ export type PhysiquePlan =
       gap: { d_weight_kg: number; d_fat_mass_kg: number | null; d_lean_mass_kg: number | null };
       energy: { bmr: number; tdee: number; tdee_measured: boolean; calorie_target: number; delta_kcal: number };
       macros: { protein_g: number; protein_kcal: number; fat_g: number; carb_g: number; protein_g_per_kg: number };
-      diet_vs_exercise: { daily_deficit_kcal: number; shadowbox_min_equiv: number; note: string };
+      diet_vs_exercise: { daily_deficit_kcal: number; shadowbox_min_equiv: number; headline: string; note: string };
       levers: { name: string; share_pct: number; why: string }[];
       training: { resistance_sessions_per_week: number; primary: string; shadowboxing: string; interference: string };
       timeline: { weeks_fat: number; weeks_muscle: number; eta_weeks: number; eta_label: string };

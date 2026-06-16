@@ -156,20 +156,19 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
     d_fat = (fm_tgt - fm_now) if has_bf else None
     d_lean = (lm_tgt - lm_now) if has_bf else None
 
-    # 方向の判定
-    if has_bf:
-        lose_fat = d_fat <= -0.5
-        gain_lean = d_lean >= 0.5
-        if lose_fat and gain_lean:
-            direction = "recomp"
-        elif lose_fat:
-            direction = "cut"
-        elif gain_lean and d_fat > -0.5:
-            direction = "lean_bulk"
-        else:
-            direction = "maintain"
+    # 方向の判定。カロリー戦略はネット体重目標を主軸にする:
+    # 体重を純増させるには黒字が要る (維持では +Xkg に到達できない)、純減には赤字。
+    # 体重がほぼ同じで脂肪減&筋増を狙う場合のみ「リコンプ(維持)」。
+    lose_fat = (d_fat <= -0.5) if has_bf else (d_weight < 0)
+    gain_lean = (d_lean >= 0.5) if has_bf else (d_weight > 0)
+    if d_weight > 0.5:
+        direction = "lean_bulk"  # 純増 → 小さな黒字
+    elif d_weight < -0.5:
+        direction = "cut"  # 純減 → 赤字
+    elif has_bf and lose_fat and gain_lean:
+        direction = "recomp"  # 同体重で組成だけ入れ替え → 維持
     else:
-        direction = "cut" if d_weight < -0.5 else "lean_bulk" if d_weight > 0.5 else "maintain"
+        direction = "maintain"
 
     label = {
         "cut": "減量 (脂肪を落とす)",
@@ -194,6 +193,7 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
         calorie_target = tdee + surplus
         delta_kcal = round(surplus)
     else:
+        surplus = 0.0
         calorie_target = tdee
         delta_kcal = 0
 
@@ -202,6 +202,24 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
     # 食事 vs 運動: 同じ赤字を運動で作るのに必要な時間
     kcal_min = _kcal_per_min_shadowbox(w_now)
     ex_min = round(daily_deficit / kcal_min) if daily_deficit > 0 and kcal_min > 0 else 0
+
+    # 方向に応じた「食事の核心」メッセージ (食事が主レバーである理由を数理で)
+    if daily_deficit > 0:
+        dve_headline = "食事が主レバー"
+        dve_note = (
+            f"同じ {round(daily_deficit)} kcal の赤字を運動だけで作るには高強度シャドーボクシング "
+            f"約 {ex_min} 分/日。食事で {round(daily_deficit)} kcal 減らす方が圧倒的に楽 = 食事が主レバー。"
+        )
+    elif delta_kcal > 0:
+        dve_headline = "黒字は筋肉の材料"
+        dve_note = (
+            f"筋を {round(d_lean, 1) if d_lean else '+'}kg 増やすには小さな黒字 (+{delta_kcal} kcal/日) が必要。"
+            "維持カロリーのままでは純増しない。ただし黒字を大きくしすぎると脂肪が増えるだけ。"
+            "黒字は筋トレ刺激とセットで初めて筋になる。有酸素のやり過ぎは黒字を相殺。"
+        )
+    else:
+        dve_headline = "現状維持 + 質"
+        dve_note = "体重は目標域。赤字も黒字も不要。タンパク質と筋トレで組成の質を磨く局面。"
 
     levers = _levers(direction, macros["protein_g"], ex_min)
 
@@ -255,12 +273,8 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
         "diet_vs_exercise": {
             "daily_deficit_kcal": round(daily_deficit),
             "shadowbox_min_equiv": ex_min,
-            "note": (
-                f"同じ {round(daily_deficit)} kcal の赤字を運動だけで作るには高強度シャドーボクシング "
-                f"約 {ex_min} 分/日。食事で {round(daily_deficit)} kcal 減らす方が圧倒的に楽 = 食事が主レバー。"
-                if daily_deficit > 0 else
-                "赤字は不要な局面。運動は筋刺激・健康目的で。"
-            ),
+            "headline": dve_headline,
+            "note": dve_note,
         },
         "levers": levers,
         "training": {

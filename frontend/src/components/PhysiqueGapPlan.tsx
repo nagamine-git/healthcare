@@ -97,15 +97,20 @@ export function PhysiqueGapPlan() {
           hint={p.energy.tdee_measured ? "実測ベース" : "推定 (係数1.45)"} />
       </div>
 
-      {/* 食事 vs 運動 の核心 */}
-      {p.diet_vs_exercise.daily_deficit_kcal > 0 && (
-        <div className="rounded-xl border border-amber-700/30 bg-amber-950/20 p-3">
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-amber-200">
-            <Utensils size={12} /> 食事が主レバー
-          </div>
-          <p className="text-[11px] leading-relaxed text-amber-100/80">{p.diet_vs_exercise.note}</p>
+      {/* 食事 vs 運動 の核心 (方向で色を変える) */}
+      <div className={`rounded-xl border p-3 ${
+        p.direction === "lean_bulk" ? "border-sky-700/30 bg-sky-950/20"
+        : p.direction === "maintain" ? "border-slate-700/40 bg-slate-900/40"
+        : "border-amber-700/30 bg-amber-950/20"
+      }`}>
+        <div className={`mb-1 flex items-center gap-1.5 text-[11px] font-medium ${
+          p.direction === "lean_bulk" ? "text-sky-200"
+          : p.direction === "maintain" ? "text-slate-200" : "text-amber-200"
+        }`}>
+          <Utensils size={12} /> {p.diet_vs_exercise.headline}
         </div>
-      )}
+        <p className="text-[11px] leading-relaxed text-slate-300/90">{p.diet_vs_exercise.note}</p>
+      </div>
 
       {/* トレーニング処方 */}
       <div className="space-y-1.5 rounded-xl bg-slate-950/40 p-3">

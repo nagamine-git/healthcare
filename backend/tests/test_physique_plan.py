@@ -71,17 +71,18 @@ def test_physique_plan_recomp_direction(app_client):
             ts=datetime.now(UTC).replace(tzinfo=None),
             weight_kg=85.0, body_fat_pct=24.0, source="test",
         ))
+        # 同体重で組成だけ入れ替え (85kg維持・体脂肪24%→15%) → recomp
         s.merge(UserProfile(
             id=1, height_cm=175.0, sex="male",
-            target_weight_kg=78.0, target_body_fat_pct=15.0, age=35,
+            target_weight_kg=85.0, target_body_fat_pct=15.0, age=35,
         ))
 
     r = app_client.get("/api/physique-plan").json()
     assert r["available"] is True
-    # 脂肪減 + 筋増 → recomp
+    # 同体重で脂肪減 + 筋増 → recomp
     assert r["direction"] == "recomp"
     assert r["gap"]["d_fat_mass_kg"] < 0  # 脂肪を減らす
-    # 赤字方向 → カロリー目標 < TDEE
+    # 緩い赤字方向 → カロリー目標 < TDEE
     assert r["energy"]["calorie_target"] < r["energy"]["tdee"]
     assert r["energy"]["tdee_measured"] is False  # DailySummary 無し → 推定
     # タンパク質は per kg から (既定 2.0 * 85 = 170)
@@ -90,6 +91,29 @@ def test_physique_plan_recomp_direction(app_client):
     assert r["diet_vs_exercise"]["shadowbox_min_equiv"] > 0
     assert sum(x["share_pct"] for x in r["levers"]) == 100
     assert r["timeline"]["eta_weeks"] > 0
+
+
+def test_physique_plan_lean_bulk_needs_surplus(app_client):
+    """純増目標 (体重を増やす) は維持では到達不能 → 黒字 (lean_bulk)。"""
+    from app.db import session_scope
+    from app.models import UserProfile, WeightSample
+
+    with session_scope() as s:
+        s.add(WeightSample(
+            ts=datetime.now(UTC).replace(tzinfo=None),
+            weight_kg=54.0, body_fat_pct=16.0, source="test",
+        ))
+        s.merge(UserProfile(
+            id=1, height_cm=170.0, sex="male",
+            target_weight_kg=59.0, target_body_fat_pct=12.0, age=35,
+        ))
+
+    r = app_client.get("/api/physique-plan").json()
+    assert r["direction"] == "lean_bulk"
+    # 純増 → 黒字 (カロリー目標 > TDEE)
+    assert r["energy"]["calorie_target"] > r["energy"]["tdee"]
+    assert r["energy"]["delta_kcal"] > 0
+    assert "黒字" in r["diet_vs_exercise"]["headline"]
 
 
 def test_physique_plan_no_weight(app_client):
