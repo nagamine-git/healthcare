@@ -156,7 +156,9 @@ def _today_actions(
     if avg_protein is None or avg_kcal is None:
         from app.scoring.meal_estimate import estimate_usual_macros
         usual = estimate_usual_macros(target)
-        if usual["source"] == "pattern" and usual["estimate"]:
+        # 全枠登録(complete)のときだけ全日推定として使う。部分登録(朝だけ等)は
+        # 固定枠の合計でしかないので全日として扱わない (過小評価を防ぐ)。
+        if usual["source"] == "pattern" and usual["estimate"] and usual.get("complete"):
             if avg_protein is None:
                 avg_protein = usual["estimate"].get("protein_g")
             if avg_kcal is None:
