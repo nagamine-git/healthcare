@@ -408,6 +408,24 @@ export type UserProfileDto = {
 };
 export type ProfileAssessment = { level: "ok" | "warning" | "blocked"; warnings: string[] };
 
+export type PhysiquePlan =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      direction: "cut" | "recomp" | "lean_bulk" | "maintain";
+      direction_label: string;
+      current: { weight_kg: number; body_fat_pct: number | null; fat_mass_kg: number | null; lean_mass_kg: number | null };
+      target: { weight_kg: number; body_fat_pct: number; fat_mass_kg: number; lean_mass_kg: number };
+      gap: { d_weight_kg: number; d_fat_mass_kg: number | null; d_lean_mass_kg: number | null };
+      energy: { bmr: number; tdee: number; tdee_measured: boolean; calorie_target: number; delta_kcal: number };
+      macros: { protein_g: number; protein_kcal: number; fat_g: number; carb_g: number; protein_g_per_kg: number };
+      diet_vs_exercise: { daily_deficit_kcal: number; shadowbox_min_equiv: number; note: string };
+      levers: { name: string; share_pct: number; why: string }[];
+      training: { resistance_sessions_per_week: number; primary: string; shadowboxing: string; interference: string };
+      timeline: { weeks_fat: number; weeks_muscle: number; eta_weeks: number; eta_label: string };
+      notes: string[];
+    };
+
 /** 個人差ファクター設定 (計算直結)。派生値 (caffeine_half_life_h 等) は読み取り専用。 */
 export type SettingsDto = {
   sex: "male" | "female";
@@ -1018,6 +1036,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  physiquePlan: () => request<PhysiquePlan>("/api/physique-plan"),
   getSettings: () => request<SettingsDto>("/api/settings"),
   putSettings: (body: SettingsUpdate) =>
     request<SettingsDto>("/api/settings", {

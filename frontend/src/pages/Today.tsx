@@ -20,6 +20,7 @@ import { DayPrediction } from "../components/DayPrediction";
 import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
+import { PhysiqueGapPlan } from "../components/PhysiqueGapPlan";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
@@ -321,7 +322,9 @@ export function TodayPage({ onOpenDebug }: Props) {
         <LearningCard />
       </div>
 
-      <div id="bodyload-section" className="space-y-3">
+      <div id="physique-gap-section" className="space-y-3">
+        <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
+        <PhysiqueGapPlan />
         <BodyLoadCard />
         <p className="px-1 text-[11px] text-slate-500">
           目標体型・体組成は「設定」タブの身体セクションで調整できます。

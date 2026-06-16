@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.scoring.physique_plan import (
+    _eta_label,
+    _kcal_per_min_shadowbox,
+    _levers,
+    _macros,
+)
+
+# ----- 純粋な数理 -----
+
+
+def test_macros_protein_from_per_kg():
+    m = _macros(2000, 80, 2.0)
+    assert m["protein_g"] == 160  # 2.0 * 80
+    assert m["protein_kcal"] == 640
+
+
+def test_macros_carbs_never_negative():
+    # 極端に低いカロリーでも炭水化物は負にならない
+    m = _macros(500, 80, 2.0)
+    assert m["carb_g"] >= 0
+    assert m["fat_g"] >= 0
+
+
+def test_shadowbox_kcal_per_min_positive_scales_with_weight():
+    assert _kcal_per_min_shadowbox(60) < _kcal_per_min_shadowbox(90)
+
+
+@pytest.mark.parametrize("direction", ["cut", "recomp", "lean_bulk", "maintain"])
+def test_levers_sum_to_100(direction):
+    levers = _levers(direction, 160, 45)
+    assert sum(x["share_pct"] for x in levers) == 100
+
+
+def test_eta_label_done():
+    assert "到達" in _eta_label(0)
+    assert "週" in _eta_label(4)
+    assert "ヶ月" in _eta_label(20)
+
+
+# ----- API 統合 (実データ経路) -----
+
+
+@pytest.fixture
+def app_client(temp_data_dir, monkeypatch):
+    monkeypatch.setenv("APP_DATA_DIR", str(temp_data_dir))
+    monkeypatch.setenv("HAE_INGEST_TOKEN", "test")
+    from app import main as main_module
+    from app.config import Settings, reset_settings_cache
+
+    reset_settings_cache()
+    settings = Settings(scheduler_enabled=False, app_data_dir=temp_data_dir)
+    monkeypatch.setattr(main_module, "get_settings", lambda: settings)
+    app = main_module.create_app()
+    with TestClient(app) as client:
+        yield client
+
+
+def test_physique_plan_recomp_direction(app_client):
+    from app.db import session_scope
+    from app.models import UserProfile, WeightSample
+
+    with session_scope() as s:
+        s.add(WeightSample(
+            ts=datetime.now(UTC).replace(tzinfo=None),
+            weight_kg=85.0, body_fat_pct=24.0, source="test",
+        ))
+        s.merge(UserProfile(
+            id=1, height_cm=175.0, sex="male",
+            target_weight_kg=78.0, target_body_fat_pct=15.0, age=35,
+        ))
+
+    r = app_client.get("/api/physique-plan").json()
+    assert r["available"] is True
+    # 脂肪減 + 筋増 → recomp
+    assert r["direction"] == "recomp"
+    assert r["gap"]["d_fat_mass_kg"] < 0  # 脂肪を減らす
+    # 赤字方向 → カロリー目標 < TDEE
+    assert r["energy"]["calorie_target"] < r["energy"]["tdee"]
+    assert r["energy"]["tdee_measured"] is False  # DailySummary 無し → 推定
+    # タンパク質は per kg から (既定 2.0 * 85 = 170)
+    assert r["macros"]["protein_g"] == 170
+    # 食事 vs 運動: 赤字を運動で作る分数が出る
+    assert r["diet_vs_exercise"]["shadowbox_min_equiv"] > 0
+    assert sum(x["share_pct"] for x in r["levers"]) == 100
+    assert r["timeline"]["eta_weeks"] > 0
+
+
+def test_physique_plan_no_weight(app_client):
+    r = app_client.get("/api/physique-plan").json()
+    assert r["available"] is False

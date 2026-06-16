@@ -98,6 +98,15 @@ async def get_settings_profile() -> dict[str, Any]:
     return _settings_dict()
 
 
+@router.get("/api/physique-plan")
+async def get_physique_plan() -> dict[str, Any]:
+    """理想体型と現在地のギャップを埋める実践プラン (エネルギー収支ベース)。"""
+    from app.scoring.physique_plan import recomposition_plan
+    from app.scoring.timewindow import app_today
+
+    return recomposition_plan(app_today())
+
+
 class SettingsIn(BaseModel):
     """個人差ファクターの部分更新。指定したフィールドだけ上書きする。
 
