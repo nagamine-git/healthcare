@@ -372,7 +372,8 @@ export type DayTimelineData = {
   pressure_curve: { h: number; hpa: number }[];
   prediction_text: string | null;
   focus_windows: { start_h: number; end_h: number; score: number }[];
-  sleep_window: { melatonin_h: number; bedtime_h: number } | null;
+  sleep_window: { melatonin_h: number; bedtime_h: number; bedtime_label?: string } | null;
+  schedule?: { key: string; label: string; time: string; h: number; start_h: number; end_h: number }[];
   recovery_bands: { start_h: number; end_h: number }[];
   water: {
     intake_curve: { h: number; ml: number }[];
@@ -408,13 +409,49 @@ export type UserProfileDto = {
 };
 export type ProfileAssessment = { level: "ok" | "warning" | "blocked"; warnings: string[] };
 
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+export type MealFrequency = "daily" | "often" | "sometimes";
+export type FoodItemDto = {
+  id: number; name: string; kcal: number; protein_g: number; fat_g: number; carb_g: number;
+  unit_label: string; category: string | null; is_protein_source: boolean;
+};
+export type FoodItemInput = Omit<FoodItemDto, "id">;
+export type FoodEstimate =
+  | { available: false; reason: string }
+  | ({ available: true } & Omit<FoodItemDto, "id">);
+export type MealPatternDto = {
+  id: number; food_id: number; name: string; qty: number; frequency: MealFrequency;
+  kcal: number; protein_g: number; unit_label: string;
+};
+export type UsualMacros = {
+  estimate: { kcal: number; protein_g: number; fat_g: number | null; carb_g: number | null } | null;
+  logged: unknown; pattern: unknown;
+  source: "logged" | "pattern" | "none";
+  confidence: "high" | "medium" | "partial" | "none";
+  n_patterns: number;
+  complete: boolean;
+  registered_slots: MealSlot[];
+  variable_slots: MealSlot[];
+  fixed_protein_g: number;
+  fixed_kcal: number;
+  inferred_variable: { protein_g: number; kcal: number | null } | null;
+  logged_days: number;
+  days_since_log: number | null;
+};
+export type MealPlanDto = {
+  targets: { protein_g: number; calorie: number | null; direction: string };
+  usual: UsualMacros;
+  protein_gap: number | null;
+  suggestions: { kind: string; text: string; delta_protein_g?: number; delta_kcal?: number }[];
+};
+
 export type PhysiquePlan =
   | { available: false; reason: string }
   | {
       available: true;
       direction: "cut" | "recomp" | "lean_bulk" | "maintain";
       direction_label: string;
-      current: { weight_kg: number; body_fat_pct: number | null; fat_mass_kg: number | null; lean_mass_kg: number | null };
+      current: { weight_kg: number; body_fat_pct: number | null; fat_mass_kg: number | null; lean_mass_kg: number | null; smoothed: boolean; raw_weight_kg: number | null; raw_body_fat_pct: number | null };
       target: { weight_kg: number; body_fat_pct: number; fat_mass_kg: number; lean_mass_kg: number };
       gap: { d_weight_kg: number; d_fat_mass_kg: number | null; d_lean_mass_kg: number | null };
       energy: { bmr: number; tdee: number; tdee_measured: boolean; calorie_target: number; delta_kcal: number };
@@ -609,14 +646,27 @@ export type Pressure = {
   series: PressurePoint[];
 };
 
+export type SleepWindow = { rec: string; start: string; end: string };
 export type TonightPlan = {
   wake: string; // HH:MM
   bedtime: string;
   bath: string;
+  bath_start?: string;
+  bath_end?: string;
+  bath_method?: string;
+  bath_temp_c?: number;
   dinner_cutoff: string;
+  dinner_start?: string;
+  dinner_end?: string;
   target_sleep_min: number;
   estimated_sleep_min: number;
   compressed: boolean;
+  windows?: { bedtime: SleepWindow; wake: SleepWindow };
+  caffeine_cutoff_time?: string;
+  dim_light_time?: string;
+  morning_light?: { start: string; end: string };
+  ideal_bedtime?: string;
+  habitual_bedtime?: string | null;
   notes: string[];
 };
 
@@ -694,11 +744,24 @@ export type ForecastState = {
   generated_at: string;
   location: string;
   migraine: {
-    confidence: "high" | "medium" | "low";
     reliability: string | null;
-    buckets: MigraineForecastBucket[];
-    peak: MigraineForecastBucket;
-    is_trigger_validated: boolean;
+    episode_count?: number;
+    recent_count?: number;
+    level?: "high" | "elevated";
+    actions?: string[];
+    personal_triggers: { key: string; label: string; tier: string }[];
+    active_triggers?: { key: string; label: string; tier: string; level: "high" | "elevated"; current: number }[];
+    likely_onset?: { clock: string; peak_bucket: string | null; sd_hour: number | null; hours_from_now: number | null; passed: boolean } | null;
+    pressure_refuted?: boolean;
+    pressure: unknown;
+    // 気圧予報がある時だけ top-level に展開される
+    confidence?: "high" | "medium" | "low";
+    buckets?: MigraineForecastBucket[];
+    peak?: MigraineForecastBucket;
+    is_trigger_validated?: boolean;
+    onset_in_hours?: number | null;
+    onset_label?: string | null;
+    onset_risk?: ForecastRisk | null;
   } | null;
   energy_today: {
     confidence: "high" | "medium" | "low";
@@ -863,6 +926,9 @@ export type LearningChapter = {
   section_total: number;
   seq_end?: number;
   band?: LearningBand;
+  quiz_points?: number;
+  quiz_target?: number;
+  free_word_passed?: boolean;
 };
 export type LearningState = {
   chapters: LearningChapter[];
@@ -937,13 +1003,30 @@ export type BodyLoadState = {
   window_days: number;
 };
 
+export type QuizFormat = "free" | "choice4" | "choice2";
+
 export type LearningQuizResult = {
-  reply: string;
-  understanding: number;
-  threshold: number;
-  cleared: boolean;
+  // --- フリーワード (free) / 復習 ---
+  reply?: string;
+  understanding?: number;
+  threshold?: number;
   comment?: string;
-  state?: LearningState;
+  review?: boolean; // クリア後の復習チューター応答
+  // --- 選択式 (choice4/choice2) の問題生成 ---
+  question?: string;
+  options?: string[];
+  correct_index?: number;
+  explanation?: string;
+  // --- 選択式の採点結果 ---
+  correct?: boolean;
+  // --- 得点制 (free/choice 共通) ---
+  format?: QuizFormat;
+  quiz_points?: number;
+  target?: number;
+  free_word_passed?: boolean;
+  gained?: number;
+  cleared?: boolean;
+  state?: LearningState; // クリア時のみ
   error?: boolean;
 };
 
@@ -970,6 +1053,76 @@ export type BodyMapState = {
   muscle_confidence: "high" | "low" | "none";
   hp: BodyHpGauge[];
   hp_total: number | null;
+};
+
+export type FitnessTestDef = {
+  key: string;
+  label: string;
+  target: string;
+  protocol: string;
+  equipment: string;
+  est_minutes: number;
+  unit: string;
+  retest_weeks: number;
+  warmup: string;
+  migraine_note: string;
+  reference: string;
+  steps: string[];
+  has_lr: boolean;
+  measure_mode: "metronome_tap" | "timer_clap" | null;
+};
+export type FitnessEvaluation = {
+  status: string;
+  label: string;
+  reference: string;
+};
+export type FitnessTrend = {
+  delta: number;
+  is_real_change: boolean;
+  direction: "up" | "down" | "flat";
+  improved: boolean | null;
+  mdc: number;
+};
+export type FitnessDue = {
+  last_on: string | null;
+  due_on: string | null;
+  is_due: boolean;
+  days_until: number | null;
+};
+export type FitnessTestEntry = {
+  definition: FitnessTestDef;
+  latest: {
+    value: number;
+    performed_on: string;
+    detail: { left?: number | null; right?: number | null } | null;
+    note: string | null;
+  } | null;
+  evaluation: FitnessEvaluation | null;
+  trend: FitnessTrend | null;
+  due: FitnessDue;
+};
+export type FitnessOverview = {
+  tests: FitnessTestEntry[];
+  any_due: boolean;
+  due_labels: string[];
+  evaluable: boolean;
+};
+export type FitnessHistory = {
+  test_key: string;
+  items: Array<{
+    performed_on: string;
+    value: number;
+    detail: { left?: number | null; right?: number | null } | null;
+    note: string | null;
+  }>;
+};
+export type FitnessResultInput = {
+  test_key: string;
+  value?: number;
+  left?: number;
+  right?: number;
+  performed_on?: string;
+  note?: string;
 };
 
 export const api = {
@@ -1039,6 +1192,29 @@ export const api = {
       body: JSON.stringify(body),
     }),
   physiquePlan: () => request<PhysiquePlan>("/api/physique-plan"),
+  fitnessTests: () => request<FitnessOverview>("/api/fitness/tests"),
+  fitnessRecord: (body: FitnessResultInput) =>
+    request<{ id: number; test_key: string; performed_on: string; value: number }>(
+      "/api/fitness/results",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  fitnessHistory: (testKey: string, limit = 24) =>
+    request<FitnessHistory>(`/api/fitness/history/${testKey}?limit=${limit}`),
+  foods: () => request<{ items: FoodItemDto[] }>("/api/foods"),
+  foodEstimate: (name: string, qty_text?: string) =>
+    request<FoodEstimate>("/api/foods/estimate", {
+      method: "POST", body: JSON.stringify({ name, qty_text }),
+    }),
+  foodCreate: (body: FoodItemInput) =>
+    request<FoodItemDto>("/api/foods", { method: "POST", body: JSON.stringify(body) }),
+  foodDelete: (id: number) =>
+    request<{ deleted: number }>(`/api/foods/${id}`, { method: "DELETE" }),
+  mealPatterns: () => request<{ slots: Record<MealSlot, MealPatternDto[]> }>("/api/meal-patterns"),
+  mealPatternAdd: (body: { slot: MealSlot; food_id: number; qty?: number; frequency?: MealFrequency }) =>
+    request<MealPatternDto>("/api/meal-patterns", { method: "POST", body: JSON.stringify(body) }),
+  mealPatternDelete: (id: number) =>
+    request<{ deleted: number }>(`/api/meal-patterns/${id}`, { method: "DELETE" }),
+  mealPlan: () => request<MealPlanDto>("/api/meal-plan"),
   getSettings: () => request<SettingsDto>("/api/settings"),
   putSettings: (body: SettingsUpdate) =>
     request<SettingsDto>("/api/settings", {
@@ -1113,10 +1289,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ done, done_at_iso: doneAtIso }),
     }),
-  learningQuiz: (chapter: number, messages: { role: "user" | "assistant"; content: string }[]) =>
+  learningQuiz: (
+    chapter: number,
+    messages: { role: "user" | "assistant"; content: string }[],
+    opts?: {
+      mode?: "exam" | "review";
+      format?: QuizFormat;
+      action?: "question" | "answer";
+      selected_index?: number;
+      correct_index?: number;
+    },
+  ) =>
     request<LearningQuizResult>(`/api/learning/chapter/${chapter}/quiz`, {
       method: "POST",
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, ...(opts ?? {}) }),
     }),
   setLifeWeights: (weights: Record<string, number>) =>
     request<LifeResponse>("/api/life/weights", {
@@ -1125,4 +1311,22 @@ export const api = {
     }),
   applyLifePreset: (name: string) =>
     request<LifeResponse>(`/api/life/preset/${name}`, { method: "POST" }),
+  pushConfig: () => request<PushConfig>("/api/push/config"),
+  pushSubscribe: (sub: unknown) =>
+    request<{ status: string }>("/api/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify(sub),
+    }),
+  pushUnsubscribe: (endpoint: string) =>
+    request<{ status: string; removed: boolean }>("/api/push/unsubscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint }),
+    }),
+  pushTest: () =>
+    request<{ status: string; sent: number }>("/api/push/test", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };
+
+export type PushConfig = { enabled: boolean; vapid_public_key: string | null };
