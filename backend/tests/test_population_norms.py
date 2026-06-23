@@ -63,13 +63,17 @@ def test_build_distribution_evaluable():
     assert {"bmi", "body_fat", "ffmi", "vo2max"} == set(by_key)
     assert by_key["bmi"]["value"] == pytest.approx(23.5, abs=0.1)
     assert by_key["bmi"]["percentile"] is not None
-    # 体脂肪率の目標範囲 = 15 ± 2
+    # 3指標とも範囲 (帯)。体脂肪率の目標範囲 = 15 ± 2
     assert by_key["body_fat"]["target_low"] == pytest.approx(13.0, abs=0.1)
     assert by_key["body_fat"]["target_high"] == pytest.approx(17.0, abs=0.1)
-    # BMI は目標体重で 1 点 (体重70/1.75²=22.86)
-    assert by_key["bmi"]["target_low"] == by_key["bmi"]["target_high"]
-    assert by_key["bmi"]["target_low"] == pytest.approx(22.9, abs=0.1)
-    # FFMI は範囲 (体脂肪率の許容幅から)。体脂肪13%→FFMI高、17%→FFMI低
+    # BMI 範囲 (除脂肪量一定で体脂肪率±2 → 体重スイング)。FFM=70*0.85=59.5
+    ffm = 70.0 * 0.85
+    bmi_lo = (ffm / (1 - 13 / 100)) / (1.75 ** 2)
+    bmi_hi = (ffm / (1 - 17 / 100)) / (1.75 ** 2)
+    assert by_key["bmi"]["target_low"] == pytest.approx(bmi_lo, abs=0.1)
+    assert by_key["bmi"]["target_high"] == pytest.approx(bmi_hi, abs=0.1)
+    assert by_key["bmi"]["target_low"] < by_key["bmi"]["target_high"]
+    # FFMI 範囲 (目標体重固定で体脂肪率±2)。体脂肪13%→FFMI高、17%→FFMI低
     ffmi_hi = (70.0 * (1 - 13 / 100)) / (1.75 ** 2)
     ffmi_lo = (70.0 * (1 - 17 / 100)) / (1.75 ** 2)
     assert by_key["ffmi"]["target_low"] == pytest.approx(ffmi_lo, abs=0.1)

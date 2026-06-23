@@ -363,6 +363,41 @@ def predict_decay_curve(
     return points
 
 
+def predict_residual_decay_curve(
+    *,
+    residual_mg: float,
+    start_time: datetime,
+    bedtime: datetime,
+    body_weight_kg: float,
+    half_life_h: float = 5.0,
+    vd_l_per_kg: float = 0.5,
+    step_min: int = 30,
+) -> list[dict[str, float | str]]:
+    """既に体内にある残量 residual_mg が start_time→bedtime に純粋消失していくカーブ。
+
+    吸収相は無し (既に吸収済み前提) で 1 次消失のみ。新規摂取が非推奨でも
+    「今の体内残量がどう抜けていくか」をグラフに出すために使う。
+    """
+    if residual_mg <= 0 or bedtime <= start_time:
+        return []
+    vd = vd_l_per_kg * body_weight_kg
+    points: list[dict[str, float | str]] = []
+    cur = start_time
+    while cur <= bedtime:
+        h = (cur - start_time).total_seconds() / 3600
+        residual = residual_mg * (0.5 ** (h / half_life_h))
+        conc = residual / vd if vd > 0 else 0.0
+        points.append(
+            {
+                "time": cur.strftime("%H:%M"),
+                "residual_mg": round(residual, 1),
+                "concentration_mg_per_l": round(conc, 3),
+            }
+        )
+        cur = cur + timedelta(minutes=step_min)
+    return points
+
+
 def _parse_hhmm(s: str) -> time:
     h, _, m = s.partition(":")
     return time(int(h), int(m))

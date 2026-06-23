@@ -14,6 +14,7 @@ from app.scoring.caffeine import (
     half_life_decay,
     max_dose_for_bedtime,
     predict_decay_curve,
+    predict_residual_decay_curve,
     recommend_caffeine,
 )
 
@@ -237,3 +238,28 @@ def test_bedtime_crosses_midnight():
     )
     # 18:00 → 翌 00:30 = 6.5h あり
     assert rec.hours_until_bedtime == pytest.approx(6.5, abs=0.05)
+
+
+def test_residual_decay_curve_halves_at_half_life():
+    start = datetime(2026, 6, 23, 12, 0, tzinfo=JST)
+    bed = datetime(2026, 6, 24, 0, 0, tzinfo=JST)
+    curve = predict_residual_decay_curve(
+        residual_mg=40.0, start_time=start, bedtime=bed,
+        body_weight_kg=70.0, half_life_h=5.0, vd_l_per_kg=0.5, step_min=30,
+    )
+    assert curve, "残量>0 ならカーブが出る"
+    assert curve[0]["residual_mg"] == pytest.approx(40.0, abs=0.1)  # 開始は残量そのもの
+    # 5時間後 (= half_life) はおよそ半分
+    five_h = next(p for p in curve if p["time"] == "17:00")
+    assert five_h["residual_mg"] == pytest.approx(20.0, abs=0.5)
+    # 単調減少
+    res = [p["residual_mg"] for p in curve]
+    assert all(res[i] >= res[i + 1] for i in range(len(res) - 1))
+
+
+def test_residual_decay_curve_empty_when_no_residual():
+    start = datetime(2026, 6, 23, 12, 0, tzinfo=JST)
+    bed = datetime(2026, 6, 24, 0, 0, tzinfo=JST)
+    assert predict_residual_decay_curve(
+        residual_mg=0.0, start_time=start, bedtime=bed, body_weight_kg=70.0,
+    ) == []

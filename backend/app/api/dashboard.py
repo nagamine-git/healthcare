@@ -222,7 +222,6 @@ async def today(
         alerts_raw = evaluate_alerts(
             session,
             d,
-            pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
             target_weight_kg=_prof.target_weight_kg,
             weight_lower_kg=_bmi_floor,
         )
@@ -534,6 +533,7 @@ def _build_caffeine(
     from app.config import get_settings
     from app.scoring.caffeine import (
         predict_decay_curve,
+        predict_residual_decay_curve,
         recommend_caffeine,
     )
 
@@ -599,8 +599,11 @@ def _build_caffeine(
     if bedtime_dt <= now_jst:
         bedtime_dt = bedtime_dt + timedelta(days=1)
 
-    # 推奨量を「今」飲んだ場合の血中濃度カーブ (UI のグラフ用)
+    # UI のグラフ用カーブ。
+    # - 推奨量がある: 「今その量を飲んだ場合」の血中濃度カーブ。
+    # - 非推奨だが残量あり: 「今の体内残量がどう抜けるか」の純粋減衰カーブ (グラフを消さない)。
     decay_curve: list[dict[str, float | str]] = []
+    decay_curve_basis: str | None = None
     if recommended_mg:
         decay_curve = predict_decay_curve(
             dose_mg=float(recommended_mg),
@@ -611,6 +614,17 @@ def _build_caffeine(
             vd_l_per_kg=settings.caffeine_vd_l_per_kg,
             absorption_half_life_h=settings.caffeine_absorption_half_life_h,
         )
+        decay_curve_basis = "recommended"
+    elif existing_residual > 0:
+        decay_curve = predict_residual_decay_curve(
+            residual_mg=existing_residual,
+            start_time=now_jst,
+            bedtime=bedtime_dt,
+            body_weight_kg=weight_kg,
+            half_life_h=half_life_h,
+            vd_l_per_kg=settings.caffeine_vd_l_per_kg,
+        )
+        decay_curve_basis = "existing"
 
     # 既存残量が反映された coffee_g とサマリ
     instant_coffee_g = (
@@ -646,6 +660,7 @@ def _build_caffeine(
         "existing_residual_mg": round(existing_residual, 1),
         "reason": final_reason,
         "decay_curve": decay_curve,
+        "decay_curve_basis": decay_curve_basis,
         "disclaimer": (
             "1コンパートメント・1次吸収/消失 (Bateman) モデルによる推定。算術的には 0.1mg "
             "精度ですが、律速は消失半減期で、個人差 (CYP1A2 遺伝多型・喫煙↓・経口避妊薬↑) "

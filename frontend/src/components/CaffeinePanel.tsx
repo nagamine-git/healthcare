@@ -101,7 +101,7 @@ export function CaffeinePanel({ caffeine }: Props) {
       <ParamGrid caffeine={caffeine} />
 
       {caffeine.decay_curve && caffeine.decay_curve.length > 0 && (
-        <DecayCurve curve={caffeine.decay_curve} />
+        <DecayCurve curve={caffeine.decay_curve} basis={caffeine.decay_curve_basis} />
       )}
 
       {/* 記録ボタン群 */}
@@ -296,14 +296,20 @@ function Param({
 
 function DecayCurve({
   curve,
+  basis,
 }: {
   curve: NonNullable<Caffeine["decay_curve"]>;
+  basis?: "recommended" | "existing" | null;
 }) {
   const maxConc = Math.max(...curve.map((p) => p.concentration_mg_per_l), 1);
+  const title =
+    basis === "existing"
+      ? "現在の体内残量の減衰予測 (mg/L)"
+      : "就寝までの血中濃度予測 (mg/L)";
   return (
     <div className="mt-4">
       <div className="mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-wider text-slate-500">
-        <span>就寝までの血中濃度予測 (mg/L)</span>
+        <span>{title}</span>
         <span className="normal-case text-slate-600">
           安全閾値 0.5 mg/L を点線で表示
         </span>

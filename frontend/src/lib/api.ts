@@ -232,6 +232,7 @@ export type Caffeine = {
   blood_concentration_at_bedtime_mg_per_l?: number;
   existing_residual_mg?: number;
   decay_curve?: CaffeineDecayPoint[];
+  decay_curve_basis?: "recommended" | "existing" | null;
   disclaimer?: string;
 };
 

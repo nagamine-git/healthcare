@@ -134,11 +134,13 @@ def build_distribution(
     年齢/性別/身長が揃い、性別が基準値を持つときのみ evaluable=True (percentile を出す)。
     値そのものは evaluable に関わらず算出可能なら返す。VO2max は Garmin 実測の最新値。
 
-    目標は「設定した目標体重を基準に固定し、体脂肪率を許容幅で振る」モデルで表す:
-    - BMI: 体重だけで決まるので目標体重から 1 点 (low==high)。
-    - 体脂肪率: 目標 ± 許容幅 (範囲)。
-    - FFMI: 目標体重を保ったまま体脂肪率が許容幅で動くと除脂肪量→FFMI が動く、その範囲。
-      (体脂肪率が低い=除脂肪量が多い=FFMI が高い)
+    目標は 3 指標とも範囲 (帯) で表す。体脂肪率の許容幅 (tol) を共通の源にし、各指標を
+    その指標にとって自然な変動で帯化する:
+    - 体脂肪率: 目標 ± tol。
+    - BMI: 「除脂肪量 (筋肉目標) 一定のまま体脂肪率が ±tol 振れたら体重がどう動くか」の体重
+      スイングから BMI 範囲を出す (BMI は体重だけで決まるため)。
+    - FFMI: 目標体重を保ったまま体脂肪率が ±tol で動くと除脂肪量→FFMI が動く、その範囲。
+    tol=0 なら各範囲は 1 点に縮退する。
     """
     evaluable = bool(
         age is not None and sex in NORMS["bmi"] and height_cm and height_cm > 0
@@ -148,13 +150,25 @@ def build_distribution(
 
     tol = body_fat_tolerance_pct or 0.0
     h = height_cm / 100.0 if height_cm and height_cm > 0 else None
-
-    # BMI: 目標体重で 1 点
-    bmi_t = bmi(target_weight_kg, height_cm)
+    target_ffm = (
+        target_weight_kg * (1.0 - target_body_fat_pct / 100.0)
+        if target_weight_kg and target_body_fat_pct is not None
+        else None
+    )
 
     # 体脂肪率の目標範囲
     bf_lo = target_body_fat_pct - tol if target_body_fat_pct is not None else None
     bf_hi = target_body_fat_pct + tol if target_body_fat_pct is not None else None
+
+    # BMI: 除脂肪量一定で体脂肪率 bf のときの体重 → BMI (体脂肪高→体重大→BMI大)
+    def _bmi_at_bf(bf: float | None) -> float | None:
+        if target_ffm is None or bf is None or bf >= 100 or height_cm is None:
+            return None
+        w = target_ffm / (1.0 - bf / 100.0)
+        return bmi(w, height_cm)
+
+    bmi_lo = _bmi_at_bf(bf_lo)  # 体脂肪率が低い → 体重小 → BMI 低
+    bmi_hi = _bmi_at_bf(bf_hi)  # 体脂肪率が高い → 体重大 → BMI 高
 
     # FFMI: 目標体重を固定し、体脂肪率 bf のときの除脂肪量 → FFMI
     def _ffmi_at_bf(bf: float | None) -> float | None:
@@ -167,7 +181,7 @@ def build_distribution(
     ffmi_hi = _ffmi_at_bf(bf_lo)  # 体脂肪率が低い → FFMI 高
 
     metrics = [
-        _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_t, bmi_t, evaluable),
+        _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_lo, bmi_hi, evaluable),
         _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, bf_lo, bf_hi, evaluable),
         _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, ffmi_lo, ffmi_hi, evaluable),
         _metric(
