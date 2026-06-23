@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronDown, Info, Timer, TimerReset } from "lucide-react";
+import { Activity, ChevronDown, History, Info, Pencil, Timer, TimerReset, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, type FitnessTestEntry } from "../lib/api";
 import { MeasureModal } from "./measure/MeasureModal";
@@ -101,6 +101,7 @@ function TestCard({
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
   const [measuring, setMeasuring] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const submit = () => {
     if (d.has_lr) {
@@ -242,6 +243,20 @@ function TestCard({
         </button>
       </div>
 
+      {/* 履歴 (閲覧・編集・削除) */}
+      <div className="border-t border-slate-800/60 px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => setShowHistory((s) => !s)}
+          className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300"
+        >
+          <History size={12} />
+          履歴
+          <ChevronDown size={13} className={showHistory ? "rotate-180 transition" : "transition"} />
+        </button>
+      </div>
+      {showHistory && <HistorySection testKey={d.key} unit={d.unit} editable={!d.has_lr} />}
+
       {measuring && d.measure_mode && (
         <MeasureModal
           mode={d.measure_mode}
@@ -254,6 +269,121 @@ function TestCard({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * 1テストの過去記録一覧。各行を編集 (UPSERT で同日上書き) / 削除できる。
+ * 握力など左右別 (editable=false) は値の構造が違うため編集は出さず削除のみ。
+ */
+function HistorySection({
+  testKey,
+  unit,
+  editable,
+}: {
+  testKey: string;
+  unit: string;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["fitness-history", testKey],
+    queryFn: () => api.fitnessHistory(testKey),
+  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["fitness-history", testKey] });
+    qc.invalidateQueries({ queryKey: ["fitness-tests"] });
+    qc.invalidateQueries({ queryKey: ["today"] });
+  };
+  const edit = useMutation({ mutationFn: api.fitnessRecord, onSuccess: invalidate });
+  const del = useMutation({ mutationFn: api.fitnessDelete, onSuccess: invalidate });
+
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState("");
+
+  const items = q.data?.items ?? [];
+  if (q.isLoading) return <div className="px-3 py-2 text-[11px] text-slate-500">読み込み中…</div>;
+  if (items.length === 0)
+    return <div className="px-3 py-2 text-[11px] text-slate-600">まだ記録がありません。</div>;
+
+  return (
+    <ul className="divide-y divide-slate-800/40 px-3 pb-2">
+      {items.map((it) => {
+        const isEditing = editId === it.id;
+        return (
+          <li key={it.id} className="flex items-center gap-2 py-1.5 text-[12px]">
+            <span className="w-20 shrink-0 tabular-nums text-slate-500">{it.performed_on}</span>
+            {isEditing ? (
+              <>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={editVal}
+                  onChange={(e) => setEditVal(e.target.value)}
+                  className="w-20 rounded bg-slate-900/60 px-2 py-1 tabular-nums text-slate-100 outline-none ring-1 ring-slate-700"
+                />
+                <button
+                  type="button"
+                  disabled={edit.isPending}
+                  onClick={() => {
+                    const v = parseFloat(editVal);
+                    if (Number.isNaN(v)) return;
+                    edit.mutate({ test_key: testKey, value: v, performed_on: it.performed_on });
+                    setEditId(null);
+                  }}
+                  className="rounded bg-sky-600/80 px-2 py-1 text-[11px] text-white hover:bg-sky-600 disabled:opacity-50"
+                >
+                  保存
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditId(null)}
+                  className="px-1 text-[11px] text-slate-500 hover:text-slate-300"
+                >
+                  取消
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 tabular-nums text-slate-100">
+                  {it.value}
+                  <span className="ml-0.5 text-[10px] text-slate-500">{unit}</span>
+                  {it.detail && (it.detail.left != null || it.detail.right != null) && (
+                    <span className="ml-1.5 text-[10px] text-slate-500">
+                      (左{it.detail.left ?? "-"}/右{it.detail.right ?? "-"})
+                    </span>
+                  )}
+                </span>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditId(it.id);
+                      setEditVal(String(it.value));
+                    }}
+                    className="rounded p-1 text-slate-500 hover:text-sky-300"
+                    aria-label="編集"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={del.isPending}
+                  onClick={() => {
+                    if (window.confirm(`${it.performed_on} の記録を削除しますか?`)) del.mutate(it.id);
+                  }}
+                  className="rounded p-1 text-slate-500 hover:text-rose-400 disabled:opacity-50"
+                  aria-label="削除"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

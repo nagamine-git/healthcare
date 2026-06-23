@@ -39,6 +39,27 @@ def test_record_and_reflect(app_client):
     assert pu["due"]["is_due"] is False  # 直後なので next 推奨はまだ
 
 
+def test_history_includes_id_and_delete(app_client):
+    app_client.post(
+        "/api/fitness/results",
+        json={"test_key": "push_up", "value": 30, "performed_on": "2026-06-01"},
+    )
+    app_client.post(
+        "/api/fitness/results",
+        json={"test_key": "push_up", "value": 35, "performed_on": "2026-06-08"},
+    )
+    hist = app_client.get("/api/fitness/history/push_up").json()
+    assert len(hist["items"]) == 2
+    assert all("id" in it for it in hist["items"])
+    target = hist["items"][0]["id"]
+
+    r = app_client.delete(f"/api/fitness/results/{target}")
+    assert r.status_code == 200
+    hist2 = app_client.get("/api/fitness/history/push_up").json()
+    assert len(hist2["items"]) == 1
+    assert target not in {it["id"] for it in hist2["items"]}
+
+
 def test_measure_mode_exposed(app_client):
     data = app_client.get("/api/fitness/tests").json()
     modes = {t["definition"]["key"]: t["definition"]["measure_mode"] for t in data["tests"]}

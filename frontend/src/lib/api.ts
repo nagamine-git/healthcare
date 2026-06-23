@@ -1110,6 +1110,7 @@ export type FitnessOverview = {
 export type FitnessHistory = {
   test_key: string;
   items: Array<{
+    id: number;
     performed_on: string;
     value: number;
     detail: { left?: number | null; right?: number | null } | null;
@@ -1123,6 +1124,21 @@ export type FitnessResultInput = {
   right?: number;
   performed_on?: string;
   note?: string;
+};
+export type PhysiqueDistributionMetric = {
+  key: string;
+  label: string;
+  unit: string;
+  value: number | null;
+  mean: number | null;
+  sd: number | null;
+  percentile: number | null;
+  source: string;
+  target: number | null;
+};
+export type PhysiqueDistribution = {
+  evaluable: boolean;
+  metrics: PhysiqueDistributionMetric[];
 };
 
 export const api = {
@@ -1200,6 +1216,9 @@ export const api = {
     ),
   fitnessHistory: (testKey: string, limit = 24) =>
     request<FitnessHistory>(`/api/fitness/history/${testKey}?limit=${limit}`),
+  fitnessDelete: (id: number) =>
+    request<{ deleted: number }>(`/api/fitness/results/${id}`, { method: "DELETE" }),
+  physiqueDistribution: () => request<PhysiqueDistribution>("/api/physique/distribution"),
   foods: () => request<{ items: FoodItemDto[] }>("/api/foods"),
   foodEstimate: (name: string, qty_text?: string) =>
     request<FoodEstimate>("/api/foods/estimate", {
