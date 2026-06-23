@@ -22,7 +22,8 @@ export function DistributionPanel() {
         <h3 className="text-sm tracking-wide text-slate-100">母集団での現在地</h3>
       </div>
       <p className="text-[11px] leading-relaxed text-slate-500">
-        日本人 同年代・同性の分布に対する自分の位置。BMI に加え、BMI では見えない筋肉質さ (FFMI) も。
+        日本人 同年代・同性の分布に対する自分の位置。BMI に加え、筋肉質さ (FFMI) と
+        最強の予後指標である心肺フィットネス (VO2max) も。
         {!data.evaluable && " 設定で生年月日・性別・身長を入れると percentile が出ます。"}
       </p>
       <div className="space-y-3">

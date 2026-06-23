@@ -55,15 +55,18 @@ def test_ffmi_calc():
 def test_build_distribution_evaluable():
     d = build_distribution(
         weight_kg=72.0, body_fat_pct=20.0, age=35, sex="male", height_cm=175.0,
-        target_weight_kg=70.0, target_body_fat_pct=15.0,
+        target_weight_kg=70.0, target_body_fat_pct=15.0, vo2max=48.0,
     )
     assert d["evaluable"] is True
     by_key = {m["key"]: m for m in d["metrics"]}
-    assert {"bmi", "body_fat", "ffmi"} == set(by_key)
+    assert {"bmi", "body_fat", "ffmi", "vo2max"} == set(by_key)
     assert by_key["bmi"]["value"] == pytest.approx(23.5, abs=0.1)
     assert by_key["bmi"]["percentile"] is not None
     assert by_key["bmi"]["target"] is not None  # 目標体重→目標BMI
     assert by_key["ffmi"]["value"] == pytest.approx(18.8, abs=0.1)
+    # VO2max=48 は 30-49男性 平均41 を上回る → percentile > 50
+    assert by_key["vo2max"]["value"] == pytest.approx(48.0, abs=0.1)
+    assert by_key["vo2max"]["percentile"] > 50
 
 
 def test_build_distribution_missing_body_fat():

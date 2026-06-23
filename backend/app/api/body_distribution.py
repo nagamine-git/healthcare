@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.db import session_scope
-from app.models import WeightSample
+from app.models import DailySummary, WeightSample
 from app.scoring.population_norms import build_distribution
 from app.scoring.profile import resolve_profile
 
@@ -31,6 +31,17 @@ async def get_physique_distribution() -> dict[str, Any]:
         )
         weight_kg = row.weight_kg if row else None
         body_fat_pct = row.body_fat_pct if row else None
+        # 心肺: 最新の非null VO2max (Garmin 実測)。
+        vo2max = (
+            session.execute(
+                select(DailySummary.vo2max)
+                .where(DailySummary.vo2max.is_not(None))
+                .order_by(DailySummary.date.desc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
     return build_distribution(
         weight_kg=weight_kg,
         body_fat_pct=body_fat_pct,
@@ -39,4 +50,5 @@ async def get_physique_distribution() -> dict[str, Any]:
         height_cm=prof.height_cm,
         target_weight_kg=prof.target_weight_kg,
         target_body_fat_pct=prof.target_body_fat_pct,
+        vo2max=vo2max,
     )

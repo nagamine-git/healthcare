@@ -25,6 +25,6 @@ def test_distribution_shape(app_client):
     data = r.json()
     assert "evaluable" in data
     keys = {m["key"] for m in data["metrics"]}
-    assert keys == {"bmi", "body_fat", "ffmi"}
+    assert keys == {"bmi", "body_fat", "ffmi", "vo2max"}
     for m in data["metrics"]:
         assert {"value", "mean", "sd", "percentile", "source", "target", "label", "unit"} <= set(m)

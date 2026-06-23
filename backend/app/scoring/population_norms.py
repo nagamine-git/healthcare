@@ -32,12 +32,17 @@ NORMS: dict[str, dict[str, list[tuple[int, int, float, float]]]] = {
         "male": [(18, 29, 18.9, 1.9), (30, 49, 18.9, 1.9), (50, 69, 18.3, 1.9), (70, 200, 17.6, 1.9)],
         "female": [(18, 29, 14.6, 1.6), (30, 49, 14.6, 1.6), (50, 69, 14.2, 1.6), (70, 200, 13.8, 1.6)],
     },
+    "vo2max": {  # ml/kg/min。ACSM/FRIEND レジストリ等の目安 (高いほど良い)
+        "male": [(18, 29, 46.0, 8.0), (30, 49, 41.0, 8.0), (50, 69, 33.0, 7.0), (70, 200, 27.0, 6.0)],
+        "female": [(18, 29, 37.0, 7.0), (30, 49, 33.0, 7.0), (50, 69, 27.0, 6.0), (70, 200, 22.0, 5.0)],
+    },
 }
 
 SOURCES = {
     "bmi": "国民健康・栄養調査",
     "body_fat": "文献の目安",
     "ffmi": "文献の目安",
+    "vo2max": "ACSM/FRIENDの目安",
 }
 
 
@@ -111,11 +116,12 @@ def build_distribution(
     height_cm: float | None,
     target_weight_kg: float | None = None,
     target_body_fat_pct: float | None = None,
+    vo2max: float | None = None,
 ) -> dict:
-    """体型3指標 (BMI/体脂肪率/FFMI) の値・母集団mean/sd・percentile・目標をまとめる。
+    """体型4指標 (BMI/体脂肪率/FFMI/心肺VO2max) の値・母集団mean/sd・percentile・目標をまとめる。
 
     年齢/性別/身長が揃い、性別が基準値を持つときのみ evaluable=True (percentile を出す)。
-    値そのものは evaluable に関わらず算出可能なら返す。
+    値そのものは evaluable に関わらず算出可能なら返す。VO2max は Garmin 実測の最新値。
     """
     evaluable = bool(
         age is not None and sex in NORMS["bmi"] and height_cm and height_cm > 0
@@ -127,6 +133,7 @@ def build_distribution(
         _metric("bmi", "BMI", "", bmi_v, age, sex, target_bmi, evaluable),
         _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, target_body_fat_pct, evaluable),
         _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, None, evaluable),
+        _metric("vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, evaluable),
     ]
     return {"evaluable": evaluable, "metrics": metrics}
 
