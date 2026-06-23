@@ -56,6 +56,8 @@ def smoothed_body(
     half_life_days: float = 14.0,
     window_days: int = 60,
     outlier_kg: float = 8.0,
+    outlier_bf_pct: float = 10.0,
+    outlier_muscle_kg: float = 8.0,
 ) -> BodyEstimate:
     """直近 window_days の体組成を時間加重指数平滑したトレンドを返す。"""
     if target is not None:
@@ -78,8 +80,14 @@ def smoothed_body(
         return BodyEstimate(None, None, None, None, None, None, 0)
 
     ref_ts, raw_w, raw_bf, _raw_m = rows[0]
-    # 誤測ガード: 体重の中央値から大きく外れる行は除外
+    # 誤測ガード: 各指標の中央値から大きく外れる値は除外。体重だけでなく
+    # 体脂肪率・筋量も BIA の測定誤差 (体脂肪率は ±2-4% 揺れる) で外れ値が出るため、
+    # 体重が正常な行でも bf/筋量が極端ならその値だけ平均から外す。
     med_w = _median([float(r[1]) for r in rows])
+    _bf_vals = [float(r[2]) for r in rows if r[2] is not None]
+    _m_vals = [float(r[3]) for r in rows if r[3] is not None]
+    med_bf = _median(_bf_vals) if _bf_vals else None
+    med_m = _median(_m_vals) if _m_vals else None
 
     def decay(ts: datetime) -> float:
         days = (ref_ts - ts).total_seconds() / 86400.0
@@ -93,9 +101,9 @@ def smoothed_body(
             continue
         wt = decay(ts)
         wsamp.append((float(w), wt))
-        if bf is not None:
+        if bf is not None and (med_bf is None or abs(float(bf) - med_bf) <= outlier_bf_pct):
             bfsamp.append((float(bf), wt))
-        if m is not None:
+        if m is not None and (med_m is None or abs(float(m) - med_m) <= outlier_muscle_kg):
             msamp.append((float(m), wt))
 
     return BodyEstimate(
