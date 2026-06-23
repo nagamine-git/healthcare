@@ -32,6 +32,16 @@ SECTION_FIELDS = ("read", "explained")
 _FIELD_COLUMNS = {"read": "read_at", "explained": "explained_at"}
 _FIELD_LABELS = {"read": "読了", "explained": "説明できた", "rustlings": "Rustlings"}
 
+# --- 理解度チェックの得点制 ---
+# 難しい形式ほど高得点。閾値到達 + フリーワード正解1問以上で章クリア。
+QUIZ_TARGET = 100  # 章クリアに必要な累計得点
+FW_FULL_MIN = 80  # フリーワード「正解」とみなす理解度
+FW_PARTIAL_MIN = 56  # 部分点を与える下限
+FW_FULL = 50  # フリーワード正解の得点 (超高得点)
+FW_PARTIAL = 15  # フリーワード部分点
+CHOICE4 = 20  # 4択正解の得点 (中)
+CHOICE2 = 10  # 2択正解の得点 (少)
+
 
 class Chapter(TypedDict):
     chapter: int
@@ -237,6 +247,15 @@ def set_chapter_rustlings(
     return state()
 
 
+def _chapter_quiz_map() -> dict[int, tuple[int, bool]]:
+    """章 → (累計得点, フリーワード正解済みか)。"""
+    from app.models import LearningChapterProgress
+
+    with session_scope() as session:
+        rows = session.execute(select(LearningChapterProgress)).scalars().all()
+        return {r.chapter: ((r.quiz_points or 0), r.free_word_passed_at is not None) for r in rows}
+
+
 def _section_complete(checks: dict[str, datetime | None] | None) -> bool:
     return bool(checks and all(checks.get(f) for f in SECTION_FIELDS))
 
@@ -295,6 +314,81 @@ def mark_chapter_explained(chapter: int) -> dict[str, Any]:
     title = next(c["title"] for c in CURRICULUM if c["chapter"] == chapter)
     upsert_today_entry(f"The Book ch{chapter} {title}: 口頭試問 合格")
     return state()
+
+
+def _points_for(*, free_understanding: int | None, choice_correct: bool | None, fmt: str | None) -> int:
+    """1 回の回答で得る得点を算出する。"""
+    if free_understanding is not None:
+        if free_understanding >= FW_FULL_MIN:
+            return FW_FULL
+        if free_understanding >= FW_PARTIAL_MIN:
+            return FW_PARTIAL
+        return 0
+    if choice_correct:
+        return CHOICE4 if fmt == "choice4" else CHOICE2
+    return 0
+
+
+def award_quiz_points(
+    chapter: int,
+    *,
+    free_understanding: int | None = None,
+    choice_correct: bool | None = None,
+    fmt: str | None = None,
+) -> dict[str, Any]:
+    """理解度チェック 1 回分の得点を加算し、クリア条件を判定する。
+
+    - free_understanding を渡すとフリーワード採点 (>=80 で品質フロアを満たす)。
+    - choice_correct/fmt を渡すと選択式採点 (choice4/choice2)。
+    クリア (points>=QUIZ_TARGET かつ free_word_passed) になったら mark_chapter_explained を呼ぶ。
+
+    Returns:
+        ``{quiz_points, target, free_word_passed, gained, cleared, state?}``
+    """
+    from app.models import LearningChapterProgress
+
+    if chapter not in SECTIONS:
+        raise ValueError(f"unknown chapter: {chapter}")
+
+    gained = _points_for(
+        free_understanding=free_understanding, choice_correct=choice_correct, fmt=fmt
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    with session_scope() as session:
+        row = session.get(LearningChapterProgress, chapter)
+        if row is None:
+            row = LearningChapterProgress(chapter=chapter)
+            session.add(row)
+        row.quiz_points = (row.quiz_points or 0) + gained
+        if free_understanding is not None and free_understanding >= FW_FULL_MIN and row.free_word_passed_at is None:
+            row.free_word_passed_at = now
+        points = row.quiz_points
+        free_passed = row.free_word_passed_at is not None
+
+    cleared = points >= QUIZ_TARGET and free_passed
+    out: dict[str, Any] = {
+        "quiz_points": points,
+        "target": QUIZ_TARGET,
+        "free_word_passed": free_passed,
+        "gained": gained,
+        "cleared": cleared,
+    }
+    if cleared:
+        # 既にクリア済みでも mark_chapter_explained は冪等 (explained_at は None の節だけ埋める)
+        out["state"] = mark_chapter_explained(chapter)
+    return out
+
+
+def chapter_quiz_progress(chapter: int) -> dict[str, Any]:
+    """章の現在の得点状況を返す (フロントの再開表示用)。"""
+    from app.models import LearningChapterProgress
+
+    with session_scope() as session:
+        row = session.get(LearningChapterProgress, chapter)
+        points = (row.quiz_points or 0) if row else 0
+        free_passed = bool(row and row.free_word_passed_at is not None)
+    return {"quiz_points": points, "target": QUIZ_TARGET, "free_word_passed": free_passed}
 
 
 def _plan_meta() -> tuple[date_type | None, date_type | None]:
@@ -532,6 +626,7 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
     d = today or app_today()
     sec_rows = _section_rows()
     rustlings = _chapter_rustlings()
+    quiz_pts = _chapter_quiz_map()
 
     chapters: list[dict[str, Any]] = []
     current: int | None = None
@@ -587,6 +682,9 @@ def state(*, today: date_type | None = None) -> dict[str, Any]:
                 "sections": secs,
                 "section_done": sum(1 for s in secs if s["done"]),
                 "section_total": len(secs),
+                "quiz_points": quiz_pts.get(ch, (0, False))[0],
+                "quiz_target": QUIZ_TARGET,
+                "free_word_passed": quiz_pts.get(ch, (0, False))[1],
             }
         )
 
