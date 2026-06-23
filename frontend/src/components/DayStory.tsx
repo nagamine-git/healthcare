@@ -4,6 +4,7 @@ import { Armchair, Check, Footprints, Activity, Moon, Flame, Coffee, Droplet } f
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
+import { DayDigest } from "./DayDigest";
 
 type Win = "day" | "24h";
 
@@ -29,7 +30,8 @@ const BODY_Y0 = 50; // 身体反応トラック上端
 const BODY_H = 64;
 const BODY_Y1 = BODY_Y0 + BODY_H;
 const AXIS_Y = BODY_Y1 + 14;
-const TOTAL_H = AXIS_Y + 4;
+const SCHED_Y = AXIS_Y + 11; // 今夜の理想スケジュールのアイコン行 (軸の下)
+const TOTAL_H = SCHED_Y + 5;
 const bodyY = (v: number) => BODY_Y1 - (Math.max(0, Math.min(100, v)) / 100) * BODY_H;
 
 function colorFor(seg: DayStorySegment): string {
@@ -114,6 +116,25 @@ export function DayStory() {
   }
 
   const nowH = d.now_h;
+
+  // 今夜の理想スケジュール (夕食/入浴/就寝)。各イベントは推奨「範囲」を持つ。x昇順・未来のみ。
+  const SCHED_ICON: Record<string, string> = {
+    dinner: "🍽", dinner_cutoff: "🍽", bath: "🛁", bedtime: "🛌", wake: "☀",
+    caffeine_cutoff: "☕", dim_light: "🌙",
+  };
+  const SCHED_FILL: Record<string, string> = {
+    dinner: "#fb923c", bath: "#22d3ee", bedtime: "#818cf8", wake: "#fbbf24",
+    caffeine_cutoff: "#f59e0b", dim_light: "#6366f1",
+  };
+  const schedMarks = (t?.schedule ?? [])
+    .map((sc) => ({
+      key: sc.key, icon: SCHED_ICON[sc.key] ?? "•", fill: SCHED_FILL[sc.key] ?? "#a5b4fc",
+      label: sc.label, time: sc.time, h: sc.h, x: X(sc.h),
+      xs: X(sc.start_h), xe: X(sc.end_h), endH: sc.end_h,
+    }))
+    .filter((p) => nowH == null || p.endH >= nowH - 0.3)
+    .sort((a, b) => a.x - b.x);
+
   const bb = t?.body_battery ?? [];
   const stress = t?.stress ?? [];
   const bbArea =
@@ -165,6 +186,9 @@ export function DayStory() {
         <Stat icon={Coffee} label="カフェイン" value={`${d.stats.caffeine_mg}mg`} />
         <Stat icon={Droplet} label="水分" value={t?.water?.intake_total_ml != null ? `${(t.water.intake_total_ml / 1000).toFixed(1)}L` : "--"} />
       </div>
+
+      {/* 今日のハイライト (時系列ダイジェスト): 何時に何をしたかをグラフと同じ軸で */}
+      <DayDigest segments={d.segments} t={t} originJst={d.origin_jst} nowH={d.now_h} />
 
       {/* 拡大すると横スクロール。メイン+カフェイン+水分を1つの容器に入れ、
           同じ幅・同じグリッド・同じx軸でスクロールが連動する */}
@@ -280,6 +304,19 @@ export function DayStory() {
             <title>{`メラトニン上昇〜就寝の窓 (この時間に光を抑えると寝つきやすい)`}</title>
           </rect>
         )}
+        {/* 今夜の理想スケジュール: 推奨「範囲」を帯で表現 + 端の点線 + アイコン */}
+        {schedMarks.map((m, i) => (
+          <g key={`sc${i}`}>
+            <rect x={m.xs} y={ACT_Y} width={Math.max(2, m.xe - m.xs)} height={BODY_Y1 - ACT_Y}
+                  fill={m.fill} opacity={0.1} rx={2} />
+            <line x1={m.xs} y1={ACT_Y} x2={m.xs} y2={AXIS_Y - 2} stroke={m.fill} strokeWidth={0.8}
+                  strokeDasharray="2 3" opacity={0.5} />
+            <line x1={m.xe} y1={ACT_Y} x2={m.xe} y2={AXIS_Y - 2} stroke={m.fill} strokeWidth={0.8}
+                  strokeDasharray="2 3" opacity={0.5} />
+            <text x={(m.xs + m.xe) / 2} y={SCHED_Y} fontSize={11} textAnchor="middle">{m.icon}</text>
+            <title>{`今夜の予定: ${m.label} ${m.time}`}</title>
+          </g>
+        ))}
         {/* 集中ピーク窓: 活動バー上端に琥珀の点線 */}
         {(t?.focus_windows ?? []).map((f, i) => (
           <rect key={`fw${i}`} x={X(f.start_h)} y={ACT_Y - 0.5}
@@ -330,6 +367,18 @@ export function DayStory() {
                 textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
         ))}
         </svg>
+
+        {/* 今夜の理想スケジュール凡例 (時刻は重ならないようここで読みやすく) */}
+        {schedMarks.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 px-1 text-[10px] text-indigo-300/80">
+            <span className="text-slate-500">今夜の予定</span>
+            {schedMarks.map((m, i) => (
+              <span key={i} className="tabular-nums">
+                {m.icon} {m.label} <b className="text-indigo-200">{m.time}</b>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* 心拍・運動レーン (心臓と身体の負荷を別枠で。運動かストレスか見分けやすく) */}
         {t && (t.heart_rate.length > 1 || (t.steps_binned?.length ?? 0) > 0) && (

@@ -315,12 +315,57 @@ def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
     except Exception:
         pass
 
-    # --- 就寝/メラトニン窓 (メラトニン上昇 ≈ 就寝2h前 〜 就寝) ---
+    # --- 今夜の理想スケジュール (夕食→入浴→就寝→起床) を未来ゾーンにマーカー化 ---
+    # HH:MM だけだと日跨ぎ (00:24 など) で位置がズレるので、夜の連続性を保って
+    # datetime 化 (18時より前の時刻は翌日扱い) → 同一時間軸の offset に。
     try:
         plan = compute_tonight_plan(target)
-        bed = _hhmm_to_off(plan["bedtime"], origin_utc, off)
-        if bed is not None:
-            out["sleep_window"] = {"melatonin_h": max(0.0, bed - 2.0), "bedtime_h": bed}
+        evening = datetime(target.year, target.month, target.day, 18, 0, tzinfo=JST)
+
+        def ev_off(hm: str) -> float:
+            hh, _, mm = hm.partition(":")
+            dt = datetime(target.year, target.month, target.day, int(hh), int(mm), tzinfo=JST)
+            if dt < evening:  # 深夜・翌朝 → 翌日
+                dt += timedelta(days=1)
+            return (dt.astimezone(UTC).replace(tzinfo=None) - origin_utc).total_seconds() / 3600
+
+        w = plan.get("windows", {})
+        # (key, label, 表示時刻, 範囲start, 範囲end)。夕食は食べ始め–食べ終わり、他は推奨範囲。
+        items: list[tuple] = []
+        if plan.get("dinner_start") and plan.get("dinner_end"):
+            items.append(("dinner", "夕食", f"{plan['dinner_start']}–{plan['dinner_end']}",
+                          plan["dinner_start"], plan["dinner_end"]))
+        if plan.get("caffeine_cutoff_time"):
+            cc = plan["caffeine_cutoff_time"]
+            items.append(("caffeine_cutoff", "カフェイン最終", cc, cc, cc))
+        if plan.get("bath_start") and plan.get("bath_end"):
+            items.append(("bath", "入浴(湯船)", f"{plan['bath_start']}–{plan['bath_end']}",
+                          plan["bath_start"], plan["bath_end"]))
+        if plan.get("dim_light_time"):
+            dl = plan["dim_light_time"]
+            items.append(("dim_light", "照明↓", dl, dl, dl))
+        if w.get("bedtime"):
+            items.append(("bedtime", "就寝", plan["bedtime"], w["bedtime"]["start"], w["bedtime"]["end"]))
+        if w.get("wake"):
+            items.append(("wake", "起床", plan["wake"], w["wake"]["start"], w["wake"]["end"]))
+
+        schedule: list[dict[str, Any]] = []
+        for key, label, time_label, s_hm, e_hm in items:
+            s_raw, e_raw = ev_off(s_hm), ev_off(e_hm)
+            if e_raw < 0 or s_raw > SPAN_H:  # 表示窓の外
+                continue
+            sc = round(min(SPAN_H, max(0.0, s_raw)), 2)
+            ec = round(min(SPAN_H, max(0.0, e_raw)), 2)
+            schedule.append({
+                "key": key, "label": label, "time": time_label,
+                "h": round((sc + ec) / 2, 2), "start_h": sc, "end_h": ec,
+            })
+        out["schedule"] = schedule
+
+        bed_raw = ev_off(plan["bedtime"])
+        bed_clamped = min(SPAN_H, max(0.0, bed_raw))
+        out["sleep_window"] = {"melatonin_h": max(0.0, bed_clamped - 2.0), "bedtime_h": bed_clamped,
+                               "bedtime_label": plan.get("bedtime")}
     except Exception:
         pass
 
@@ -671,6 +716,7 @@ async def day_timeline(
         "prediction_text": prediction_text,
         "focus_windows": ctx["focus_windows"],
         "sleep_window": ctx["sleep_window"],
+        "schedule": ctx.get("schedule", []),
         "recovery_bands": ctx["recovery_bands"],
         "water": water,
         "events": _gather_events(start_utc, end_utc, off),

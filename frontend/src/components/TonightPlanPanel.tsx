@@ -1,4 +1,4 @@
-import type { TonightPlan } from "../lib/api";
+import type { SleepWindow, TonightPlan } from "../lib/api";
 
 type Props = {
   plan?: TonightPlan;
@@ -21,15 +21,39 @@ export function TonightPlanPanel({ plan }: Props) {
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Slot label="夕食終了" time={plan.dinner_cutoff} hint="就寝 3h 前" />
-        <Slot label="入浴" time={plan.bath} hint="就寝 90 分前" />
+        <Slot
+          label="夕食"
+          time={plan.dinner_start && plan.dinner_end ? `${plan.dinner_start}–${plan.dinner_end}` : plan.dinner_cutoff}
+          hint="食べ始め–食べ終わり・遅すぎない時間に"
+        />
+        <Slot
+          label="入浴"
+          time={plan.bath_start && plan.bath_end ? `${plan.bath_start}–${plan.bath_end}` : plan.bath}
+          hint={`${plan.bath_method ?? "湯船"}${plan.bath_temp_c ? ` ${plan.bath_temp_c}℃` : ""}・就寝90分前に上がる`}
+        />
         <Slot
           label="就寝"
           time={plan.bedtime}
+          range={plan.windows?.bedtime}
           hint={plan.compressed ? "圧縮中" : "目標"}
           accent={plan.compressed ? "amber" : "emerald"}
         />
-        <Slot label="起床 (明朝)" time={plan.wake} hint="次の日" />
+        <Slot label="起床 (明朝)" time={plan.wake} range={plan.windows?.wake} hint="次の日" />
+      </div>
+      {/* 科学的に大事な timing (厳選) */}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
+        {plan.morning_light && (
+          <span>🌅 朝の光浴 <b className="tabular-nums text-amber-200">{plan.morning_light.start}–{plan.morning_light.end}</b>
+            <span className="text-slate-500"> 起床後すぐ屋外光</span></span>
+        )}
+        {plan.caffeine_cutoff_time && (
+          <span>☕ カフェイン最終 <b className="tabular-nums text-amber-200">{plan.caffeine_cutoff_time}</b>
+            <span className="text-slate-500"> まで</span></span>
+        )}
+        {plan.dim_light_time && (
+          <span>🌙 照明↓ <b className="tabular-nums text-indigo-200">{plan.dim_light_time}</b>
+            <span className="text-slate-500"> 以降</span></span>
+        )}
       </div>
       {plan.notes.length > 0 && (
         <p className="mt-3 text-[10px] leading-relaxed text-amber-300/80">
@@ -43,11 +67,13 @@ export function TonightPlanPanel({ plan }: Props) {
 function Slot({
   label,
   time,
+  range,
   hint,
   accent = "slate",
 }: {
   label: string;
   time: string;
+  range?: SleepWindow;
   hint?: string;
   accent?: "slate" | "emerald" | "amber";
 }) {
@@ -62,7 +88,13 @@ function Slot({
       <div className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </div>
-      <div className={`font-mono text-xl tabular-nums ${color}`}>{time}</div>
+      {/* 推奨絶対時刻 (大) + 推奨範囲 (小) の両方。範囲(–入り)はやや小さく */}
+      <div className={`font-mono tabular-nums ${time.includes("–") ? "text-base" : "text-xl"} ${color}`}>{time}</div>
+      {range && (
+        <div className="font-mono text-[10px] tabular-nums text-slate-400">
+          {range.start}–{range.end}
+        </div>
+      )}
       {hint && <div className="text-[10px] text-slate-500">{hint}</div>}
     </div>
   );

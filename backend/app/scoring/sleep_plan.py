@@ -18,10 +18,42 @@ from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 
+# 概日リズムの前進は行動・光で1日~30-60分が限界 (Burgess/Eastman)。
+# 一気に理想へ飛ばさず、習慣の就寝から最大この分だけ前倒しする。
+MAX_ADVANCE_MIN = 45
+
 
 def _parse_hhmm(s: str) -> time:
     h, _, m = s.partition(":")
     return time(int(h), int(m))
+
+
+def _habitual_phase(target: date_type, *, days: int = 14) -> dict[str, float] | None:
+    """直近の実睡眠から習慣的な就寝時刻(h)・睡眠時間(min)を median 推定。"""
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MetricSample, SleepSession
+
+    lo = datetime.combine(target - timedelta(days=days), datetime.min.time())
+    with session_scope() as ses:
+        durs = sorted(
+            float(t) for (t,) in ses.execute(
+                select(SleepSession.total_min).where(SleepSession.date >= target - timedelta(days=days))
+            ).all() if t
+        )
+        mids = sorted(
+            float(v) for (v,) in ses.execute(
+                select(MetricSample.value).where(
+                    MetricSample.metric_key == "sleep_midpoint_hour", MetricSample.ts >= lo
+                )
+            ).all() if v is not None
+        )
+    if not durs or not mids:
+        return None
+    dur = durs[len(durs) // 2]
+    mid = mids[len(mids) // 2]  # JST hour (早朝は 0-9)
+    return {"midpoint_h": mid, "dur_min": dur, "bedtime_h": mid - dur / 120.0}
 
 
 def compute_tonight_plan(
@@ -51,13 +83,37 @@ def compute_tonight_plan(
     wake_t = _parse_hhmm(prof.wake_time)
     # wake は target + 1 day で作る (今日の夜→明朝)
     wake_dt = datetime.combine(target + timedelta(days=1), wake_t, tz)
-    bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
-    bath_dt = bedtime_dt - timedelta(minutes=s.bath_to_bed_lead_min)
-    dinner_dt = bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min)
+    ideal_bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
 
     notes: list[str] = []
-    compressed = False
-    sleep_min = target_sleep_min
+    # 実睡眠データから「習慣的な就寝」を取り、理想へ一気に飛ばさず realistic に前倒し。
+    # (固定の理想時刻だけ出すと実態と矛盾し、睡眠ドライバー分析とも食い違う)
+    bedtime_dt = ideal_bedtime_dt
+    habitual_bedtime_str: str | None = None
+    phase = _habitual_phase(target)
+    if phase is not None:
+        bh = phase["bedtime_h"]
+        if bh >= 0:  # 翌日未明 (例 01:15)
+            hab_bed = datetime.combine(target + timedelta(days=1), time(0, 0), tz) + timedelta(hours=bh)
+        else:  # 当日の夜 (例 23:00)
+            hab_bed = datetime.combine(target, time(0, 0), tz) + timedelta(hours=24 + bh)
+        habitual_bedtime_str = hab_bed.strftime("%H:%M")
+        if hab_bed > ideal_bedtime_dt + timedelta(minutes=15):
+            # 実就寝が理想より遅い → 一気にではなく最大 45 分だけ前倒し (概日前進の限界)
+            bedtime_dt = max(ideal_bedtime_dt, hab_bed - timedelta(minutes=MAX_ADVANCE_MIN))
+            notes.append(
+                f"普段の就寝は約{hab_bed.strftime('%H:%M')}・睡眠{phase['dur_min'] / 60:.1f}h。"
+                f"理想{ideal_bedtime_dt.strftime('%H:%M')}へ一気に早めるのは非現実的"
+                f"(概日リズムの前進は1日30-60分が限界)。今夜はまず{bedtime_dt.strftime('%H:%M')}を目標に、"
+                "毎晩30-45分ずつ前倒しで近づける。"
+            )
+
+    sleep_min = int((wake_dt - bedtime_dt).total_seconds() / 60)
+    compressed = bedtime_dt > ideal_bedtime_dt + timedelta(minutes=5)
+    # 入浴は「上がる」を就寝90分前に置き、そこから逆算して「入る」を出す (湯船に浸かる前提)
+    bath_end_dt = bedtime_dt - timedelta(minutes=s.bath_to_bed_lead_min)
+    bath_start_dt = bath_end_dt - timedelta(minutes=s.bath_soak_duration_min)
+    bath_dt = bath_end_dt  # 後方互換 (= 上がる時刻)
 
     # 当日のトレーニング終了時刻が bath_dt より遅い場合、現実的な bedtime を再計算
     if last_training_end_jst is not None:
@@ -78,13 +134,68 @@ def compute_tonight_plan(
                         f"現実的には {sleep_min} 分程度。"
                     )
 
+    # 夕食: 就寝3h前 と「起床+13h(遅すぎない上限)」の早い方を食べ終わりに。遅い夕食を回避。
+    today_wake_dt = datetime.combine(target, wake_t, tz)
+    healthy_latest = today_wake_dt + timedelta(hours=s.meal_last_h_after_wake)
+    dinner_end_dt = min(bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min), healthy_latest)
+    dinner_start_dt = dinner_end_dt - timedelta(minutes=s.dinner_eat_duration_min)
+    dinner_capped_by_clock = healthy_latest < bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min)
+    if dinner_capped_by_clock:
+        notes.append(
+            f"夕食は就寝逆算だと {(bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min)).strftime('%H:%M')} だが、"
+            f"夜遅い食事は代謝に悪いので {dinner_end_dt.strftime('%H:%M')} までに食べ終えるのが理想。"
+        )
+
+    # 入浴: トレーニングで bath_dt が後ろ倒しになった場合も「入る→上がる」を再算出
+    bath_end_dt = bath_dt
+    bath_start_dt = bath_end_dt - timedelta(minutes=s.bath_soak_duration_min)
+    notes.append(
+        f"入浴は湯船(約{s.bath_temp_c}℃)に{s.bath_soak_duration_min}分。シャワーだけより深部体温が上がり、"
+        f"その後の低下で寝つきが良くなる(Haghayegh 2019)。就寝{s.bath_to_bed_lead_min}分前に上がるのが目安。"
+    )
+
+    def _win(rec_dt: datetime, minus: int, plus: int) -> dict[str, str]:
+        return {
+            "rec": rec_dt.strftime("%H:%M"),
+            "start": (rec_dt - timedelta(minutes=minus)).strftime("%H:%M"),
+            "end": (rec_dt + timedelta(minutes=plus)).strftime("%H:%M"),
+        }
+
+    # 推奨範囲: 就寝=目標±20分(規則性) / 起床=目標±30分。夕食・入浴は開始終了の span。
+    windows = {
+        "bedtime": _win(bedtime_dt, 20, 20),
+        "wake": _win(wake_dt, 30, 30),
+    }
+
+    # 科学的に大事な timing (厳選): 朝の光浴(概日リズム最強レバー) / カフェイン最終(就寝6h前) /
+    # 照明を落とす(就寝2h前、夜光のメラトニン抑制回避)。
+    caffeine_cutoff_dt = bedtime_dt - timedelta(hours=s.caffeine_cutoff_hours_before_bed)
+    dim_light_dt = bedtime_dt - timedelta(minutes=120)
+    morning_light = {
+        "start": wake_dt.strftime("%H:%M"),
+        "end": (wake_dt + timedelta(minutes=30)).strftime("%H:%M"),
+    }
+
     return {
         "wake": wake_dt.strftime("%H:%M"),
-        "bedtime": bedtime_dt.strftime("%H:%M"),
-        "bath": bath_dt.strftime("%H:%M"),
-        "dinner_cutoff": dinner_dt.strftime("%H:%M"),
+        "bedtime": bedtime_dt.strftime("%H:%M"),  # 今夜の現実的な目標 (習慣から前倒し)
+        "bath": bath_dt.strftime("%H:%M"),  # 後方互換 (= 上がる時刻)
+        "bath_start": bath_start_dt.strftime("%H:%M"),  # 湯船に入る
+        "bath_end": bath_end_dt.strftime("%H:%M"),  # 上がる (就寝90分前)
+        "bath_method": "湯船",  # シャワーより推奨
+        "bath_temp_c": s.bath_temp_c,
+        "dinner_cutoff": dinner_end_dt.strftime("%H:%M"),  # 後方互換 (= 食べ終わり)
+        "dinner_start": dinner_start_dt.strftime("%H:%M"),  # 食べ始め
+        "dinner_end": dinner_end_dt.strftime("%H:%M"),  # 食べ終わり
+        "windows": windows,  # bedtime/wake の推奨範囲 + 推奨絶対時刻
+        # 科学的に大事な timing (厳選)
+        "caffeine_cutoff_time": caffeine_cutoff_dt.strftime("%H:%M"),  # これ以降カフェイン断ち
+        "dim_light_time": dim_light_dt.strftime("%H:%M"),  # これ以降 照明↓・ブルーライト減
+        "morning_light": morning_light,  # 起床後すぐ屋外光 (概日リズム同調)
         "target_sleep_min": target_sleep_min,
         "estimated_sleep_min": sleep_min,
         "compressed": compressed,
+        "ideal_bedtime": ideal_bedtime_dt.strftime("%H:%M"),  # 最終目標 (起床−必要睡眠)
+        "habitual_bedtime": habitual_bedtime_str,  # 実データの習慣就寝
         "notes": notes,
     }
