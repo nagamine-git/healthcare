@@ -68,18 +68,20 @@ def _phi(z: float) -> float:
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
 
-def percentile(metric: str, value: float | None, age: int | None, sex: str | None) -> float | None:
-    """value が母集団で下位から何%地点か (0-100)。算出不能なら None。"""
-    if value is None:
-        return None
-    band = norm_for(metric, age, sex)
-    if band is None:
-        return None
-    mean, sd = band
-    if sd <= 0:
+def pct_from(value: float | None, mean: float | None, sd: float | None) -> float | None:
+    """mean/sd の正規分布で value が下位から何%地点か (0-100)。汎用・体力テストでも再利用。"""
+    if value is None or mean is None or sd is None or sd <= 0:
         return None
     p = _phi((value - mean) / sd) * 100.0
     return max(0.0, min(100.0, p))
+
+
+def percentile(metric: str, value: float | None, age: int | None, sex: str | None) -> float | None:
+    """value が母集団で下位から何%地点か (0-100)。算出不能なら None。"""
+    band = norm_for(metric, age, sex)
+    if band is None:
+        return None
+    return pct_from(value, band[0], band[1])
 
 
 def _r(x: float | None) -> float | None:

@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Users } from "lucide-react";
 import { useState } from "react";
-import { Area, AreaChart, ReferenceArea, ReferenceLine, ResponsiveContainer, XAxis } from "recharts";
 import { api, type PhysiqueDistributionMetric } from "../lib/api";
-import { bellCurve } from "../lib/stats";
+import { BellCurve } from "./BellCurve";
 
 /**
  * 体型の母集団分布。BMI / 体脂肪率 / FFMI について、日本人 同年代・同性の分布
@@ -61,59 +60,14 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
 
       {hasDist && (
         <>
-          <div className="mt-2 h-20 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={bellCurve(m.mean!, m.sd!)} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
-                <defs>
-                  <linearGradient id={`fill-${m.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.03} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="x"
-                  type="number"
-                  domain={["dataMin", "dataMax"]}
-                  tick={{ fontSize: 9, fill: "#64748b" }}
-                  tickFormatter={(v: number) => v.toFixed(0)}
-                  interval="preserveStartEnd"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="y"
-                  stroke="#38bdf8"
-                  strokeWidth={1}
-                  fill={`url(#fill-${m.key})`}
-                  isAnimationActive={false}
-                />
-                {/* 母集団平均 */}
-                <ReferenceLine x={m.mean!} stroke="#475569" strokeDasharray="2 2" />
-                {/* 目標範囲 (帯) — low<high のとき */}
-                {m.target_low != null && m.target_high != null && m.target_high > m.target_low && (
-                  <ReferenceArea
-                    x1={m.target_low}
-                    x2={m.target_high}
-                    fill="#fbbf24"
-                    fillOpacity={0.15}
-                    stroke="#fbbf24"
-                    strokeOpacity={0.4}
-                    label={{ value: "目標", fontSize: 9, fill: "#fbbf24", position: "insideTop" }}
-                  />
-                )}
-                {/* 目標が点 (FFMI など low==high) のとき */}
-                {m.target_low != null && m.target_high === m.target_low && (
-                  <ReferenceLine
-                    x={m.target_low}
-                    stroke="#fbbf24"
-                    strokeDasharray="4 2"
-                    label={{ value: "目標", fontSize: 9, fill: "#fbbf24", position: "insideTopRight" }}
-                  />
-                )}
-                {/* 現在値 */}
-                <ReferenceLine x={m.value!} stroke="#38bdf8" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <BellCurve
+            idKey={m.key}
+            value={m.value!}
+            mean={m.mean!}
+            sd={m.sd!}
+            targetLow={m.target_low}
+            targetHigh={m.target_high}
+          />
           <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
             {m.percentile != null ? (
               <span className="text-[11px] text-slate-400">

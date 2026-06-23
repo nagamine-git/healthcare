@@ -1,8 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ChevronDown, History, Info, Pencil, Timer, TimerReset, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { api, type FitnessTestEntry } from "../lib/api";
+import { api, type FitnessComposite, type FitnessTestEntry } from "../lib/api";
+import { BellCurve } from "./BellCurve";
 import { MeasureModal } from "./measure/MeasureModal";
+
+const TEST_LABEL: Record<string, string> = {
+  grip: "握力",
+  push_up: "腕立て",
+  chair_stand: "椅子立ち",
+  srt: "SRT",
+};
+
+/** 総合体力スコア (0-100) + 内訳バー。医学エビデンス重み付けの加重平均。 */
+function CompositeScoreBanner({ composite }: { composite: FitnessComposite }) {
+  return (
+    <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm font-medium text-slate-100">総合体力スコア</span>
+        <span className="text-2xl font-bold tabular-nums text-sky-300">
+          {Math.round(composite.score)}
+          <span className="ml-0.5 text-xs font-normal text-slate-400">/100</span>
+        </span>
+      </div>
+      <div className="mt-1 text-[10px] text-slate-500">
+        同年代・同性比の percentile を予後エビデンスで重み付け平均 ({composite.n_tests}種測定済み)
+      </div>
+      <div className="mt-2 space-y-1">
+        {composite.contributions.map((c) => (
+          <div key={c.key} className="flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[10px] text-slate-400">{TEST_LABEL[c.key] ?? c.key}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full bg-sky-500/70"
+                style={{ width: `${Math.max(2, Math.min(100, c.percentile))}%` }}
+              />
+            </div>
+            <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-slate-400">
+              {Math.round(c.percentile)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * 自宅フィットネスチェック。医学的に予後と相関する4テスト (腕立て/握力/
@@ -40,6 +82,8 @@ export function FitnessTestPanel() {
           設定で生年月日・性別を入れると、絶対値に加えて基準値評価 (優/良/平均/要改善) が出ます。
         </div>
       )}
+
+      {data.composite && <CompositeScoreBanner composite={data.composite} />}
 
       <div className="space-y-2.5">
         {data.tests.map((t) => (
@@ -191,6 +235,25 @@ function TestCard({
           <ChevronDown size={16} className={open ? "rotate-180 transition" : "transition"} />
         </button>
       </div>
+
+      {/* 母集団分布 (連続値テストのみ) */}
+      {entry.distribution && latest && (
+        <div className="border-t border-slate-800/60 px-3 pb-2 pt-1">
+          <BellCurve
+            idKey={d.key}
+            value={latest.value}
+            mean={entry.distribution.mean}
+            sd={entry.distribution.sd}
+          />
+          <div className="mt-0.5 text-[11px] text-slate-400">
+            同年代・同性で{" "}
+            <span className="font-semibold tabular-nums text-sky-300">
+              {Math.round(entry.distribution.percentile)}
+            </span>
+            <span className="text-slate-500"> パーセンタイル</span>
+          </div>
+        </div>
+      )}
 
       {/* 手順 (折りたたみ) */}
       {open && (

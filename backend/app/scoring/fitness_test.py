@@ -33,6 +33,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import FitnessTestResult
+from app.scoring.population_norms import pct_from
 from app.scoring.profile import resolve_profile
 
 
@@ -193,6 +194,87 @@ _MALE_BANDS: dict[str, list[_Band]] = {
 }
 
 
+# 連続値テストの母集団 mean/sd (sex × 年代帯 [lo,hi])。握力=比較的堅い、他=目安。
+FITNESS_NORMS: dict[str, dict[str, list[tuple[int, int, float, float]]]] = {
+    "grip": {
+        "male": [(18, 29, 47, 7), (30, 49, 47, 7), (50, 69, 42, 7), (70, 200, 36, 6)],
+        "female": [(18, 29, 28, 5), (30, 49, 29, 5), (50, 69, 26, 5), (70, 200, 23, 4)],
+    },
+    "push_up": {
+        "male": [(18, 29, 30, 12), (30, 49, 22, 11), (50, 69, 15, 9), (70, 200, 9, 7)],
+        "female": [(18, 29, 18, 9), (30, 49, 14, 8), (50, 69, 9, 6), (70, 200, 5, 5)],
+    },
+    "chair_stand": {
+        "male": [(18, 29, 33, 6), (30, 49, 31, 6), (50, 69, 27, 5), (70, 200, 22, 5)],
+        "female": [(18, 29, 31, 6), (30, 49, 29, 6), (50, 69, 25, 5), (70, 200, 20, 5)],
+    },
+}
+
+# 予後エビデンス順の重み (握力=全死亡最強, 腕立て=CV, SRT=死亡, 椅子=サルコペニア)。
+COMPOSITE_WEIGHTS: dict[str, float] = {
+    "grip": 0.35,
+    "push_up": 0.25,
+    "srt": 0.20,
+    "chair_stand": 0.20,
+}
+
+
+def fitness_norm(
+    test_key: str, age: int | None, sex: str | None
+) -> tuple[float, float] | None:
+    """連続値テストの年代帯 (mean, sd)。該当無しは None。"""
+    if age is None or sex is None:
+        return None
+    table = FITNESS_NORMS.get(test_key, {}).get(sex)
+    if not table:
+        return None
+    for lo, hi, mean, sd in table:
+        if lo <= age <= hi:
+            return (mean, sd)
+    return None
+
+
+def fitness_percentile(
+    test_key: str, value: float | None, age: int | None, sex: str | None
+) -> float | None:
+    """連続値テストの同年代・同性 percentile (0-100)。算出不能なら None。"""
+    band = fitness_norm(test_key, age, sex)
+    if band is None:
+        return None
+    return pct_from(value, band[0], band[1])
+
+
+def srt_percentile(value: float | None) -> float | None:
+    """SRT (0-10) を percentile (0-100) に線形換算 (目安)。総合点への算入用。"""
+    if value is None:
+        return None
+    return max(0.0, min(100.0, value * 10.0))
+
+
+def composite_fitness(per_test_pct: dict[str, float | None]) -> dict[str, Any] | None:
+    """測定済みテストの percentile を予後エビデンス重みで加重平均 (0-100)。
+
+    未測定テストは除外し、残りの重みで再正規化する。1 件も無ければ None。
+    """
+    contributions: list[dict[str, Any]] = []
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for key, weight in COMPOSITE_WEIGHTS.items():
+        pct = per_test_pct.get(key)
+        if pct is None:
+            continue
+        weighted_sum += weight * pct
+        weight_total += weight
+        contributions.append({"key": key, "percentile": round(pct, 1), "weight": weight})
+    if weight_total <= 0:
+        return None
+    return {
+        "score": round(weighted_sum / weight_total, 1),
+        "n_tests": len(contributions),
+        "contributions": contributions,
+    }
+
+
 def evaluate(
     test_key: str, value: float | None, age: int | None = None, sex: str | None = None
 ) -> dict[str, Any] | None:
@@ -308,6 +390,7 @@ def build_overview(today: date_type) -> dict[str, Any]:
     tests: list[dict[str, Any]] = []
     any_due = False
     due_labels: list[str] = []
+    per_test_pct: dict[str, float | None] = {}
     with session_scope() as session:
         for key, defn in FITNESS_TESTS.items():
             latest, prev = _two_latest(session, key)
@@ -319,6 +402,22 @@ def build_overview(today: date_type) -> dict[str, Any]:
             if due["is_due"]:
                 any_due = True
                 due_labels.append(defn.label)
+
+            # 分布 (連続3種は釣鐘、SRTは段階評価なので釣鐘なし) と総合用 percentile
+            distribution: dict[str, Any] | None = None
+            if key == "srt":
+                pct = srt_percentile(latest_value)
+            else:
+                band = fitness_norm(key, prof.age, prof.sex)
+                pct = pct_from(latest_value, band[0], band[1]) if band else None
+                if pct is not None and band is not None:
+                    distribution = {
+                        "mean": band[0],
+                        "sd": band[1],
+                        "percentile": round(pct, 1),
+                    }
+            per_test_pct[key] = pct
+
             tests.append(
                 {
                     "definition": def_payload(defn),
@@ -335,6 +434,7 @@ def build_overview(today: date_type) -> dict[str, Any]:
                     "evaluation": evaluation,
                     "trend": trend,
                     "due": due,
+                    "distribution": distribution,
                 }
             )
     return {
@@ -342,4 +442,5 @@ def build_overview(today: date_type) -> dict[str, Any]:
         "any_due": any_due,
         "due_labels": due_labels,
         "evaluable": prof.age is not None and prof.sex == "male",
+        "composite": composite_fitness(per_test_pct),
     }

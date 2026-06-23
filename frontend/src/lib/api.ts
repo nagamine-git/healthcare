@@ -1101,12 +1101,19 @@ export type FitnessTestEntry = {
   evaluation: FitnessEvaluation | null;
   trend: FitnessTrend | null;
   due: FitnessDue;
+  distribution: { mean: number; sd: number; percentile: number } | null;
+};
+export type FitnessComposite = {
+  score: number;
+  n_tests: number;
+  contributions: Array<{ key: string; percentile: number; weight: number }>;
 };
 export type FitnessOverview = {
   tests: FitnessTestEntry[];
   any_due: boolean;
   due_labels: string[];
   evaluable: boolean;
+  composite: FitnessComposite | null;
 };
 export type FitnessHistory = {
   test_key: string;
