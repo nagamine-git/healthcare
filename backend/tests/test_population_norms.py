@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from app.scoring.population_norms import (
@@ -14,7 +12,7 @@ from app.scoring.population_norms import (
 
 
 def test_percentile_at_mean_is_50():
-    mean, sd = norm_for("bmi", 35, "male")
+    mean, _sd = norm_for("bmi", 35, "male")
     assert mean == pytest.approx(23.9)
     p = percentile("bmi", mean, 35, "male")
     assert p == pytest.approx(50.0, abs=0.5)

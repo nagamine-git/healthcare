@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.db import session_scope
-from app.models import FitnessTestResult
 import pytest
 
+from app.db import session_scope
+from app.models import FitnessTestResult
 from app.scoring.fitness_test import (
     FITNESS_TESTS,
     build_overview,
@@ -17,7 +17,6 @@ from app.scoring.fitness_test import (
     grip_best,
     srt_percentile,
 )
-
 
 # ---- 分布 percentile / 総合点 ----
 

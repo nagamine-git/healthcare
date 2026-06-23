@@ -5,16 +5,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import activity as activity_api
 from app.api import admin as admin_api
 from app.api import advice_feedback as advice_feedback_api
 from app.api import alcohol as alcohol_api
+from app.api import body_distribution as body_distribution_api
 from app.api import bodyload as bodyload_api
 from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
-from app.api import activity as activity_api
-from app.api import body_distribution as body_distribution_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
 from app.api import imputation as imputation_api
