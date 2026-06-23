@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Smile } from "lucide-react";
 import { api } from "../lib/api";
-import type { CheckinSuggested, CheckinUpdate } from "../lib/api";
+import type { Checkin, CheckinResponse, CheckinSuggested, CheckinUpdate } from "../lib/api";
+
+const DIM_KEYS = ["mood", "energy", "stress", "soreness"] as const;
 
 /**
  * いまの調子: 気分/活力/ストレス/筋肉痛を 5 段階でタップ記録 (即時保存)。
@@ -60,9 +62,36 @@ export function CheckinCard() {
   });
   const save = useMutation({
     mutationFn: (body: CheckinUpdate) => api.postCheckin(body),
+    // 楽観更新: タップ即座にドットを反映し、通信は裏で。サーバ応答で確定し、
+    // 失敗したら元に戻す (today スコア等の再計算はグローバルの遅延 invalidate が担う)。
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ["checkin"] });
+      const prev = qc.getQueryData<CheckinResponse>(["checkin"]);
+      qc.setQueryData<CheckinResponse>(["checkin"], (old) => {
+        const base: Checkin = old?.today ?? {
+          date: "", mood: null, energy: null, stress: null, soreness: null, note: null,
+        };
+        const next: Checkin = { ...base };
+        for (const k of body.clear ?? []) {
+          if ((DIM_KEYS as readonly string[]).includes(k)) next[k as (typeof DIM_KEYS)[number]] = null;
+        }
+        for (const k of DIM_KEYS) {
+          if (body[k] != null) next[k] = body[k] as number;
+        }
+        next.updated_at = new Date().toISOString();
+        return {
+          today: next,
+          items: old?.items ?? [],
+          suggested: old?.suggested ?? { mood: null, energy: null, stress: null, soreness: null },
+        };
+      });
+      return { prev };
+    },
+    onError: (_e, _body, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["checkin"], ctx.prev);
+    },
     onSuccess: (data) => {
       qc.setQueryData(["checkin"], data);
-      qc.invalidateQueries({ queryKey: ["today"] });
     },
   });
 
