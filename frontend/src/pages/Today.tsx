@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Settings as SettingsIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { DayStory } from "../components/DayStory";
@@ -21,6 +22,9 @@ import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
 import { PhysiqueGapPlan } from "../components/PhysiqueGapPlan";
+import { FitnessTestPanel, FitnessDueBanner } from "../components/FitnessTestPanel";
+import { DistributionPanel } from "../components/DistributionPanel";
+import { MealPlanner } from "../components/MealPlanner";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
@@ -47,18 +51,20 @@ type Props = {
   onOpenDebug?: () => void;
 };
 
-type Tab = "today" | "goals" | "review" | "log" | "settings";
+// ドメイン別タブ。設定は歯車アイコン (タブ外) から開く。
+type Tab = "summary" | "sleep" | "migraine" | "physique" | "health" | "learning" | "settings";
 const TABS: { key: Tab; label: string }[] = [
-  { key: "today", label: "今日" },
-  { key: "goals", label: "目標" },
-  { key: "review", label: "振り返り" },
-  { key: "log", label: "記録" },
-  { key: "settings", label: "設定" },
+  { key: "summary", label: "総合" },
+  { key: "sleep", label: "睡眠" },
+  { key: "migraine", label: "頭痛" },
+  { key: "physique", label: "体型" },
+  { key: "health", label: "健康" },
+  { key: "learning", label: "学習" },
 ];
 
 export function TodayPage({ onOpenDebug }: Props) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<Tab>("summary");
   const geo = useGeolocation();
   const coords = geo.coords;
   const today = useQuery({
@@ -83,8 +89,10 @@ export function TodayPage({ onOpenDebug }: Props) {
     mutationFn: api.adviceFeedback,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
-  const fullRefresh = useMutation({
-    mutationFn: () => api.fullRefresh(true),
+  // データのみ更新 (Garmin同期+スコア再計算)。LLM助言は再生成しない=無駄遣い防止。
+  // 助言は朝の cron + 明示「アドバイス再生成」でのみ作る (遅延動作)。
+  const dataRefresh = useMutation({
+    mutationFn: () => api.fullRefresh(false),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["today"] }),
   });
   const schedule = useMutation({
@@ -106,11 +114,11 @@ export function TodayPage({ onOpenDebug }: Props) {
     const last = today.data.last_data_update_at;
     const stale =
       !last || Date.now() - new Date(last).getTime() > 30 * 60_000;
-    if (stale && !fullRefresh.isPending) {
+    if (stale && !dataRefresh.isPending) {
       autoRefreshTriggeredRef.current = true;
-      fullRefresh.mutate();
+      dataRefresh.mutate();  // 自動更新はデータのみ (LLM助言は焼かない)
     }
-  }, [today.data, fullRefresh]);
+  }, [today.data, dataRefresh]);
 
   // 1 分ごとに「最終更新 N 分前」を再描画するため tick を取る
   const now = useTickingNow();
@@ -175,11 +183,22 @@ export function TodayPage({ onOpenDebug }: Props) {
           <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
           <span className="text-[10px] tabular-nums text-slate-500">
             最終更新 {relativeMinutes(data.last_data_update_at, now)}
-            {fullRefresh.isPending && <span className="ml-1 text-emerald-400">(更新中…)</span>}
+            {dataRefresh.isPending && <span className="ml-1 text-emerald-400">(更新中…)</span>}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
+          <button
+            type="button"
+            onClick={() => setTab(tab === "settings" ? "summary" : "settings")}
+            aria-label="設定"
+            title="設定"
+            className={`rounded-lg p-1.5 transition-colors ${
+              tab === "settings" ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <SettingsIcon size={16} />
+          </button>
           <SyncMenu
             lastSyncedLabel={
               data.sync.garmin?.last_synced_at
@@ -188,10 +207,10 @@ export function TodayPage({ onOpenDebug }: Props) {
             }
             items={[
               {
-                label: "全部更新",
-                description: "Garmin 同期 + スコア再計算 + アドバイス再生成",
-                onClick: () => fullRefresh.mutate(),
-                pending: fullRefresh.isPending,
+                label: "更新",
+                description: "Garmin 同期 + スコア再計算 (LLM助言は焼かない)",
+                onClick: () => dataRefresh.mutate(),
+                pending: dataRefresh.isPending,
               },
               {
                 label: "Garmin だけ再取得",
@@ -246,8 +265,8 @@ export function TodayPage({ onOpenDebug }: Props) {
       />
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
-        isRefreshing={fullRefresh.isPending}
-        onRefresh={() => fullRefresh.mutate()}
+        isRefreshing={dataRefresh.isPending}
+        onRefresh={() => dataRefresh.mutate()}
       />
 
       {/* ===== タブナビ (sticky) ===== */}
@@ -263,8 +282,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </div>
 
-      {/* ============ タブ: 今日 ============ */}
-      {tab === "today" && (
+      {/* ============ タブ: 総合 (サマリー) ============ */}
+      {tab === "summary" && (
       <div className="space-y-3">
       <div id="alerts-section">
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
@@ -272,6 +291,7 @@ export function TodayPage({ onOpenDebug }: Props) {
           <DayPrediction />
           <WellbeingAlertsBanner alerts={data.alerts} />
           <MigraineRiskBanner />
+          <FitnessDueBanner onOpen={() => setTab("physique")} />
           <AdviceCard
             advice={data.advice}
             onRegenerate={() => regenerate.mutate()}
@@ -304,56 +324,10 @@ export function TodayPage({ onOpenDebug }: Props) {
           onClear: geo.clear,
         }}
       />
-      <NutritionPanel nutrition={data.nutrition} />
-      <TonightPlanPanel plan={data.tonight_plan} />
-      </div>
-      )}
 
-      {/* ============ タブ: 目標 ============ */}
-      {tab === "goals" && (
-      <div className="space-y-3">
-      <div id="life-section">
-        <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
-        <LifeSection />
-      </div>
-
-      <div id="learning-section">
-        <SectionHeader label="学習" hint="The Book 完走プラン — 読了 / Rustlings / 説明できた の3点クリア" />
-        <LearningCard />
-      </div>
-
-      <div id="physique-gap-section" className="space-y-3">
-        <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
-        <PhysiqueGapPlan />
-        <BodyLoadCard />
-        <p className="px-1 text-[11px] text-slate-500">
-          目標体型・体組成は「設定」タブの身体セクションで調整できます。
-        </p>
-      </div>
-      </div>
-      )}
-
-      {/* ============ タブ: 設定 ============ */}
-      {tab === "settings" && (
-      <div className="space-y-3">
-        <SectionHeader label="個人差ファクター" hint="計算に効く体質・生活パラメータを自己最適化" />
-        <SettingsTab
-          current={
-            weight?.weight_kg != null && weight?.body_fat_pct != null
-              ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
-              : null
-          }
-        />
-      </div>
-      )}
-
-      {/* ============ タブ: 振り返り ============ */}
-      {tab === "review" && (
-      <div className="space-y-3">
-      <SectionHeader label="今日のスコア" hint="24 時間の振り返り" />
+      <SectionHeader label="今日のスコア" hint="24 時間の振り返り + トレンド" />
       <ImputedNotice imputed={data.imputed} />
       <SubScoreRadar subs={subs} total={score?.total ?? null} />
-
       <div id="trends-section">
       <TrendsSection
         hints={{
@@ -382,19 +356,80 @@ export function TodayPage({ onOpenDebug }: Props) {
         ]}
       />
       </div>
-
-      <SleepDriverPanel />
       </div>
       )}
 
-      {/* ============ タブ: 記録 ============ */}
-      {tab === "log" && (
+      {/* ============ タブ: 睡眠 ============ */}
+      {tab === "sleep" && (
       <div className="space-y-3">
-      <SectionHeader label="記録" hint="飲んだ/痛くなった時に開いて入力" />
-      <CaffeinePanel caffeine={data.caffeine} />
-      <MigrainePanel />
-      <MigraineTriggerPanel />
-      <AlcoholPanel />
+        <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
+        <TonightPlanPanel plan={data.tonight_plan} />
+        <SectionHeader label="睡眠ドライバー" hint="睡眠の質 × 翌日パフォーマンスの個人分析" />
+        <SleepDriverPanel />
+      </div>
+      )}
+
+      {/* ============ タブ: 頭痛 ============ */}
+      {tab === "migraine" && (
+      <div className="space-y-3">
+        <SectionHeader label="片頭痛" hint="リスク・誘因分析・記録" />
+        <MigraineRiskBanner />
+        <MigrainePanel />
+        <MigraineTriggerPanel />
+      </div>
+      )}
+
+      {/* ============ タブ: 体型 ============ */}
+      {tab === "physique" && (
+      <div id="physique-gap-section" className="space-y-3">
+        <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
+        <PhysiqueGapPlan />
+        <DistributionPanel />
+        <BodyLoadCard />
+        <FitnessTestPanel />
+        <p className="px-1 text-[11px] text-slate-500">
+          目標体型・体組成は歯車（設定）の身体セクションで調整できます。
+        </p>
+      </div>
+      )}
+
+      {/* ============ タブ: 健康 (栄養/嗜好品) ============ */}
+      {tab === "health" && (
+      <div className="space-y-3">
+        <SectionHeader label="栄養" hint="カロリー収支・マクロ・食事プラン" />
+        <NutritionPanel nutrition={data.nutrition} />
+        <MealPlanner />
+        <SectionHeader label="嗜好品の記録" hint="カフェイン / アルコール" />
+        <CaffeinePanel caffeine={data.caffeine} />
+        <AlcoholPanel />
+      </div>
+      )}
+
+      {/* ============ タブ: 学習 ============ */}
+      {tab === "learning" && (
+      <div className="space-y-3">
+      <div id="life-section">
+        <SectionHeader label="ライフスコア" hint="理想への総合接近度 + 重み調整" />
+        <LifeSection />
+      </div>
+      <div id="learning-section">
+        <SectionHeader label="学習" hint="The Book 完走プラン — 読了 / Rustlings / 説明できた の3点クリア" />
+        <LearningCard />
+      </div>
+      </div>
+      )}
+
+      {/* ============ 設定 (歯車アイコンから) ============ */}
+      {tab === "settings" && (
+      <div className="space-y-3">
+        <SectionHeader label="個人差ファクター" hint="計算に効く体質・生活パラメータを自己最適化" />
+        <SettingsTab
+          current={
+            weight?.weight_kg != null && weight?.body_fat_pct != null
+              ? { weight: weight.weight_kg, bf: weight.body_fat_pct }
+              : null
+          }
+        />
       </div>
       )}
 

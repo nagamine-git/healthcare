@@ -13,11 +13,15 @@ from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
+from app.api import body_distribution as body_distribution_api
+from app.api import fitness as fitness_api
+from app.api import food as food_api
 from app.api import imputation as imputation_api
 from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.api import profile as profile_api
+from app.api import push as push_api
 from app.api import sleep_drivers as sleep_drivers_api
 from app.api import speech as speech_api
 from app.api import timeline as timeline_api
@@ -72,6 +76,10 @@ def create_app() -> FastAPI:
     app.include_router(advice_feedback_api.router)
     app.include_router(migraine_api.router)
     app.include_router(profile_api.router)
+    app.include_router(push_api.router)
+    app.include_router(food_api.router)
+    app.include_router(fitness_api.router)
+    app.include_router(body_distribution_api.router)
     app.include_router(alcohol_api.router)
     app.include_router(timeline_api.router)
     app.include_router(debug.router)
