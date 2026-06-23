@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { ChevronDown, Users } from "lucide-react";
+import { useState } from "react";
 import { Area, AreaChart, ReferenceArea, ReferenceLine, ResponsiveContainer, XAxis } from "recharts";
 import { api, type PhysiqueDistributionMetric } from "../lib/api";
 import { bellCurve } from "../lib/stats";
@@ -37,6 +38,7 @@ export function DistributionPanel() {
 
 function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
   const hasDist = m.value != null && m.mean != null && m.sd != null;
+  const showVo2Help = m.key === "vo2max" && m.value == null;
 
   return (
     <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
@@ -139,6 +141,42 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
             )}
           </div>
         </>
+      )}
+      {showVo2Help && <Vo2MaxHelp />}
+    </div>
+  );
+}
+
+/** VO2max が未取得のときの取得方法ヘルプ (Garmin Instinct 3 前提)。 */
+function Vo2MaxHelp() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 border-t border-slate-800/50 pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-[11px] text-sky-300/80 hover:text-sky-300"
+      >
+        VO2maxの取得方法
+        <ChevronDown size={13} className={open ? "rotate-180 transition" : "transition"} />
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-slate-400">
+          <p>
+            Garmin (Instinct 3) は<strong className="text-slate-300">屋外ランニング</strong>から推定します。
+            GPSオンで、<strong className="text-slate-300">最大心拍の70%以上を10分以上</strong>継続するのが条件 (週1回が目安)。
+          </p>
+          <p>
+            サイクリングでも出ますが<strong className="text-slate-300">パワーメーター必須</strong> (高強度20分以上)。
+          </p>
+          <p className="text-slate-500">
+            筋トレ・ラッキング・ボクシング・屋内ランは対象外 (VO2maxは生成されません)。
+            ウォーキングは直近30日にランの推定が無いときだけ代替で出ることがあります。
+          </p>
+          <p className="text-slate-500">
+            → 一度<strong className="text-slate-300">屋外ランを1本</strong>走れば値が入り、ここに分布が出ます。
+          </p>
+        </div>
       )}
     </div>
   );
