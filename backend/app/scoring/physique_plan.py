@@ -27,10 +27,8 @@ from __future__ import annotations
 from datetime import date as date_type
 from typing import Any
 
-from sqlalchemy import select
-
 from app.db import session_scope
-from app.models import WeightSample
+from app.scoring.body_trend import BodyEstimate, smoothed_body
 from app.scoring.nutrition import (
     _bmr_mifflin,
     _garmin_active_kcal_avg,
@@ -45,16 +43,12 @@ SHADOWBOX_MET = 7.0
 RESISTANCE_SESSIONS_PER_WEEK = 4
 
 
-def _latest_body() -> tuple[float, float | None] | None:
-    with session_scope() as session:
-        row = session.execute(
-            select(WeightSample.weight_kg, WeightSample.body_fat_pct)
-            .order_by(WeightSample.ts.desc())
-            .limit(1)
-        ).first()
-    if row is None or row[0] is None:
+def _latest_body() -> BodyEstimate | None:
+    """測定ノイズを除いた体組成トレンド (時間加重指数平滑)。生値も保持。"""
+    est = smoothed_body()
+    if est.weight_kg is None:
         return None
-    return float(row[0]), (float(row[1]) if row[1] is not None else None)
+    return est
 
 
 def _tdee(target: date_type, bmr: float) -> tuple[float, bool]:
@@ -142,8 +136,21 @@ def _today_actions(
     from app.scoring.nutrition import _avg_daily
 
     with session_scope() as session:
-        avg_protein, _ = _avg_daily(session, "protein_g", target, 14, min_value=5.0)
-        avg_kcal, _ = _avg_daily(session, "kcal_intake", target, 14, min_value=200.0)
+        # Apple Health/HAE の実キー (protein/dietary_energy)。直近+履歴を拾うため 60日窓。
+        avg_protein, _ = _avg_daily(session, "protein", target, 60, min_value=20.0)
+        avg_kcal, _ = _avg_daily(session, "dietary_energy", target, 60, min_value=600.0)
+
+    # 食事記録が無ければ「普段の食事パターン」からの推定で埋める (記録ゼロでも具体化)
+    if avg_protein is None or avg_kcal is None:
+        from app.scoring.meal_estimate import estimate_usual_macros
+        usual = estimate_usual_macros(target)
+        # 全枠登録(complete)のときだけ全日推定として使う。部分登録(朝だけ等)は
+        # 固定枠の合計でしかないので全日として扱わない (過小評価を防ぐ)。
+        if usual["source"] == "pattern" and usual["estimate"] and usual.get("complete"):
+            if avg_protein is None:
+                avg_protein = usual["estimate"].get("protein_g")
+            if avg_kcal is None:
+                avg_kcal = usual["estimate"].get("kcal")
 
     actions: list[dict[str, Any]] = []
 
@@ -253,10 +260,11 @@ def _levers(direction: str, protein_g: int, ex_min: int) -> list[dict[str, Any]]
 
 def recomposition_plan(target: date_type) -> dict[str, Any]:
     prof = resolve_profile()
-    body = _latest_body()
-    if body is None:
+    est = _latest_body()
+    if est is None:
         return {"available": False, "reason": "体重データがありません"}
-    w_now, bf_now = body
+    # 計算は測定ノイズを除いた平滑トレンドで行う (脂肪/筋の真値はゆっくり動く)
+    w_now, bf_now = est.weight_kg, est.body_fat_pct
     w_tgt, bf_tgt = prof.target_weight_kg, prof.target_body_fat_pct
 
     bmr = _bmr_mifflin(w_now, prof.height_cm, prof.age, prof.sex)
@@ -382,10 +390,13 @@ def recomposition_plan(target: date_type) -> dict[str, Any]:
         "direction": direction,
         "direction_label": label,
         "current": {
-            "weight_kg": round(w_now, 1),
+            "weight_kg": round(w_now, 1),  # 平滑トレンド
             "body_fat_pct": round(bf_now, 1) if has_bf else None,
             "fat_mass_kg": round(fm_now, 1) if has_bf else None,
             "lean_mass_kg": round(lm_now, 1) if has_bf else None,
+            "smoothed": est.n > 1,  # 2点以上で平滑が効いている
+            "raw_weight_kg": round(est.raw_weight_kg, 1) if est.raw_weight_kg is not None else None,
+            "raw_body_fat_pct": round(est.raw_body_fat_pct, 1) if est.raw_body_fat_pct is not None else None,
         },
         "target": {
             "weight_kg": round(w_tgt, 1),

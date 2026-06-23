@@ -76,10 +76,12 @@ export function PhysiqueGapPlan() {
         </div>
       )}
 
-      {/* 現在 → 目標 */}
+      {/* 現在 → 目標 (現在は測定ノイズを除いた平滑トレンド) */}
       <div className="flex items-center gap-3 rounded-xl bg-slate-950/40 p-3 text-xs">
-        <GapCol label="現在" w={p.current.weight_kg} bf={p.current.body_fat_pct}
-          fat={p.current.fat_mass_kg} lean={p.current.lean_mass_kg} />
+        <GapCol label={p.current.smoothed ? "現在(トレンド)" : "現在"}
+          w={p.current.weight_kg} bf={p.current.body_fat_pct}
+          fat={p.current.fat_mass_kg} lean={p.current.lean_mass_kg}
+          raw={p.current.smoothed ? `実測 ${p.current.raw_weight_kg}kg${p.current.raw_body_fat_pct != null ? ` / ${p.current.raw_body_fat_pct}%` : ""}` : undefined} />
         <ArrowRight size={18} className="shrink-0 text-slate-600" />
         <GapCol label="目標" w={p.target.weight_kg} bf={p.target.body_fat_pct}
           fat={p.target.fat_mass_kg} lean={p.target.lean_mass_kg} accent />
@@ -161,8 +163,8 @@ export function PhysiqueGapPlan() {
   );
 }
 
-function GapCol({ label, w, bf, fat, lean, accent }: {
-  label: string; w: number; bf: number | null; fat: number | null; lean: number | null; accent?: boolean;
+function GapCol({ label, w, bf, fat, lean, accent, raw }: {
+  label: string; w: number; bf: number | null; fat: number | null; lean: number | null; accent?: boolean; raw?: string;
 }) {
   return (
     <div className="space-y-0.5">
@@ -174,6 +176,7 @@ function GapCol({ label, w, bf, fat, lean, accent }: {
       {fat != null && lean != null && (
         <div className="text-[9px] tabular-nums text-slate-500">脂肪{fat} / 筋{lean}kg</div>
       )}
+      {raw && <div className="text-[8px] tabular-nums text-slate-600">{raw}</div>}
     </div>
   );
 }
