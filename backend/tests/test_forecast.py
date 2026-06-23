@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from app.db import session_scope
-from app.models import BodyBattery
+from app.models import BodyBattery, MigraineEpisode
 from app.scoring import forecast as fc
 
 
@@ -30,9 +30,15 @@ def test_migraine_forecast_flags_pressure_swing(db_engine, monkeypatch):
     monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: series)
     out = fc.forecast(now_jst=now)
     assert out["migraine"] is not None
-    risks = {b["risk"] for b in out["migraine"]["buckets"]}
+    m = out["migraine"]
+    risks = {b["risk"] for b in m["buckets"]}
     assert "high" in risks or "elevated" in risks
-    assert out["migraine"]["peak"]["swing_hpa"] >= 5
+    assert m["peak"]["swing_hpa"] >= 5
+    # 何時間後から (onset) が出る
+    assert m["onset_in_hours"] is not None
+    assert m["onset_in_hours"] >= 0
+    # personal_triggers キーが常にある (発作データ無しなら空)
+    assert m["personal_triggers"] == []
 
 
 def test_migraine_forecast_suppressed_when_swing_low(db_engine, monkeypatch):
@@ -44,6 +50,47 @@ def test_migraine_forecast_suppressed_when_swing_low(db_engine, monkeypatch):
     monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: series)
     out = fc.forecast(now_jst=now)
     assert out["migraine"] is None
+
+
+def test_migraine_forecast_high_includes_coping_actions(db_engine, monkeypatch):
+    """気圧変動が大きくリスク高 → 旧『気圧降下×頭痛多発期』の対処アクションを集約して返す。"""
+    now = datetime(2026, 6, 14, 10, 0)
+    base = now - timedelta(hours=24)
+    # 1015 → 998 の急降下 (変動 ~17hPa) = 一般基準で high
+    series = [(base + timedelta(hours=i), 1015.0 if i < 36 else 998.0) for i in range(72)]
+    monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: series)
+    out = fc.forecast(now_jst=now)
+    m = out["migraine"]
+    assert m is not None
+    assert m["level"] == "high"
+    assert any("頭痛薬" in a for a in m["actions"])
+
+
+def test_migraine_forecast_recent_count_30d(db_engine, monkeypatch):
+    """直近30日の完了発作数を recent_count に集約 (多発期の文脈)。未完了・30日超は除外。"""
+    now = datetime(2026, 6, 14, 10, 0)
+    now_utc = now - timedelta(hours=9)
+    with session_scope() as s:
+        s.add(MigraineEpisode(
+            started_at=now_utc - timedelta(days=2),
+            ended_at=now_utc - timedelta(days=2) + timedelta(hours=4),
+        ))
+        s.add(MigraineEpisode(
+            started_at=now_utc - timedelta(days=10),
+            ended_at=now_utc - timedelta(days=10) + timedelta(hours=3),
+        ))
+        s.add(MigraineEpisode(  # 進行中 → 除外
+            started_at=now_utc - timedelta(days=1), ended_at=None,
+        ))
+        s.add(MigraineEpisode(  # 30日超 → 除外
+            started_at=now_utc - timedelta(days=40),
+            ended_at=now_utc - timedelta(days=40) + timedelta(hours=2),
+        ))
+    base = now - timedelta(hours=24)
+    series = [(base + timedelta(hours=i), 1015.0 if i < 36 else 998.0) for i in range(72)]
+    monkeypatch.setattr(fc, "get_pressure_hourly", lambda **k: series)
+    out = fc.forecast(now_jst=now)
+    assert out["migraine"]["recent_count"] == 2
 
 
 def test_energy_projection_from_bb_slope(db_engine, monkeypatch):

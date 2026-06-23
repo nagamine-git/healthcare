@@ -250,28 +250,6 @@ def test_caffeine_dependency_cycle(session):
     assert "caffeine_dependency_cycle" in codes
 
 
-def test_pressure_migraine_trigger(session):
-    from app.models import MigraineEpisode
-
-    today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
-    for i in range(4):
-        session.add(
-            MigraineEpisode(
-                started_at=now - timedelta(days=i * 5),
-                ended_at=now - timedelta(days=i * 5, hours=-3),
-                severity=6,
-            )
-        )
-    session.flush()
-
-    alerts = evaluate_alerts(session, today, pressure_risk_level="severe")
-    codes = [a.code for a in alerts]
-    assert "pressure_migraine_trigger" in codes
-    a = next(a for a in alerts if a.code == "pressure_migraine_trigger")
-    assert a.severity == "critical"
-
-
 def test_alerts_sorted_by_severity(session):
     from app.models import HrvDaily, SleepSession
 

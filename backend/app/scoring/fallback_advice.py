@@ -136,7 +136,6 @@ def build_fallback_advice(
         pressure
         and pressure.get("risk_level") in ("warning", "severe")
         and len(actions) < 3
-        and "pressure_migraine_trigger" not in used_codes
     ):
         actions.append(
             {
@@ -179,8 +178,6 @@ def _category_for_alert(code: str) -> str:
         return "nutrition"
     if code in ("moh_risk_high", "moh_risk_mid"):
         return "other"
-    if code == "pressure_migraine_trigger":
-        return "recovery"
     return "other"
 
 
@@ -225,7 +222,6 @@ def _duration_for_alert(code: str) -> int:
         "moh_risk_mid": 10,
         "moh_risk_high": 10,
         "caffeine_dependency_cycle": 20,
-        "pressure_migraine_trigger": 15,
     }.get(code, 10)
 
 

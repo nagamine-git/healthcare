@@ -35,7 +35,6 @@ from app.models import (
     BodyBatteryDaily,
     CaffeineIntake,
     HrvDaily,
-    MigraineEpisode,
     SleepSession,
     WeightSample,
 )
@@ -56,7 +55,6 @@ def evaluate_alerts(
     session: Session,
     target: date,
     *,
-    pressure_risk_level: str | None = None,
     target_weight_kg: float = 56.5,
     weight_lower_kg: float = 55.5,
 ) -> list[WellbeingAlert]:
@@ -93,11 +91,8 @@ def evaluate_alerts(
     if a6:
         alerts.append(a6)
 
-    # ルール 7: 気圧急降下 + 偏頭痛履歴
-    if pressure_risk_level in ("warning", "severe"):
-        a7 = _check_pressure_migraine(session, target, pressure_risk_level)
-        if a7:
-            alerts.append(a7)
+    # 気圧×片頭痛リスクは forecast の片頭痛バナー (MigraineRiskBanner) に集約済み。
+    # ここでは扱わない (旧 pressure_migraine_trigger を廃止)。
 
     # ルール 8-11: 生理指標 (sleep raw_json / Training Readiness 由来)
     for check in (
@@ -351,34 +346,6 @@ def _check_caffeine_dependency_cycle(
             "悪循環に入っている可能性"
         ),
         action="今日は午後カフェインゼロにして、14-15 時に 20 分ナップ",
-    )
-
-
-def _check_pressure_migraine(
-    session: Session, target: date, pressure_risk_level: str
-) -> WellbeingAlert | None:
-    """気圧急降下 (warning/severe) + 直近 30 日に偏頭痛 3 回以上で alert。"""
-    thirty_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
-    count = session.execute(
-        select(func.count(MigraineEpisode.id)).where(
-            MigraineEpisode.started_at >= thirty_days_ago,
-            MigraineEpisode.ended_at.is_not(None),
-        )
-    ).scalar()
-    count = int(count or 0)
-    if count < 3:
-        return None
-
-    severity = "critical" if pressure_risk_level == "severe" else "warning"
-    return WellbeingAlert(
-        code="pressure_migraine_trigger",
-        severity=severity,
-        title="気圧降下 × 頭痛多発期",
-        detail=(
-            f"直近 30 日に偏頭痛 {count} 回、本日の気圧は "
-            f"{pressure_risk_level}。発症リスク高"
-        ),
-        action="今日は屋外活動を控え、頭痛薬を手元に。光・音刺激を最小化",
     )
 
 

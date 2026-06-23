@@ -105,7 +105,7 @@ export function EnvironmentPanel({
               <GeoControlsRow geo={geo} />
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2">
             {pressure && <PressureCard pressure={pressure} />}
             {airQuality && <AirCard air={airQuality} />}
           </div>
@@ -118,9 +118,9 @@ export function EnvironmentPanel({
 
 function PressureCard({ pressure }: { pressure: Pressure }) {
   return (
-    <div className={`rounded-xl border p-3 ${PRESSURE_STYLE[pressure.risk_level]}`}>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wider opacity-70">
+    <div className={`min-w-0 rounded-xl border p-3 ${PRESSURE_STYLE[pressure.risk_level]}`}>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="truncate text-[10px] uppercase tracking-wider opacity-70">
           気圧 ({pressure.location_label})
         </span>
         <span className="rounded border border-current/40 px-2 py-0.5 text-[10px] tracking-wider">
@@ -154,9 +154,9 @@ function PressureCard({ pressure }: { pressure: Pressure }) {
 
 function AirCard({ air }: { air: AirQuality }) {
   return (
-    <div className={`rounded-xl border p-3 ${AIR_STYLE[air.risk_level]}`}>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wider opacity-70">
+    <div className={`min-w-0 rounded-xl border p-3 ${AIR_STYLE[air.risk_level]}`}>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="truncate text-[10px] uppercase tracking-wider opacity-70">
           大気質 ({air.location_label})
         </span>
         <span className="rounded border border-current/40 px-2 py-0.5 text-[10px] tracking-wider">
@@ -169,7 +169,7 @@ function AirCard({ air }: { air: AirQuality }) {
         </span>
         <span className="text-xs opacity-60">μg/m³ (PM2.5)</span>
       </div>
-      <div className="mt-1 grid grid-cols-3 gap-2 font-mono text-[10px] tabular-nums opacity-80">
+      <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums opacity-80">
         {air.aqi != null && <span>AQI {air.aqi}</span>}
         {air.uv_index != null && <span>UV {air.uv_index.toFixed(1)}</span>}
         {air.o3 != null && <span>O₃ {air.o3.toFixed(0)}</span>}

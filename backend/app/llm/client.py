@@ -602,9 +602,7 @@ def _gather_pressure() -> dict[str, Any] | None:
         return None
 
 
-def _gather_wellbeing_alerts(
-    target: date_type, pressure: dict[str, Any] | None
-) -> list[dict[str, Any]]:
+def _gather_wellbeing_alerts(target: date_type) -> list[dict[str, Any]]:
     from app.scoring.profile import resolve_profile
     from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict
 
@@ -614,7 +612,6 @@ def _gather_wellbeing_alerts(
         alerts = evaluate_alerts(
             sess,
             target,
-            pressure_risk_level=(pressure or {}).get("risk_level") if pressure else None,
             target_weight_kg=prof.target_weight_kg,
             weight_lower_kg=bmi_floor,
         )
@@ -1034,7 +1031,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["caffeine_intakes_today"] = _gather_caffeine_intakes_today(target)
     today_payload["migraine"] = _gather_migraine_summary(target)
     today_payload["pressure"] = _gather_pressure()
-    today_payload["alerts"] = _gather_wellbeing_alerts(target, today_payload["pressure"])
+    today_payload["alerts"] = _gather_wellbeing_alerts(target)
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
