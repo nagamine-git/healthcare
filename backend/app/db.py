@@ -105,6 +105,10 @@ def _apply_lightweight_migrations() -> None:
             ("rustlings_at", "DATETIME"),
             ("explained_at", "DATETIME"),
         ],
+        "learning_chapter_progress": [
+            ("quiz_points", "INTEGER"),
+            ("free_word_passed_at", "DATETIME"),
+        ],
         "user_profile": [
             ("birth_date", "DATE"),
             ("age", "INTEGER"),

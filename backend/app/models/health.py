@@ -257,6 +257,44 @@ class UserProfile(Base):
     water_ml_per_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class FoodItem(Base):
+    """ユーザーが登録する頻用食品マスタ (マクロ付き、再利用可能)。
+
+    LLM が食品名+量からマクロを推定し、ユーザーが確認/微修正して保存する。
+    1 単位 (unit_label, 例 "1個"/"1杯"/"100g") あたりの栄養。
+    """
+
+    __tablename__ = "food_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100))
+    kcal: Mapped[float] = mapped_column(Float)
+    protein_g: Mapped[float] = mapped_column(Float)
+    fat_g: Mapped[float] = mapped_column(Float, default=0.0)
+    carb_g: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_label: Mapped[str] = mapped_column(String(20), default="1食")
+    category: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 主食/主菜/間食/飲料/タンパク源
+    is_protein_source: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MealPattern(Base):
+    """「普段の食事パターン」: スロット (朝/昼/夜/間食) × 食品 × 量 × 頻度。
+
+    「朝は A・B・C をよく食べる」= slot=breakfast の行が3つ。頻度で期待値を重み付け。
+    記録が無い日の摂取推定の土台になる。
+    """
+
+    __tablename__ = "meal_pattern"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slot: Mapped[str] = mapped_column(String(12))  # breakfast|lunch|dinner|snack
+    food_id: Mapped[int] = mapped_column(ForeignKey("food_item.id", ondelete="CASCADE"))
+    qty: Mapped[float] = mapped_column(Float, default=1.0)
+    frequency: Mapped[str] = mapped_column(String(10), default="daily")  # daily|often|sometimes
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AdviceFeedback(Base):
     """LLM 助言アクションへの完了・評価フィードバック (日 × アクション)。
 
@@ -338,6 +376,10 @@ class LearningChapterProgress(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     rustlings_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     explained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 理解度チェックの累計得点 (フリーワード+50/4択+20/2択+10)。None は 0 とみなす。
+    quiz_points: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    # フリーワードで理解度80%以上に達した時刻 (選択式だけでの逃げ切りを防ぐ品質フロア)。
+    free_word_passed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class LearningSectionProgress(Base):
@@ -368,6 +410,59 @@ class LearningPlanMeta(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     started_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class PushSubscription(Base):
+    """Web Push の購読 (ブラウザ/PWA ごとの送信先)。
+
+    PushManager.subscribe() が返す endpoint + 鍵 (p256dh / auth) を保存する。
+    endpoint がデバイス単位で一意なので主キーにする (再購読で UPSERT)。
+    """
+
+    __tablename__ = "push_subscription"
+
+    endpoint: Mapped[str] = mapped_column(String(512), primary_key=True)
+    p256dh: Mapped[str] = mapped_column(String(255))
+    auth: Mapped[str] = mapped_column(String(255))
+    ua: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class NotificationLog(Base):
+    """送信済み通知の記録 (冪等性のため)。
+
+    engine が生成する dedup_key を主キーにし、同じ通知を二重送信しない。
+    1 日 1 行〜数行のペースなので肥大しないが、古い行は定期的に掃除してよい。
+    """
+
+    __tablename__ = "notification_log"
+
+    dedup_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class FitnessTestResult(Base):
+    """自宅フィットネスチェックの測定結果 (test_key × 実施日で 1 行、UPSERT)。
+
+    テスト定義・基準値・プロトコルはコード (scoring/fitness_test.py) に持ち、
+    このテーブルは結果だけを永続化する (Learning のカリキュラム/進捗分離と同じ)。
+    value は主指標 (回 / kg / 点)。detail_json は握力の左右別など補助情報。
+    """
+
+    __tablename__ = "fitness_test_result"
+    __table_args__ = (
+        UniqueConstraint("test_key", "performed_on", name="uq_fitness_test"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    test_key: Mapped[str] = mapped_column(String(24), index=True)  # push_up|grip|chair_stand|srt
+    performed_on: Mapped[date] = mapped_column(Date, index=True)  # JST 日付
+    value: Mapped[float] = mapped_column(Float)
+    detail_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
