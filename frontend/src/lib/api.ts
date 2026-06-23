@@ -1141,6 +1141,16 @@ export type PhysiqueDistribution = {
   evaluable: boolean;
   metrics: PhysiqueDistributionMetric[];
 };
+export type ActivityDay = {
+  date: string;
+  moved: boolean | null;
+  went_outside: boolean | null;
+  confidence: "none" | "low" | "medium" | "high";
+  steps: number | null;
+  distance_m: number | null;
+  sources: string[];
+};
+export type ActivitySignal = { days: ActivityDay[] };
 
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
@@ -1220,6 +1230,8 @@ export const api = {
   fitnessDelete: (id: number) =>
     request<{ deleted: number }>(`/api/fitness/results/${id}`, { method: "DELETE" }),
   physiqueDistribution: () => request<PhysiqueDistribution>("/api/physique/distribution"),
+  activitySignal: (days = 14) =>
+    request<ActivitySignal>(`/api/activity/signal?days=${days}`),
   foods: () => request<{ items: FoodItemDto[] }>("/api/foods"),
   foodEstimate: (name: string, qty_text?: string) =>
     request<FoodEstimate>("/api/foods/estimate", {

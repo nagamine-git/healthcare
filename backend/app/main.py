@@ -13,6 +13,7 @@ from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
+from app.api import activity as activity_api
 from app.api import body_distribution as body_distribution_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(food_api.router)
     app.include_router(fitness_api.router)
     app.include_router(body_distribution_api.router)
+    app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)
     app.include_router(timeline_api.router)
     app.include_router(debug.router)
