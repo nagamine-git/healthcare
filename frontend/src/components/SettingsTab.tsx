@@ -12,6 +12,7 @@ import {
 import { api } from "../lib/api";
 import type { SettingsDto, SettingsUpdate } from "../lib/api";
 import { PhysiqueTargetSection } from "./PhysiqueTargetSection";
+import { NotificationSettings } from "./NotificationSettings";
 
 /**
  * 個人差ファクター設定タブ。計算に直結する因子だけをグループ別の開閉式
@@ -53,6 +54,8 @@ export function SettingsTab({
         計算に効く体質・生活パラメータ。<span className="text-slate-400">グレーの値は自動</span>
         （派生・デフォルト）で、迷ったらそのままでOK。値を入れると個人設定になり、× で自動に戻せます。
       </p>
+
+      <NotificationSettings />
 
       {/* 身体・基礎 */}
       <Group icon={<User size={14} className="text-emerald-300" />} title="身体・基礎"

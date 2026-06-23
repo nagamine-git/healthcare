@@ -32,6 +32,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     # Lazy imports keep optional deps out of unit tests.
     from app.ingest.garmin_sync import sync_garmin_job
     from app.llm.client import morning_advice_job
+    from app.notifications.service import notification_tick_job
     from app.scoring.recompute import recompute_today_job, refresh_baselines_job
 
     scheduler.add_job(
@@ -64,6 +65,14 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="baseline_refresh",
         coalesce=True,
         max_instances=1,
+    )
+    scheduler.add_job(
+        notification_tick_job,
+        _parse_cron(settings.scheduler_notify_cron),
+        id="notification_tick",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=120,
     )
 
     scheduler.start()

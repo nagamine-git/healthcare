@@ -53,6 +53,11 @@ services:
       WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:-139.7671}
       WEATHER_LOCATION_LABEL: ${WEATHER_LOCATION_LABEL:-Tokyo}
       MEDITATION_TARGET_MIN: ${MEDITATION_TARGET_MIN:-15}
+      # Web Push (VAPID)。private は秘密、public はブラウザにも渡る。
+      # 未設定なら通知は自動的に無効 (push_enabled は config 既定 true だが鍵が無いと送らない)。
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
     volumes:
       - ./data:/data
     restart: unless-stopped

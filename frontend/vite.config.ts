@@ -30,6 +30,8 @@ export default defineConfig({
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/(api|admin|healthz|ingest)/],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // Web Push のハンドラを生成 SW に取り込む (public/push-sw.js)
+        importScripts: ["push-sw.js"],
       },
     }),
   ],

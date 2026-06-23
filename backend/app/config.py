@@ -239,6 +239,24 @@ class Settings(BaseSettings):
     scheduler_recompute_cron: str = "15 * * * *"
     scheduler_morning_advice_cron: str = "30 6 * * *"
     scheduler_baseline_cron: str = "0 3 * * *"
+    # 通知 tick: 毎分「今送るべき通知」を判定して Web Push を送る。
+    # アクションの time_jst は分単位なので、ピッタリその分に発火させるため毎分回す
+    # (NotificationLog による冪等判定があるので毎分でも二重送信しない)。
+    scheduler_notify_cron: str = "* * * * *"
+
+    # --- Web Push 通知 ---
+    # VAPID 鍵ペア。private は秘密 (1Password 等)、public はブラウザにも渡る applicationServerKey。
+    # base64url 文字列で渡す (bin/gen-vapid-keys.py で生成)。未設定なら通知は無効。
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    # VAPID の連絡先 (mailto: か https URL)。push サービスが配信不能時に連絡するための識別子。
+    vapid_subject: str = "mailto:admin@example.com"
+    # 通知サブシステム全体の ON/OFF。
+    push_enabled: bool = True
+    # 就寝リマインドを送るか。
+    push_bedtime_reminder: bool = True
+    # critical アラート digest を出し始める時刻 (時)。早朝の就寝中に鳴らさないため。
+    push_critical_after_hour: int = 7
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 

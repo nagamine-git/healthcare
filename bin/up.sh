@@ -29,6 +29,13 @@ op run --no-masking --env-file=.env.tmpl -- bash -c '
     printf "%s=%s\n" "$k" "${!k}"
   done
 ' > .env.runtime
+
+# gitignore したローカル秘密 overlay (.env.secrets.local) を追記する。
+# 1Password に置けない/置きたくない秘密 (例: Web Push VAPID 秘密鍵) をここで合流させる。
+if [[ -f .env.secrets.local ]]; then
+  echo "==> .env.secrets.local を .env.runtime に追記"
+  grep -E '^[A-Z_][A-Z0-9_]*=' .env.secrets.local >> .env.runtime
+fi
 chmod 600 .env.runtime
 
 echo "==> docker compose up -d --build"
