@@ -134,10 +134,11 @@ def build_distribution(
     年齢/性別/身長が揃い、性別が基準値を持つときのみ evaluable=True (percentile を出す)。
     値そのものは evaluable に関わらず算出可能なら返す。VO2max は Garmin 実測の最新値。
 
-    目標は「除脂肪量 (FFM) を一定の目標とし、体脂肪率を許容幅で振る」一貫モデルで範囲化:
-    - 体脂肪率: 目標 ± 許容幅。
-    - BMI: 目標FFMを保ったまま体脂肪率が許容幅で動くと総体重→BMI が動く、その範囲。
-    - FFMI: 目標FFM/身長² (体型の筋肉目標なので点。low==high)。
+    目標は「設定した目標体重を基準に固定し、体脂肪率を許容幅で振る」モデルで表す:
+    - BMI: 体重だけで決まるので目標体重から 1 点 (low==high)。
+    - 体脂肪率: 目標 ± 許容幅 (範囲)。
+    - FFMI: 目標体重を保ったまま体脂肪率が許容幅で動くと除脂肪量→FFMI が動く、その範囲。
+      (体脂肪率が低い=除脂肪量が多い=FFMI が高い)
     """
     evaluable = bool(
         age is not None and sex in NORMS["bmi"] and height_cm and height_cm > 0
@@ -146,36 +147,29 @@ def build_distribution(
     ffmi_v = ffmi(weight_kg, body_fat_pct, height_cm)
 
     tol = body_fat_tolerance_pct or 0.0
-    target_ffm = (
-        target_weight_kg * (1.0 - target_body_fat_pct / 100.0)
-        if target_weight_kg and target_body_fat_pct is not None
-        else None
-    )
+    h = height_cm / 100.0 if height_cm and height_cm > 0 else None
+
+    # BMI: 目標体重で 1 点
+    bmi_t = bmi(target_weight_kg, height_cm)
 
     # 体脂肪率の目標範囲
     bf_lo = target_body_fat_pct - tol if target_body_fat_pct is not None else None
     bf_hi = target_body_fat_pct + tol if target_body_fat_pct is not None else None
 
-    # FFM を保ったまま体脂肪率 bf のときの体重 → BMI
-    def _bmi_at_bf(bf: float | None) -> float | None:
-        if target_ffm is None or bf is None or bf >= 100:
+    # FFMI: 目標体重を固定し、体脂肪率 bf のときの除脂肪量 → FFMI
+    def _ffmi_at_bf(bf: float | None) -> float | None:
+        if not target_weight_kg or bf is None or h is None:
             return None
-        w = target_ffm / (1.0 - bf / 100.0)
-        return bmi(w, height_cm)
+        ffm = target_weight_kg * (1.0 - bf / 100.0)
+        return ffm / (h * h)
 
-    bmi_lo = _bmi_at_bf(bf_lo)
-    bmi_hi = _bmi_at_bf(bf_hi)
-
-    # FFMI 目標 (点): 目標FFM / 身長²
-    ffmi_t = None
-    if target_ffm is not None and height_cm and height_cm > 0:
-        h = height_cm / 100.0
-        ffmi_t = target_ffm / (h * h)
+    ffmi_lo = _ffmi_at_bf(bf_hi)  # 体脂肪率が高い → FFMI 低
+    ffmi_hi = _ffmi_at_bf(bf_lo)  # 体脂肪率が低い → FFMI 高
 
     metrics = [
-        _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_lo, bmi_hi, evaluable),
+        _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_t, bmi_t, evaluable),
         _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, bf_lo, bf_hi, evaluable),
-        _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, ffmi_t, ffmi_t, evaluable),
+        _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, ffmi_lo, ffmi_hi, evaluable),
         _metric(
             "vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, None, evaluable
         ),
