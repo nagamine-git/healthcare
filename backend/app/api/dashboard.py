@@ -194,7 +194,13 @@ async def today(
 
         air_snap = get_air_quality_snapshot(latitude=lat, longitude=lon)
         air_quality = air_quality_to_dict(air_snap)
-        morning_light = compute_morning_light_score(session, d)
+        # 朝光ウィンドウは個人の起床時刻に連動させる (光の phase-reset 効果は
+        # 起床=CBTmin 直後のタイミングに依存するため、固定 06:30 では精度が落ちる)。
+        from app.scoring.profile import resolve_profile as _resolve_profile_ml
+
+        morning_light = compute_morning_light_score(
+            session, d, wake_hhmm=_resolve_profile_ml().wake_time
+        )
 
         # --- 集中力 (Focus Readiness) ---
         # 現在時刻における認知準備度を proxy 指標から算出する。
