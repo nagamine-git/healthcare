@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     user_age: int = 30
     user_sex: str = "male"  # "male" | "female"
     user_height_cm: float = 170.0
-    user_resting_hr: int = 60  # 安静時心拍 (Karvonen 法の心拍ゾーン算出に使用)
+    # Karvonen 法の心拍ゾーン算出に使う安静時心拍。**覚醒・座位の安静時 HR** を入れること
+    # (睡眠中の最低 HR ではない。睡眠中は 5-10 bpm 低く、これを使うと HRR が広がりゾーンが上振れする)。
+    user_resting_hr: int = 60
     user_max_hr: int | None = None  # 実測最大心拍。None なら Tanaka 式 (208-0.7*age)
     user_chronotype: str = "intermediate"  # morning|intermediate|evening (睡眠/光曝露の助言)
     target_weight_kg: float = 65.0
