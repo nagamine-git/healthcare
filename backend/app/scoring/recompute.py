@@ -102,33 +102,58 @@ def _recent_body_fat(session: Session, target: date_type) -> float | None:
     return sorted_v[n // 2] if n % 2 == 1 else (sorted_v[n // 2 - 1] + sorted_v[n // 2]) / 2
 
 
+def _workout_load(training_load: float | None, duration_s: int | None) -> float:
+    """1 ワークアウトの負荷量。Garmin training_load が無ければ時間(分)で代替する。
+
+    bodyload._load と同じ規約。在宅・自重トレは training_load が欠損しがちで、
+    これを 0 にすると ACWR の急性負荷が過小評価され「負荷不足」と誤判定するため、
+    分(= 1 分 1 負荷ユニット)で粗く代替する。
+    """
+    if training_load is not None and training_load > 0:
+        return float(training_load)
+    if duration_s:
+        return duration_s / 60.0
+    return 0.0
+
+
+def _daily_loads(
+    workouts: list[tuple[datetime, float | None, int | None]], target: date_type
+) -> list[float]:
+    """ワークアウトを JST 暦日で集計し、target を末尾とする直近42日の日次負荷系列を返す。
+
+    休養日は 0、training_load 欠損は _workout_load で分代替する(0 にしない)。
+    """
+    from app.scoring.timewindow import JST
+
+    by_day: dict[date_type, float] = {}
+    for start_dt, load, dur in workouts:
+        if start_dt is None:
+            continue
+        day = start_dt.replace(tzinfo=UTC).astimezone(JST).date()
+        by_day[day] = by_day.get(day, 0.0) + _workout_load(load, dur)
+    return [by_day.get(target - timedelta(days=i), 0.0) for i in reversed(range(42))]
+
+
+def _acwr(series: list[float]) -> tuple[float | None, float | None]:
+    """同一の日次系列に span=7/28 の EWMA をかけ、最新時点の (急性, 慢性) を返す。
+
+    急性・慢性を別々のサブ系列で計算するのではなく、同一の連続系列に異なる時定数の
+    指数平滑をかけて最新値の比をとるのが ACWR(EWMA 版)の標準形(Williams 2017)。
+    """
+    return ewma(series, span=7), ewma(series, span=28)
+
+
 def _training_load(session: Session, target: date_type) -> tuple[float | None, float | None]:
     """Return (acute, chronic) EWMA training loads up to and including target (JST)."""
     start_chronic = jst_window_start(42, target)
     _, end = jst_day_bounds(target)
 
     rows = session.execute(
-        select(Workout.start, Workout.training_load)
+        select(Workout.start, Workout.training_load, Workout.duration_s)
         .where(Workout.start >= start_chronic, Workout.start < end)
         .order_by(Workout.start)
     ).all()
-
-    from app.scoring.timewindow import JST
-
-    by_day: dict[date_type, float] = {}
-    for start_dt, load in rows:
-        if load is None or start_dt is None:
-            continue
-        # naive UTC → JST 暦の日付
-        day = start_dt.replace(tzinfo=UTC).astimezone(JST).date()
-        by_day[day] = by_day.get(day, 0.0) + float(load)
-
-    def _series(days: int) -> list[float]:
-        return [by_day.get(target - timedelta(days=i), 0.0) for i in reversed(range(days))]
-
-    acute = ewma(_series(7), span=7)
-    chronic = ewma(_series(28), span=28)
-    return acute, chronic
+    return _acwr(_daily_loads(rows, target))
 
 
 def recompute_for_date(target: date_type) -> dict[str, Any]:
