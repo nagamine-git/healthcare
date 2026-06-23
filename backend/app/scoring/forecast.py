@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db import session_scope
 from app.integrations.weather import get_pressure_hourly
 from app.models import BodyBattery
@@ -37,6 +38,7 @@ def _first_onset(series, now_jst: datetime, elev_thr: float, case_mean: float | 
     返り値: (現在からの時間, 時刻ラベル, その時点のリスク) or (None, None, None)。
     24h 窓の変動なので「いつから危険な気圧変化が始まるか」= 何時間後からを示せる。
     """
+    severe_thr = get_settings().pressure_drop_severe_hpa
     h = now_jst
     end = now_jst + timedelta(hours=48)
     while h <= end:
@@ -45,7 +47,7 @@ def _first_onset(series, now_jst: datetime, elev_thr: float, case_mean: float | 
             hours = (h - now_jst).total_seconds() / 3600
             d_off = (h.date() - now_jst.date()).days
             label = f"{_rel_label(d_off)}{h.hour:02d}時頃" if hours >= 1 else "まもなく"
-            high = (case_mean is not None and sw >= case_mean) or (case_mean is None and sw >= 8)
+            high = sw >= (case_mean if case_mean is not None else severe_thr)
             return round(hours), label, ("high" if high else "elevated")
         h += timedelta(hours=1)
     return None, None, None
@@ -56,19 +58,23 @@ def _pressure_forecast(series, now_jst: datetime, pf: dict | None, tr: dict) -> 
 
     pf=検証済み誘発トリガー(個人閾値) / None=一般基準フォールバック。
     """
+    s = get_settings()
+    warn_thr, severe_thr = s.pressure_drop_warning_hpa, s.pressure_drop_severe_hpa
     if pf is not None:
         conf = {"strong": "high", "suggestive": "medium"}.get(pf["tier"], "low")
         case_mean, control_mean = pf.get("case_mean"), pf.get("control_mean")
         elev_thr = (case_mean + control_mean) / 2
     else:
-        conf, case_mean, control_mean, elev_thr = "low", None, None, 5.0
+        # 未検証 (個人閾値なし) のフォールバックは一般基準 = config の気圧降下閾値に揃える
+        # (forecast 独自のマジックナンバーを持たず warning/severe を一元管理する)。
+        conf, case_mean, control_mean, elev_thr = "low", None, None, warn_thr
 
     def classify(swing: float) -> str:
         if case_mean is not None and control_mean is not None:
             if swing >= case_mean:
                 return "high"
             return "elevated" if swing >= elev_thr else "low"
-        return "high" if swing >= 8 else ("elevated" if swing >= 5 else "low")
+        return "high" if swing >= severe_thr else ("elevated" if swing >= warn_thr else "low")
 
     buckets: list[dict[str, Any]] = []
     for b in range(4):
