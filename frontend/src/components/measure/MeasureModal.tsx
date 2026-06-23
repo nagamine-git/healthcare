@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useWakeLock } from "../../hooks/useWakeLock";
+import { setAudioSession } from "../../lib/audioSession";
 import { PushUpMeasure } from "./PushUpMeasure";
 import { ChairStandMeasure } from "./ChairStandMeasure";
 
@@ -23,8 +24,13 @@ export function MeasureModal({
   const wake = useWakeLock();
   useEffect(() => {
     void wake.request();
-    return () => wake.release();
-  }, [wake]);
+    // サイレントモードでも鳴らす。マイクを使う椅子は play-and-record。
+    setAudioSession(mode === "timer_clap" ? "play-and-record" : "playback");
+    return () => {
+      wake.release();
+      setAudioSession("auto");
+    };
+  }, [wake, mode]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
