@@ -3,6 +3,7 @@ import { useMetronome } from "../../hooks/useMetronome";
 import { bpmToInterval, repIntervalSec, shouldAutoStop } from "../../lib/measure";
 
 const BPM = 80;
+const TAP_REFRACTORY_MS = 300; // これ未満の連続タップは誤タップ (二重カウント) として無視
 
 /**
  * 腕立て (80bpm) の測定。3-2-1 リードイン後にメトロノーム開始。特大ボタンを顎でタッチ=1回。
@@ -43,7 +44,10 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
   }, [counting, count, metro, onFinish]);
 
   const tap = () => {
-    lastTapRef.current = performance.now();
+    const now = performance.now();
+    // 短すぎる連打 (チンのバウンドや pointer イベント二重発火) は無視。
+    if (lastTapRef.current != null && now - lastTapRef.current < TAP_REFRACTORY_MS) return;
+    lastTapRef.current = now;
     setCount((c) => c + 1);
   };
 
