@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Users } from "lucide-react";
-import { Area, AreaChart, ReferenceLine, ResponsiveContainer, XAxis } from "recharts";
+import { Area, AreaChart, ReferenceArea, ReferenceLine, ResponsiveContainer, XAxis } from "recharts";
 import { api, type PhysiqueDistributionMetric } from "../lib/api";
 import { bellCurve } from "../lib/stats";
 
@@ -86,10 +86,22 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
                 />
                 {/* 母集団平均 */}
                 <ReferenceLine x={m.mean!} stroke="#475569" strokeDasharray="2 2" />
-                {/* 目標 */}
-                {m.target != null && (
+                {/* 目標範囲 (帯) — low<high のとき */}
+                {m.target_low != null && m.target_high != null && m.target_high > m.target_low && (
+                  <ReferenceArea
+                    x1={m.target_low}
+                    x2={m.target_high}
+                    fill="#fbbf24"
+                    fillOpacity={0.15}
+                    stroke="#fbbf24"
+                    strokeOpacity={0.4}
+                    label={{ value: "目標", fontSize: 9, fill: "#fbbf24", position: "insideTop" }}
+                  />
+                )}
+                {/* 目標が点 (FFMI など low==high) のとき */}
+                {m.target_low != null && m.target_high === m.target_low && (
                   <ReferenceLine
-                    x={m.target}
+                    x={m.target_low}
                     stroke="#fbbf24"
                     strokeDasharray="4 2"
                     label={{ value: "目標", fontSize: 9, fill: "#fbbf24", position: "insideTopRight" }}
@@ -100,19 +112,32 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          {m.percentile != null ? (
-            <div className="mt-1 text-[11px] text-slate-400">
-              同年代・同性で{" "}
-              <span className="font-semibold tabular-nums text-sky-300">
-                {Math.round(m.percentile)}
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+            {m.percentile != null ? (
+              <span className="text-[11px] text-slate-400">
+                同年代・同性で{" "}
+                <span className="font-semibold tabular-nums text-sky-300">
+                  {Math.round(m.percentile)}
+                </span>
+                <span className="text-slate-500"> パーセンタイル (下位からの位置)</span>
               </span>
-              <span className="text-slate-500"> パーセンタイル (下位からの位置)</span>
-            </div>
-          ) : (
-            <div className="mt-1 text-[11px] text-slate-600">
-              生年月日・性別・身長を設定すると現在地 (percentile) が出ます。
-            </div>
-          )}
+            ) : (
+              <span className="text-[11px] text-slate-600">
+                生年月日・性別・身長を設定すると現在地 (percentile) が出ます。
+              </span>
+            )}
+            {m.target_low != null && (
+              <span className="text-[11px] text-amber-300/80">
+                <span className="text-slate-500">目標 </span>
+                <span className="tabular-nums">
+                  {m.target_high != null && m.target_high > m.target_low
+                    ? `${m.target_low}–${m.target_high}`
+                    : m.target_low}
+                </span>
+                {m.unit && <span className="text-slate-500">{m.unit}</span>}
+              </span>
+            )}
+          </div>
         </>
       )}
     </div>

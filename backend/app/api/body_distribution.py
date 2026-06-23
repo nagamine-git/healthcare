@@ -50,5 +50,6 @@ async def get_physique_distribution() -> dict[str, Any]:
         height_cm=prof.height_cm,
         target_weight_kg=prof.target_weight_kg,
         target_body_fat_pct=prof.target_body_fat_pct,
+        body_fat_tolerance_pct=prof.body_fat_tolerance_pct,
         vo2max=vo2max,
     )

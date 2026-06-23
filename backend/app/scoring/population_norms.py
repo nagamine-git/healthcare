@@ -82,6 +82,10 @@ def percentile(metric: str, value: float | None, age: int | None, sex: str | Non
     return max(0.0, min(100.0, p))
 
 
+def _r(x: float | None) -> float | None:
+    return round(x, 1) if x is not None else None
+
+
 def _metric(
     key: str,
     label: str,
@@ -89,22 +93,28 @@ def _metric(
     value: float | None,
     age: int | None,
     sex: str | None,
-    target: float | None,
+    target_low: float | None,
+    target_high: float | None,
     evaluable: bool,
 ) -> dict:
     band = norm_for(key, age, sex) if evaluable else None
+    # 範囲は低い方を low に揃える (体脂肪率の許容幅から導くと逆転し得るため)。
+    lo, hi = target_low, target_high
+    if lo is not None and hi is not None and lo > hi:
+        lo, hi = hi, lo
     return {
         "key": key,
         "label": label,
         "unit": unit,
-        "value": round(value, 1) if value is not None else None,
+        "value": _r(value),
         "mean": band[0] if band else None,
         "sd": band[1] if band else None,
         "percentile": (
             round(p, 1) if evaluable and (p := percentile(key, value, age, sex)) is not None else None
         ),
         "source": metric_source(key),
-        "target": round(target, 1) if target is not None else None,
+        "target_low": _r(lo),
+        "target_high": _r(hi),
     }
 
 
@@ -116,24 +126,59 @@ def build_distribution(
     height_cm: float | None,
     target_weight_kg: float | None = None,
     target_body_fat_pct: float | None = None,
+    body_fat_tolerance_pct: float | None = None,
     vo2max: float | None = None,
 ) -> dict:
-    """体型4指標 (BMI/体脂肪率/FFMI/心肺VO2max) の値・母集団mean/sd・percentile・目標をまとめる。
+    """体型4指標 (BMI/体脂肪率/FFMI/心肺VO2max) の値・母集団mean/sd・percentile・目標範囲をまとめる。
 
     年齢/性別/身長が揃い、性別が基準値を持つときのみ evaluable=True (percentile を出す)。
     値そのものは evaluable に関わらず算出可能なら返す。VO2max は Garmin 実測の最新値。
+
+    目標は「除脂肪量 (FFM) を一定の目標とし、体脂肪率を許容幅で振る」一貫モデルで範囲化:
+    - 体脂肪率: 目標 ± 許容幅。
+    - BMI: 目標FFMを保ったまま体脂肪率が許容幅で動くと総体重→BMI が動く、その範囲。
+    - FFMI: 目標FFM/身長² (体型の筋肉目標なので点。low==high)。
     """
     evaluable = bool(
         age is not None and sex in NORMS["bmi"] and height_cm and height_cm > 0
     )
     bmi_v = bmi(weight_kg, height_cm)
     ffmi_v = ffmi(weight_kg, body_fat_pct, height_cm)
-    target_bmi = bmi(target_weight_kg, height_cm)
+
+    tol = body_fat_tolerance_pct or 0.0
+    target_ffm = (
+        target_weight_kg * (1.0 - target_body_fat_pct / 100.0)
+        if target_weight_kg and target_body_fat_pct is not None
+        else None
+    )
+
+    # 体脂肪率の目標範囲
+    bf_lo = target_body_fat_pct - tol if target_body_fat_pct is not None else None
+    bf_hi = target_body_fat_pct + tol if target_body_fat_pct is not None else None
+
+    # FFM を保ったまま体脂肪率 bf のときの体重 → BMI
+    def _bmi_at_bf(bf: float | None) -> float | None:
+        if target_ffm is None or bf is None or bf >= 100:
+            return None
+        w = target_ffm / (1.0 - bf / 100.0)
+        return bmi(w, height_cm)
+
+    bmi_lo = _bmi_at_bf(bf_lo)
+    bmi_hi = _bmi_at_bf(bf_hi)
+
+    # FFMI 目標 (点): 目標FFM / 身長²
+    ffmi_t = None
+    if target_ffm is not None and height_cm and height_cm > 0:
+        h = height_cm / 100.0
+        ffmi_t = target_ffm / (h * h)
+
     metrics = [
-        _metric("bmi", "BMI", "", bmi_v, age, sex, target_bmi, evaluable),
-        _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, target_body_fat_pct, evaluable),
-        _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, None, evaluable),
-        _metric("vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, evaluable),
+        _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_lo, bmi_hi, evaluable),
+        _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, bf_lo, bf_hi, evaluable),
+        _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, ffmi_t, ffmi_t, evaluable),
+        _metric(
+            "vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, None, evaluable
+        ),
     ]
     return {"evaluable": evaluable, "metrics": metrics}
 

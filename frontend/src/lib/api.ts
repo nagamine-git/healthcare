@@ -1134,7 +1134,8 @@ export type PhysiqueDistributionMetric = {
   sd: number | null;
   percentile: number | null;
   source: string;
-  target: number | null;
+  target_low: number | null;
+  target_high: number | null;
 };
 export type PhysiqueDistribution = {
   evaluable: boolean;
