@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from datetime import date as date_type
 from pathlib import Path
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.logging import get_logger
 
 logger = get_logger(__name__)
@@ -259,9 +260,13 @@ def _normalise_body_battery(raw: list | dict) -> dict[str, Any]:
         except (TypeError, ValueError):
             continue
 
+    # 「朝の値」は実運用タイムゾーン (app_tz) で判定する。OS のローカル TZ に
+    # 依存させると、サーバ/CI の TZ 次第で朝の時刻判定がズレる。
+    tz = ZoneInfo(get_settings().app_tz)
+
     morning = None
     for point in series:
-        local = point["ts"].astimezone() if point["ts"].tzinfo else point["ts"]
+        local = point["ts"].astimezone(tz) if point["ts"].tzinfo else point["ts"]
         if local.hour == 6:
             morning = point["value"]
             break
@@ -271,7 +276,7 @@ def _normalise_body_battery(raw: list | dict) -> dict[str, Any]:
         # 夜間充電「前」の最低値) を朝の値にしない。08時までの最後の
         # サンプル = 起床時点の近似を使う
         for point in series:
-            local = point["ts"].astimezone() if point["ts"].tzinfo else point["ts"]
+            local = point["ts"].astimezone(tz) if point["ts"].tzinfo else point["ts"]
             if local.hour >= 8:
                 break
             morning = point["value"]

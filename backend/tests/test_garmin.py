@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -21,6 +22,8 @@ from app.models import (
     SourceSync,
     Workout,
 )
+
+JST = ZoneInfo("Asia/Tokyo")
 
 SAMPLE_SLEEP = {
     "dailySleepDTO": {
@@ -48,9 +51,9 @@ def test_normalise_body_battery_picks_morning_value():
         {
             "bodyBatteryValuesArray": [
                 # entries: [epoch ms, status, value]
-                [int(datetime(2026, 5, 1, 6, 0, tzinfo=UTC).timestamp() * 1000), "MEASURED", 88],
-                [int(datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp() * 1000), "MEASURED", 60],
-                [int(datetime(2026, 5, 1, 22, 0, tzinfo=UTC).timestamp() * 1000), "MEASURED", 30],
+                [int(datetime(2026, 5, 1, 6, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 88],
+                [int(datetime(2026, 5, 1, 12, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 60],
+                [int(datetime(2026, 5, 1, 22, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 30],
             ]
         }
     ]
@@ -67,9 +70,9 @@ def test_normalise_body_battery_early_sync_uses_wakeup_not_midnight():
     raw = [
         {
             "bodyBatteryValuesArray": [
-                [int(datetime(2026, 6, 10, 0, 3, tzinfo=UTC).timestamp() * 1000), "MEASURED", 18],
-                [int(datetime(2026, 6, 10, 3, 0, tzinfo=UTC).timestamp() * 1000), "MEASURED", 55],
-                [int(datetime(2026, 6, 10, 5, 3, tzinfo=UTC).timestamp() * 1000), "MEASURED", 82],
+                [int(datetime(2026, 6, 10, 0, 3, tzinfo=JST).timestamp() * 1000), "MEASURED", 18],
+                [int(datetime(2026, 6, 10, 3, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 55],
+                [int(datetime(2026, 6, 10, 5, 3, tzinfo=JST).timestamp() * 1000), "MEASURED", 82],
             ]
         }
     ]
