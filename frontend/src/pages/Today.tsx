@@ -14,6 +14,7 @@ import { MigrainePanel } from "../components/MigrainePanel";
 import { MigraineTriggerPanel } from "../components/MigraineTriggerPanel";
 import { AlcoholPanel } from "../components/AlcoholPanel";
 import { EnvironmentPanel } from "../components/EnvironmentPanel";
+import { WeatherPanel } from "../components/WeatherPanel";
 import { StaleBanner } from "../components/StaleBanner";
 import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
@@ -286,6 +287,10 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 総合 (サマリー) ============ */}
       {tab === "summary" && (
       <div className="space-y-3">
+      <div id="weather-section">
+        <SectionHeader label="天気" hint="今日の天気・降水確率 + 週間予報" />
+        <WeatherPanel />
+      </div>
       <div id="alerts-section">
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
         <div className="space-y-3">

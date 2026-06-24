@@ -1367,6 +1367,54 @@ export const api = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+  weather: () => request<WeatherForecast>("/api/weather"),
 };
 
 export type PushConfig = { enabled: boolean; vapid_public_key: string | null };
+
+export type WeatherIcon =
+  | "sun"
+  | "cloud-sun"
+  | "cloud"
+  | "fog"
+  | "drizzle"
+  | "rain"
+  | "snow"
+  | "storm"
+  | "unknown";
+export type LaundryHint = { level: "ok" | "caution" | "no" | "unknown"; text: string };
+export type WeatherHourly = {
+  time: string;
+  temp: number | null;
+  precip: number | null;
+  precip_prob: number | null;
+  code: number | null;
+  label: string;
+  icon: WeatherIcon;
+  humidity: number | null;
+  wind: number | null;
+};
+export type WeatherDaily = {
+  date: string;
+  code: number | null;
+  label: string;
+  icon: WeatherIcon;
+  t_max: number | null;
+  t_min: number | null;
+  precip_prob_max: number | null;
+};
+export type WeatherSummary = {
+  code: number | null;
+  label: string;
+  icon: WeatherIcon;
+  t_max: number | null;
+  t_min: number | null;
+  precip_prob_max: number | null;
+  laundry: LaundryHint;
+};
+export type WeatherForecast = {
+  available: boolean;
+  summary: WeatherSummary | null;
+  hourly: WeatherHourly[];
+  daily: WeatherDaily[];
+};

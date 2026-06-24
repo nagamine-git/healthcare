@@ -26,6 +26,7 @@ from app.api import push as push_api
 from app.api import sleep_drivers as sleep_drivers_api
 from app.api import speech as speech_api
 from app.api import timeline as timeline_api
+from app.api import weather as weather_api
 from app.config import get_settings
 from app.db import create_all, init_engine
 from app.logging import configure_logging, get_logger
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)
     app.include_router(timeline_api.router)
+    app.include_router(weather_api.router)
     app.include_router(debug.router)
     return app
 
