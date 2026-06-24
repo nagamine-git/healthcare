@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
-import type { WeatherDaily, WeatherHourly, WeatherIcon } from "../lib/api";
+import type { LaundryAdvice, WeatherDaily, WeatherHourly, WeatherIcon } from "../lib/api";
 
 const ICONS: Record<WeatherIcon, LucideIcon> = {
   sun: Sun,
@@ -74,12 +74,11 @@ export function WeatherPanel() {
 
   const s = data.summary;
   const laundry = s?.laundry;
-  const L = laundry ? LAUNDRY_STYLE[laundry.level] : null;
 
   return (
     <div className={`${box} space-y-4`}>
       {s && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <WIcon icon={s.icon} size={40} />
           <div className="flex-1">
             <div className="text-base font-medium text-slate-100">{s.label}</div>
@@ -92,21 +91,19 @@ export function WeatherPanel() {
               )}
             </div>
           </div>
-          {L && laundry && (
-            <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${L.cls}`}>
-              <L.icon size={14} />
-              <span>{laundry.text}</span>
-            </div>
-          )}
+          {laundry && <LaundryBadge laundry={laundry} />}
         </div>
       )}
 
       {data.hourly.length > 0 && (
-        <div className="-mx-1 overflow-x-auto px-1">
-          <div className="flex gap-3">
-            {data.hourly.slice(0, 24).map((h) => (
-              <HourCell key={h.time} h={h} />
-            ))}
+        <div>
+          <div className="mb-1 text-[10px] text-slate-500">時間別の降水確率(青)と気温</div>
+          <div className="-mx-1 overflow-x-auto px-1">
+            <div className="flex gap-2.5">
+              {data.hourly.slice(0, 24).map((h) => (
+                <HourCell key={h.time} h={h} />
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -122,16 +119,42 @@ export function WeatherPanel() {
   );
 }
 
-function HourCell({ h }: { h: WeatherHourly }) {
+function LaundryBadge({ laundry }: { laundry: LaundryAdvice }) {
+  const style = LAUNDRY_STYLE[laundry.level] ?? LAUNDRY_STYLE.unknown;
+  const Icon = style.icon;
   return (
-    <div className="flex w-12 shrink-0 flex-col items-center gap-1 text-center">
+    <div className="text-right">
+      <div
+        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${style.cls}`}
+      >
+        <Icon size={13} />
+        <span>{laundry.now_text}</span>
+      </div>
+      <div className="mt-1 text-[11px] tabular-nums text-slate-400">{laundry.window_text}</div>
+    </div>
+  );
+}
+
+function HourCell({ h }: { h: WeatherHourly }) {
+  const prob = h.precip_prob ?? 0;
+  return (
+    <div className="flex w-10 shrink-0 flex-col items-center gap-1 text-center">
       <span className="text-[10px] tabular-nums text-slate-400">{hhmm(h.time)}</span>
-      <WIcon icon={h.icon} size={18} />
-      <span className="text-xs tabular-nums text-slate-200">
+      <WIcon icon={h.icon} size={16} />
+      <span className="text-[11px] tabular-nums text-slate-200">
         {h.temp != null ? `${Math.round(h.temp)}°` : "--"}
       </span>
-      <span className="text-[10px] tabular-nums text-sky-400">
-        {h.precip_prob != null ? `${h.precip_prob}%` : ""}
+      <div
+        className="relative h-12 w-3 overflow-hidden rounded bg-slate-700/40"
+        title={h.precip_prob != null ? `降水確率 ${h.precip_prob}%` : "降水確率 不明"}
+      >
+        <div
+          className={`absolute inset-x-0 bottom-0 ${prob >= 50 ? "bg-sky-400" : "bg-sky-500/55"}`}
+          style={{ height: `${Math.max(prob, 3)}%` }}
+        />
+      </div>
+      <span className="text-[10px] tabular-nums text-sky-300">
+        {h.precip_prob != null ? `${h.precip_prob}%` : "--"}
       </span>
     </div>
   );

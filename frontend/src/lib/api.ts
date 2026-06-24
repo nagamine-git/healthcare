@@ -1382,7 +1382,13 @@ export type WeatherIcon =
   | "snow"
   | "storm"
   | "unknown";
-export type LaundryHint = { level: "ok" | "caution" | "no" | "unknown"; text: string };
+export type LaundryAdvice = {
+  level: "ok" | "caution" | "no" | "unknown";
+  can_now: boolean;
+  now_text: string;
+  window: { start: string; end: string } | null;
+  window_text: string;
+};
 export type WeatherHourly = {
   time: string;
   temp: number | null;
@@ -1410,7 +1416,7 @@ export type WeatherSummary = {
   t_max: number | null;
   t_min: number | null;
   precip_prob_max: number | null;
-  laundry: LaundryHint;
+  laundry: LaundryAdvice;
 };
 export type WeatherForecast = {
   available: boolean;

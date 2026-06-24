@@ -4,9 +4,13 @@ from datetime import datetime
 
 from app.integrations.weather_forecast import (
     _shape_forecast,
-    laundry_hint,
+    laundry_advice,
     weather_code_to_label,
 )
+
+
+def _slot(hour, prob, precip=0.0, temp=22.0, humidity=60.0):
+    return {"hour": hour, "prob": prob, "precip": precip, "temp": temp, "humidity": humidity}
 
 
 # --- WMO weathercode → 日本語ラベル + アイコンキー ---
@@ -43,30 +47,49 @@ def test_weather_code_unknown_for_none_and_garbage():
     assert weather_code_to_label(99999)[1] == "unknown"
 
 
-# --- 洗濯/傘の素朴な3段判定 ---
+# --- 洗濯の最適時間帯アドバイス ---
 
 
-def test_laundry_ok_when_dry():
-    level, text = laundry_hint(prob_max=10, precip_total=0.0)
-    assert level == "ok"
-    assert text
+def test_laundry_all_clear_window_from_now():
+    slots = [_slot(h, 5) for h in range(6, 19)]
+    a = laundry_advice(slots, now_hour=9)
+    assert a["level"] == "ok"
+    assert a["can_now"] is True
+    assert a["window"] == {"start": "09:00", "end": "19:00"}
 
 
-def test_laundry_caution_on_mid_probability():
-    assert laundry_hint(prob_max=45, precip_total=0.0)[0] == "caution"
+def test_laundry_window_ends_before_afternoon_rain():
+    slots = [_slot(h, 10) for h in range(6, 13)] + [
+        _slot(h, 80, precip=1.0) for h in range(13, 19)
+    ]
+    a = laundry_advice(slots, now_hour=8)
+    assert a["window"] == {"start": "08:00", "end": "13:00"}
+    assert a["can_now"] is True
 
 
-def test_laundry_no_when_rain_likely():
-    assert laundry_hint(prob_max=80, precip_total=3.0)[0] == "no"
+def test_laundry_all_rain_no_window():
+    slots = [_slot(h, 90, precip=2.0) for h in range(6, 19)]
+    a = laundry_advice(slots, now_hour=10)
+    assert a["level"] == "no"
+    assert a["can_now"] is False
+    assert a["window"] is None
 
 
-def test_laundry_no_when_precip_present_even_if_prob_low():
-    # 降水量が見込まれているなら確率が低くても干さない
-    assert laundry_hint(prob_max=20, precip_total=1.5)[0] == "no"
+def test_laundry_night_has_no_window():
+    slots = [_slot(h, 5) for h in range(6, 19)]
+    a = laundry_advice(slots, now_hour=20)
+    assert a["can_now"] is False
+    assert a["window"] is None
 
 
-def test_laundry_unknown_when_no_data():
-    assert laundry_hint(prob_max=None, precip_total=None)[0] == "unknown"
+def test_laundry_short_window_is_caution():
+    slots = (
+        [_slot(h, 90, precip=1.0) for h in range(6, 17)]
+        + [_slot(17, 10), _slot(18, 10)]
+    )
+    a = laundry_advice(slots, now_hour=16)
+    assert a["window"]["start"] == "17:00"
+    assert a["level"] == "caution"
 
 
 # --- API生JSON → 整形 ---

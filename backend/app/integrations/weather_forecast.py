@@ -70,19 +70,84 @@ def weather_code_to_label(code: int | None) -> tuple[str, str]:
     return _CODE_MAP.get(int(code), ("不明", "unknown"))
 
 
-def laundry_hint(prob_max: float | None, precip_total: float | None) -> tuple[str, str]:
-    """日中の降水確率最大・降水量から「洗濯を干していいか」を3段で返す。
+_DAY_START = 6  # 干す現実的な時間帯 (時)
+_DAY_END = 18
+_DRY_PROB = 35  # これ未満なら「干せる」(降水確率 %)
+_DRY_PRECIP = 0.2  # これ未満なら「干せる」(降水量 mm)
 
-    本格的な洗濯指数 (湿度・日照・風) は次フェーズ。ここは降水だけの素朴な目安。
+
+def laundry_advice(slots: list[dict[str, Any]], now_hour: int) -> dict[str, Any]:
+    """今日の時間別から「今干せるか」「いつ干すべきか (時間帯)」を返す。
+
+    slots: [{"hour": 0-23, "prob": %|None, "precip": mm|None, "temp", "humidity"}]
+    日中 (6-18時) のうち、これから (now_hour 以降) で降水確率が低く雨量も無い連続区間を
+    探し、最長を「狙い目」ウィンドウとする。本格的な洗濯指数 (湿度・日照・風) は次フェーズ。
     """
-    if prob_max is None:
-        return ("unknown", "降水データなし")
-    precip = precip_total or 0.0
-    if prob_max >= 60 or precip >= 1.0:
-        return ("no", "今日は雨の見込み。部屋干しが安心")
-    if prob_max >= 30 or precip >= 0.3:
-        return ("caution", "にわか雨に注意。短時間なら外干しも可")
-    return ("ok", "よく乾きそう。外干しOK")
+
+    def dryable(s: dict[str, Any]) -> bool:
+        p = s.get("prob")
+        if p is None:
+            return False
+        return p < _DRY_PROB and (s.get("precip") or 0.0) < _DRY_PRECIP
+
+    future = sorted(
+        (s for s in slots if _DAY_START <= s["hour"] <= _DAY_END and s["hour"] >= now_hour),
+        key=lambda s: s["hour"],
+    )
+
+    # 連続して干せる最長区間 [start_hour, end_hour]
+    best: list[int] | None = None
+    cur: list[int] | None = None
+    for s in future:
+        if dryable(s):
+            if cur is None:
+                cur = [s["hour"], s["hour"]]
+            else:
+                cur[1] = s["hour"]
+        else:
+            if cur is not None and (best is None or cur[1] - cur[0] > best[1] - best[0]):
+                best = cur
+            cur = None
+    if cur is not None and (best is None or cur[1] - cur[0] > best[1] - best[0]):
+        best = cur
+
+    window: dict[str, str] | None = None
+    hours = 0
+    if best is not None:
+        window = {"start": f"{best[0]:02d}:00", "end": f"{best[1] + 1:02d}:00"}
+        hours = best[1] - best[0] + 1
+
+    in_day = _DAY_START <= now_hour <= _DAY_END
+    now_slot = next((s for s in slots if s["hour"] == now_hour), None)
+    can_now = bool(in_day and now_slot is not None and dryable(now_slot))
+
+    if hours >= 3:
+        level = "ok"
+    elif hours >= 1:
+        level = "caution"
+    elif not in_day:
+        level = "unknown"  # 夜など日中外
+    else:
+        level = "no"
+
+    if not in_day:
+        now_text = "今は夜。外干しは日中に"
+    elif can_now:
+        now_text = "今は干してOK"
+    else:
+        now_text = "今は外干しに不向き"
+
+    window_text = (
+        f"狙い目 {window['start']}〜{window['end']}" if window else "今日の日中は外干し非推奨"
+    )
+
+    return {
+        "level": level,
+        "can_now": can_now,
+        "now_text": now_text,
+        "window": window,
+        "window_text": window_text,
+    }
 
 
 def _safe_dt(s: str) -> datetime | None:
@@ -147,29 +212,21 @@ def _shape_forecast(raw: dict[str, Any], now_jst: datetime) -> dict[str, Any]:
             "precip_prob_max": _g(dprob, i),
         })
 
-    # 今日の日中 (9-18時) の降水確率最大・降水量で洗濯判定。日中の hourly が無ければ
-    # 当日の daily 降水確率最大でフォールバックする。
+    # 今日の時間別から「今干せるか・いつ干すべきか」を算出する。
     today = now_jst.date()
-    day_probs: list[float] = []
-    day_precs: list[float] = []
+    today_slots: list[dict[str, Any]] = []
     for i, t in enumerate(times):
         dt = _safe_dt(t)
-        if dt is None or dt.date() != today or not (9 <= dt.hour <= 18):
+        if dt is None or dt.date() != today:
             continue
-        if _g(probs, i) is not None:
-            day_probs.append(probs[i])
-        if _g(precs, i) is not None:
-            day_precs.append(precs[i])
-    if day_probs:
-        prob_max: float | None = max(day_probs)
-        precip_total: float | None = sum(day_precs)
-    elif daily:
-        prob_max = daily[0]["precip_prob_max"]
-        precip_total = 0.0
-    else:
-        prob_max = None
-        precip_total = None
-    lvl, txt = laundry_hint(prob_max, precip_total)
+        today_slots.append({
+            "hour": dt.hour,
+            "prob": _g(probs, i),
+            "precip": _g(precs, i),
+            "temp": _g(temps, i),
+            "humidity": _g(hums, i),
+        })
+    laundry = laundry_advice(today_slots, now_jst.hour)
 
     summary: dict[str, Any] | None = None
     if daily:
@@ -181,7 +238,7 @@ def _shape_forecast(raw: dict[str, Any], now_jst: datetime) -> dict[str, Any]:
             "t_max": d0["t_max"],
             "t_min": d0["t_min"],
             "precip_prob_max": d0["precip_prob_max"],
-            "laundry": {"level": lvl, "text": txt},
+            "laundry": laundry,
         }
 
     return {"summary": summary, "hourly": hourly, "daily": daily}
