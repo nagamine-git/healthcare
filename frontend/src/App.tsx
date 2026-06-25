@@ -4,15 +4,17 @@ import { DebugPage } from "./pages/Debug";
 import { IdentityPage } from "./pages/Identity";
 import { GardenPage } from "./pages/Garden";
 import { BecomingPage } from "./pages/Becoming";
+import { CommandCenter } from "./pages/CommandCenter";
 
-type View = "today" | "debug" | "identity" | "garden" | "becoming";
+type View = "home" | "today" | "debug" | "identity" | "garden" | "becoming";
 
 function viewFromHash(): View {
   if (window.location.hash === "#debug") return "debug";
   if (window.location.hash === "#identity") return "identity";
   if (window.location.hash === "#garden") return "garden";
   if (window.location.hash === "#becoming") return "becoming";
-  return "today";
+  if (window.location.hash === "#today") return "today";
+  return "home";
 }
 
 export default function App() {
@@ -53,8 +55,10 @@ export default function App() {
             window.location.hash = "";
           }}
         />
-      ) : (
+      ) : view === "today" ? (
         <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
+      ) : (
+        <CommandCenter onOpenSettings={() => (window.location.hash = "#today")} />
       )}
     </>
   );

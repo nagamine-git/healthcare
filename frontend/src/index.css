@@ -94,3 +94,61 @@ body {
     display: none !important;
   }
 }
+
+/* ===== Cockpit デザイン言語(Block A)===== */
+.status-bar-scrim {
+  background: rgba(10, 14, 20, 0.85); /* void */
+}
+
+/* 計器ラベル: 小さく・トラッキングを効かせた大文字キャプション */
+.telemetry-label {
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #5b6675; /* ink-faint */
+}
+
+/* 数値テレメトリ: Space Grotesk + tabular */
+.telemetry-num {
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 計器パネルの上辺ハイライト(微かな立体感) */
+.panel-edge {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%);
+}
+
+/* signature: フライホイールの回転インジケータ(回っている時だけ静かに回る) */
+@keyframes flywheel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.flywheel-turning {
+  animation: flywheel-spin 9s linear infinite;
+}
+
+/* 数値の起動フェード */
+@keyframes telemetry-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.telemetry-rise {
+  animation: telemetry-rise 0.3s ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flywheel-turning,
+  .telemetry-rise {
+    animation: none !important;
+  }
+}
