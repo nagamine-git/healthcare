@@ -75,10 +75,13 @@ def _streak_len(session: Session, target: date, has_today: bool) -> int:
     return length
 
 
-def recompute_garden_for_date(session: Session, target: date) -> GardenDaily:
+def recompute_garden_for_date(
+    session: Session, target: date, gaps: dict[str, float | None] | None = None
+) -> GardenDaily:
     settings = get_settings()
     catalog = settings.garden_catalog
-    gaps = gaps_from_report(build_gap_report(session))
+    if gaps is None:
+        gaps = gaps_from_report(build_gap_report(session))
     active = active_kinds_for_date(session, target, catalog)
     result = compute_garden_day(
         active, catalog, gaps,
@@ -96,3 +99,20 @@ def recompute_garden_for_date(session: Session, target: date) -> GardenDaily:
     row.streak_len = _streak_len(session, target, result["intensity"] > 0)
     session.flush()
     return row
+
+
+def recompute_garden_range(session: Session, start: date, end: date) -> int:
+    """[start, end] の全日を昇順で再計算(履歴バックフィル)。
+
+    gaps は現在の Compass ギャップを 1 度だけ算出して全日に適用する
+    (過去のギャップ snapshot は持たない=現在の盲点で重み付けする意図的な簡略化)。
+    昇順に処理するので各日の streak は確定済みの前日行を正しく参照する。
+    """
+    gaps = gaps_from_report(build_gap_report(session))
+    cur = start
+    count = 0
+    while cur <= end:
+        recompute_garden_for_date(session, cur, gaps=gaps)
+        cur += timedelta(days=1)
+        count += 1
+    return count

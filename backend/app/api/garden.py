@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db import session_scope
+from app.ingest.github_sync import sync_and_backfill
 from app.models.health import GardenConfig, GardenDaily, GoodActionLog
 from app.scoring.garden.recompute import gaps_from_report, recompute_garden_for_date
 from app.scoring.identity.store import build_gap_report
@@ -88,6 +89,18 @@ async def get_garden() -> dict:
         ]
         today_payload = _today_payload(today_row)
 
+        recent = (
+            session.query(GoodActionLog)
+            .order_by(GoodActionLog.ts.desc())
+            .limit(30)
+            .all()
+        )
+        recent_logs = [
+            {"id": r.id, "ts": r.ts.isoformat(), "kind": r.kind,
+             "source": r.source, "note": r.note}
+            for r in recent
+        ]
+
     return {
         "date": today.isoformat(),
         "grid": grid,
@@ -96,6 +109,7 @@ async def get_garden() -> dict:
         "catalog": catalog,
         "weakest_hint": weakest_hint,
         "github": github,
+        "recent_logs": recent_logs,
     }
 
 
@@ -117,6 +131,28 @@ async def add_garden_log(body: GardenLogIn) -> dict:
         row = recompute_garden_for_date(session, target)
         payload = _today_payload(row)
     return {"today": payload}
+
+
+@router.delete("/api/garden/log/{log_id}")
+async def delete_garden_log(log_id: int) -> dict:
+    with session_scope() as session:
+        row = session.get(GoodActionLog, log_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="not found")
+        target = row.ts.date()
+        session.delete(row)
+        session.flush()
+        recomputed = recompute_garden_for_date(session, target)
+        level = recomputed.level
+        payload = _today_payload(session.get(GardenDaily, app_today()))
+    return {"deleted": log_id, "date": target.isoformat(), "level": level, "today": payload}
+
+
+@router.post("/api/garden/sync")
+async def garden_sync() -> dict:
+    """GitHub を即時同期し、過去1年分の草を再計算する(「今すぐ同期」ボタン)。"""
+    with session_scope() as session:
+        return sync_and_backfill(session)
 
 
 @router.post("/api/garden/config")

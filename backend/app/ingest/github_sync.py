@@ -11,6 +11,8 @@ from app.config import get_settings
 from app.db import session_scope
 from app.logging import get_logger
 from app.models.health import GardenConfig, GithubContributionDaily
+from app.scoring.garden.recompute import recompute_garden_range
+from app.scoring.timewindow import app_today
 
 logger = get_logger(__name__)
 
@@ -72,7 +74,7 @@ def _fetch_calendar(username: str | None, token: str, days: int) -> dict | None:
         return None
 
 
-def sync_github(session: Session, *, days: int = 60) -> dict:
+def sync_github(session: Session, *, days: int = 365) -> dict:
     username, token = resolve_github_credentials(session)
     if not token:
         return {"status": "skipped", "reason": "no_credentials"}
@@ -94,6 +96,16 @@ def sync_github(session: Session, *, days: int = 60) -> dict:
     return {"status": "ok", "upserted": upserted}
 
 
+def sync_and_backfill(session: Session, *, days: int = 365) -> dict:
+    """GitHub を同期し、過去 days 日分の草を再計算して履歴を埋める。"""
+    sync_result = sync_github(session, days=days)
+    if sync_result["status"] != "ok":
+        return sync_result
+    today = app_today()
+    recomputed = recompute_garden_range(session, today - timedelta(days=days - 1), today)
+    return {**sync_result, "recomputed_days": recomputed}
+
+
 async def github_sync_job() -> dict:
     with session_scope() as session:
-        return sync_github(session)
+        return sync_and_backfill(session)

@@ -18,6 +18,7 @@ from app.scoring.garden.recompute import (
     active_kinds_for_date,
     gaps_from_report,
     recompute_garden_for_date,
+    recompute_garden_range,
 )
 
 
@@ -80,10 +81,48 @@ def test_recompute_upserts_and_computes_streak(mem_session, monkeypatch):
     assert count == 1
 
 
+def test_recompute_range_backfills_history_and_streak(mem_session, monkeypatch):
+    import app.scoring.garden.recompute as rc
+
+    monkeypatch.setattr(rc, "build_gap_report", lambda s: {"dimensions": []})
+    monkeypatch.setattr(rc, "get_settings", lambda: _FakeSettings())
+
+    # 6/23・6/24 に GitHub コミット、6/25 は無し
+    mem_session.add(GithubContributionDaily(date=date(2026, 6, 23), commit_count=2))
+    mem_session.add(GithubContributionDaily(date=date(2026, 6, 24), commit_count=1))
+    mem_session.flush()
+
+    n = recompute_garden_range(mem_session, date(2026, 6, 23), date(2026, 6, 25))
+    assert n == 3
+    r23 = mem_session.get(GardenDaily, date(2026, 6, 23))
+    r24 = mem_session.get(GardenDaily, date(2026, 6, 24))
+    r25 = mem_session.get(GardenDaily, date(2026, 6, 25))
+    assert r23.intensity > 0 and r23.streak_len == 1
+    assert r24.intensity > 0 and r24.streak_len == 2  # 連続2日
+    assert r25.intensity == 0 and r25.streak_len == 0  # 活動なしで途切れる
+
+
+def test_recompute_for_date_accepts_precomputed_gaps(mem_session, monkeypatch):
+    import app.scoring.garden.recompute as rc
+
+    # build_gap_report が呼ばれたら失敗させ、gaps を渡せばスキップされることを確認
+    def _boom(_s):
+        raise AssertionError("build_gap_report should not be called when gaps is given")
+
+    monkeypatch.setattr(rc, "build_gap_report", _boom)
+    monkeypatch.setattr(rc, "get_settings", lambda: _FakeSettings())
+    mem_session.add(GoodActionLog(ts=datetime(2026, 6, 25, 1, 0), kind="meditation", source="manual"))
+    mem_session.flush()
+    row = recompute_garden_for_date(mem_session, date(2026, 6, 25), gaps={})
+    assert row.intensity > 0
+
+
 class _FakeSettings:
     garden_catalog: ClassVar[list[dict]] = [
         {"kind": "meditation", "source": "manual", "dimensions": ["internal_locus"],
          "base": 1.2, "evidence": ""},
+        {"kind": "coding", "source": "github", "dimensions": ["ownership"],
+         "base": 2.0, "evidence": ""},
     ]
     garden_gap_gamma = 1.0
     garden_level_thresholds: ClassVar[list[float]] = [0.0, 1.0, 2.5, 4.5]

@@ -1254,6 +1254,13 @@ export type GardenCatalogItem = {
   evidence: string;
   dimensions: string[];
 };
+export type GardenLog = {
+  id: number;
+  ts: string;
+  kind: string;
+  source: string;
+  note: string | null;
+};
 export type GardenResponse = {
   date: string;
   grid: GardenGridCell[];
@@ -1262,6 +1269,7 @@ export type GardenResponse = {
   catalog: GardenCatalogItem[];
   weakest_hint: { dimension_id: string; name: string; kinds: string[] } | null;
   github: { connected: boolean; username: string | null };
+  recent_logs: GardenLog[];
 };
 
 export const api = {
@@ -1483,6 +1491,14 @@ export const api = {
     request<{ connected: boolean; username: string | null }>("/api/garden/config", {
       method: "POST",
       body: JSON.stringify({ github_username, github_token }),
+    }),
+  gardenDeleteLog: (id: number) =>
+    request<{ deleted: number; today: GardenToday }>(`/api/garden/log/${id}`, {
+      method: "DELETE",
+    }),
+  gardenSync: () =>
+    request<{ status: string; recomputed_days?: number }>("/api/garden/sync", {
+      method: "POST",
     }),
   identitySjtTurn: (messages: ChatMsg[]) =>
     request<SjtTurnResult>("/api/identity/sjt", {
