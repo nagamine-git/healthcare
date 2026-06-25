@@ -39,6 +39,29 @@ def bucket_level(intensity: float, thresholds: list[float]) -> int:
     return len(thresholds)
 
 
+def cell_focus(contributions: dict[str, float], catalog: list[dict], gamma: float) -> float:
+    """その日の努力の「重点度」を 0..1 で返す(寄与で重み付けした平均)。
+
+    重みは gap 連動 (contrib = base * (1 + gamma*gap/100)) なので、
+    保存済み contributions と base から重点度 (gap/100) を逆算できる。
+    1.0 = 盲点(重点)に全振り、0.0 = すでに強い領域への努力。
+    """
+    if gamma <= 0:
+        return 0.0
+    base = {c["kind"]: c["base"] for c in catalog}
+    total = sum(contributions.values())
+    if total <= 0:
+        return 0.0
+    fsum = 0.0
+    for kind, contrib in contributions.items():
+        b = base.get(kind)
+        if not b:
+            continue
+        focus_k = max(0.0, (contrib / b - 1.0) / gamma)
+        fsum += contrib * focus_k
+    return round(fsum / total, 4)
+
+
 def compute_garden_day(
     active_kinds: set[str],
     catalog: list[dict],

@@ -1241,6 +1241,7 @@ export type GardenGridCell = {
   level: number;
   intensity: number;
   contributions: Record<string, number>;
+  focus: number;
 };
 export type GardenToday = {
   level: number;
