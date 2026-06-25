@@ -67,7 +67,7 @@ def _fetch_calendar(username: str | None, token: str, days: int) -> dict | None:
             )
             r.raise_for_status()
             return r.json()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("github_fetch_failed", error=str(exc))
         return None
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import ClassVar
 
 import pytest
 from sqlalchemy import create_engine
@@ -80,9 +81,9 @@ def test_recompute_upserts_and_computes_streak(mem_session, monkeypatch):
 
 
 class _FakeSettings:
-    garden_catalog = [
+    garden_catalog: ClassVar[list[dict]] = [
         {"kind": "meditation", "source": "manual", "dimensions": ["internal_locus"],
          "base": 1.2, "evidence": ""},
     ]
     garden_gap_gamma = 1.0
-    garden_level_thresholds = [0.0, 1.0, 2.5, 4.5]
+    garden_level_thresholds: ClassVar[list[float]] = [0.0, 1.0, 2.5, 4.5]

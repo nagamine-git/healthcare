@@ -31,9 +31,9 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     # Lazy imports keep optional deps out of unit tests.
     from app.ingest.garmin_sync import sync_garmin_job
+    from app.ingest.github_sync import github_sync_job
     from app.llm.client import morning_advice_job
     from app.notifications.service import notification_tick_job
-    from app.ingest.github_sync import github_sync_job
     from app.scoring.garden.jobs import garden_recompute_job
     from app.scoring.identity.jobs import identity_monthly_job, identity_weekly_job
     from app.scoring.recompute import recompute_today_job, refresh_baselines_job
