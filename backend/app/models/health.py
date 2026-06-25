@@ -633,5 +633,23 @@ class GardenConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class BecomingSnapshot(Base):
+    """三層(身体・行動・アイデンティティ)の日次スナップショット。
+
+    アイデンティティのトレンドを出すための履歴の素。condition/garden は過去も
+    バックフィルできるが、dim_estimates は履歴が無いので前向き(これから)のみ。
+    """
+
+    __tablename__ = "becoming_snapshot"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    condition: Mapped[float | None] = mapped_column(Float, nullable=True)
+    garden_focus: Mapped[float | None] = mapped_column(Float, nullable=True)
+    garden_intensity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overall_proximity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dim_estimates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere

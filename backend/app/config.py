@@ -325,6 +325,12 @@ class Settings(BaseSettings):
     github_username: str | None = None
     github_token: str | None = None
 
+    # --- Becoming エンジン(三層フライホイール + 到達予測)---
+    becoming_good_condition_threshold: float = 70.0  # personal: 「動ける」良好日の閾値
+    becoming_trajectory_window_days: int = 90  # tuning: 傾き推定の窓
+    becoming_min_snapshots_for_eta: int = 14  # tuning: これ未満は ETA 低信頼
+    scheduler_becoming_snapshot_cron: str = "35 * * * *"
+
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"
     scheduler_recompute_cron: str = "15 * * * *"

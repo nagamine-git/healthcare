@@ -15,6 +15,15 @@ from typing import Any
 from app.config import get_settings
 from app.scoring.learning import CURRICULUM, SECTIONS
 
+
+def _cached_system(text: str) -> list[dict[str, Any]]:
+    """system に prompt cache (ephemeral) を付ける。
+
+    同章の口頭試問・復習・選択問題は短時間に同じ system を反復するため、
+    tools+system の前置きがキャッシュヒットし入力課金が下がる (出力は不変・ロスレス)。
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
 # 試験官の人格。掘り下げ・誤解の摘発・足場かけ・甘くしない採点を指示する。
 _SYSTEM_TEMPLATE = """\
 あなたは Rust の熟練メンターで、The Rust Programming Language (The Book) の口頭試問官です。
@@ -226,12 +235,11 @@ async def quiz_turn(chapter: int, messages: list[dict[str, Any]]) -> dict[str, A
     secs = SECTIONS.get(chapter, [])
     sections_str = " / ".join(f"{sid} {title}" for sid, title in secs) or "(節なし)"
     note = f"章の注意点: {info['note']}" if info.get("note") else ""
-    system = [{
-        "type": "text",
-        "text": _SYSTEM_TEMPLATE.format(
+    system = _cached_system(
+        _SYSTEM_TEMPLATE.format(
             chapter=chapter, title=info["title"], sections=sections_str, note=note
-        ),
-    }]
+        )
+    )
 
     convo = list(messages) if messages else [{"role": "user", "content": _OPENING}]
 
@@ -262,12 +270,11 @@ def _chapter_system(chapter: int, template: str) -> list[dict[str, Any]]:
     secs = SECTIONS.get(chapter, [])
     sections_str = " / ".join(f"{sid} {title}" for sid, title in secs) or "(節なし)"
     note = f"章の注意点: {info['note']}" if info.get("note") else ""
-    return [{
-        "type": "text",
-        "text": template.format(
+    return _cached_system(
+        template.format(
             chapter=chapter, title=info["title"], sections=sections_str, note=note
-        ),
-    }]
+        )
+    )
 
 
 async def tutor_turn(chapter: int, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -303,12 +310,11 @@ async def choice_question(
     secs = SECTIONS.get(chapter, [])
     sections_str = " / ".join(f"{sid} {title}" for sid, title in secs) or "(節なし)"
     note = f"章の注意点: {info['note']}" if info.get("note") else ""
-    system = [{
-        "type": "text",
-        "text": _CHOICE_TEMPLATE.format(
+    system = _cached_system(
+        _CHOICE_TEMPLATE.format(
             chapter=chapter, title=info["title"], sections=sections_str, note=note, n=n
-        ),
-    }]
+        )
+    )
     convo = list(messages) if messages else [{"role": "user", "content": f"{n}択の問題を1問出してください。"}]
 
     settings = get_settings()

@@ -9,6 +9,7 @@ from app.api import activity as activity_api
 from app.api import admin as admin_api
 from app.api import advice_feedback as advice_feedback_api
 from app.api import alcohol as alcohol_api
+from app.api import becoming as becoming_api
 from app.api import body_distribution as body_distribution_api
 from app.api import bodyload as bodyload_api
 from app.api import caffeine as caffeine_api
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(food_api.router)
     app.include_router(fitness_api.router)
     app.include_router(garden_api.router)
+    app.include_router(becoming_api.router)
     app.include_router(body_distribution_api.router)
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)
