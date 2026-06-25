@@ -31,7 +31,30 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
 
   return (
     <div className="space-y-3">
-      {/* プライマリ・ディスプレイ(signature) */}
+      {/* 今日の一手(=結局これをやる。最上部・最も目立たせる) */}
+      <Panel
+        title="今日やること"
+        glow="act"
+        action={
+          <Button variant="primary" disabled={moveMut.isPending} onClick={() => moveMut.mutate()}>
+            {moveMut.isPending ? "生成中…" : moveMut.data ? "再生成" : "決める"}
+          </Button>
+        }
+      >
+        {moveMut.data ? (
+          <div className="space-y-1">
+            <p className="text-lg font-semibold leading-snug text-ink">{moveMut.data.move}</p>
+            <p className="text-sm text-act-300">if-then: {moveMut.data.if_then}</p>
+            <p className="text-xs text-ink-faint">{moveMut.data.rationale}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-dim">
+            「決める」を押すと、盲点に効く今日いちばんの一手が出ます。
+          </p>
+        )}
+      </Panel>
+
+      {/* プライマリ・ディスプレイ(コンディション) */}
       <Panel onClick={() => go("#today")}>
         <div className="flex items-center gap-5">
           <RingGauge value={score?.total ?? null} label="CONDITION" tone="prog" />
@@ -43,27 +66,6 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
         </div>
         {headline && (
           <p className="mt-3 border-t border-hairline pt-2 text-sm text-ink-dim">{headline}</p>
-        )}
-      </Panel>
-
-      {/* 今日の一手 */}
-      <Panel
-        title="TODAY'S ONE MOVE"
-        glow="act"
-        action={
-          <Button variant="primary" disabled={moveMut.isPending} onClick={() => moveMut.mutate()}>
-            {moveMut.isPending ? "生成中…" : "生成"}
-          </Button>
-        }
-      >
-        {moveMut.data ? (
-          <div className="space-y-1">
-            <p className="text-base font-semibold text-ink">{moveMut.data.move}</p>
-            <p className="text-sm text-act-300">if-then: {moveMut.data.if_then}</p>
-            <p className="text-xs text-ink-faint">{moveMut.data.rationale}</p>
-          </div>
-        ) : (
-          <p className="text-sm text-ink-faint">盲点に効く、今日いちばんの一手を生成します。</p>
         )}
       </Panel>
 

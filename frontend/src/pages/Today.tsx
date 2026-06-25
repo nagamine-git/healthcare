@@ -181,8 +181,8 @@ export function TodayPage({ onOpenDebug }: Props) {
   const weight = data.metrics.weight;
 
   return (
-    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-6">
-      <header className="safe-area-top flex items-center justify-between pb-2">
+    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-3">
+      <header className="safe-area-top flex items-center justify-between pb-1">
         <div className="flex items-baseline gap-3">
           <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
           <span className="text-[10px] tabular-nums text-slate-500">
@@ -284,15 +284,18 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== コックピットのヒーロー: プライマリ・ディスプレイ + 今日の一手 + becoming 要約 ===== */}
-      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
-
-      {/* ===== 計器盤ランプ(警告)===== */}
+      {/* ===== 最上部: 今すぐ効くアラート(安全網)+ 計器盤ランプ ===== */}
+      {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
+      <MigraineRiskBanner />
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
       />
+
+      {/* ===== コックピットのヒーロー: 今日の一手 + プライマリ・ディスプレイ + becoming 要約 ===== */}
+      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
+
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
         isRefreshing={dataRefresh.isPending}
@@ -350,8 +353,6 @@ export function TodayPage({ onOpenDebug }: Props) {
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
         <div className="space-y-3">
           <DayPrediction />
-          <WellbeingAlertsBanner alerts={data.alerts} />
-          <MigraineRiskBanner />
           <FitnessDueBanner onOpen={() => setTab("physique")} />
           <AdviceCard
             advice={data.advice}
