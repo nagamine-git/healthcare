@@ -236,6 +236,95 @@ class Settings(BaseSettings):
     # --- ライフドメイン (自己目標管理) ---
     meditation_target_min: int = 15  # 1 日の瞑想目標分 (mindful_minutes 合計の目標)
 
+    # --- Compass: 価値観 × マインドセット ---
+    # 次元定義は scoring/identity/dimensions.py (枠組み定数)。ここに持つのは
+    # 「理想プロファイル (どの次元をどこまで高めたいか)」= personal/aspirational target。
+    # DB の IdentityArchetype が未設定のときの既定。env / UI で上書きできる。
+    # 既定は「起業家 (founder) アーキタイプ」: マインドセット層と自律・達成・刺激を高く、
+    # 同調・伝統・安全を低めに置く (脱・サラリーマンマインドの方向)。
+    identity_archetype_name: str = "founder"
+    identity_archetype_targets: dict[str, float] = Field(
+        default_factory=lambda: {
+            # 価値観層
+            "self_direction": 90,
+            "stimulation": 80,
+            "hedonism": 45,
+            "achievement": 85,
+            "power": 65,
+            "security": 35,
+            "conformity": 25,
+            "tradition": 25,
+            "benevolence": 60,
+            "universalism": 65,
+            # マインドセット層
+            "internal_locus": 90,
+            "proactivity": 90,
+            "effectuation": 85,
+            "risk_tolerance": 80,
+            "need_for_achievement": 88,
+            "growth_mindset": 90,
+            "ownership": 92,
+        }
+    )
+    # 重み: 本人のギャップ (脱サラリーマンマインド) が大きいマインドセット層を重く。
+    identity_archetype_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "self_direction": 2.0,
+            "stimulation": 1.0,
+            "hedonism": 0.5,
+            "achievement": 1.5,
+            "power": 0.8,
+            "security": 0.8,
+            "conformity": 1.0,
+            "tradition": 0.8,
+            "benevolence": 1.0,
+            "universalism": 1.0,
+            "internal_locus": 2.5,
+            "proactivity": 2.5,
+            "effectuation": 2.0,
+            "risk_tolerance": 2.0,
+            "need_for_achievement": 2.0,
+            "growth_mindset": 2.0,
+            "ownership": 2.5,
+        }
+    )
+    # 現在地合成 EWMA の span (意思決定ログ観測数ベース)。
+    identity_ewma_span: int = 8
+    # 作品メタdata補完 API (任意)。未設定なら IMDb CSV の情報だけで動く。
+    tmdb_api_key: str | None = None
+    omdb_api_key: str | None = None
+
+    # --- Garden(ゲーミフィケーション)---
+    # personal: 行動カタログ(理想像への紐付けを含むので個人依存)。
+    garden_catalog: list[dict] = Field(
+        default_factory=lambda: [
+            {"kind": "coding", "source": "github",
+             "dimensions": ["self_direction", "proactivity", "ownership", "effectuation"],
+             "base": 2.0, "evidence": "創造的アウトプット=founder 主体性の直接証拠"},
+            {"kind": "exercise", "source": "garmin",
+             "dimensions": ["risk_tolerance", "need_for_achievement"],
+             "base": 1.5, "evidence": "有酸素運動→BDNF・実行機能 (Erickson 2011)"},
+            {"kind": "meditation", "source": "manual",
+             "dimensions": ["internal_locus", "growth_mindset"],
+             "base": 1.2, "evidence": "瞑想→前頭前野・情動制御・HRV (Tang 2015)"},
+            {"kind": "journaling", "source": "manual",
+             "dimensions": ["growth_mindset", "internal_locus"],
+             "base": 1.2, "evidence": "expressive writing (Pennebaker 1997)"},
+            {"kind": "reflection", "source": "manual",
+             "dimensions": ["growth_mindset", "ownership"],
+             "base": 1.0, "evidence": "省察的実践 (Schön 1983)"},
+        ]
+    )
+    # tuning: ギャップ連動の効き具合。盲点(gap最大)は重み最大 (1+gamma) 倍。
+    garden_gap_gamma: float = 1.0
+    # intensity→level 0-4 の境界。
+    garden_level_thresholds: list[float] = Field(
+        default_factory=lambda: [0.0, 1.0, 2.5, 4.5]
+    )
+    # GitHub 認証フォールバック(通常は DB GardenConfig 優先)。
+    github_username: str | None = None
+    github_token: str | None = None
+
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"
     scheduler_recompute_cron: str = "15 * * * *"
@@ -245,6 +334,13 @@ class Settings(BaseSettings):
     # アクションの time_jst は分単位なので、ピッタリその分に発火させるため毎分回す
     # (NotificationLog による冪等判定があるので毎分でも二重送信しない)。
     scheduler_notify_cron: str = "* * * * *"
+    # Compass: 週次で意思決定ログを集計して現在地を更新 (月曜 8:00 JST)。
+    scheduler_identity_weekly_cron: str = "0 8 * * 1"
+    # Compass: 月初に SJT 本測リマインドを出す (1 日 8:00 JST)。
+    scheduler_identity_monthly_cron: str = "0 8 1 * *"
+    # Garden: GitHub コミット取込(毎時20分)→ 草の再計算(毎時25分)。
+    scheduler_github_sync_cron: str = "20 * * * *"
+    scheduler_garden_recompute_cron: str = "25 * * * *"
 
     # --- Web Push 通知 ---
     # VAPID 鍵ペア。private は秘密 (1Password 等)、public はブラウザにも渡る applicationServerKey。

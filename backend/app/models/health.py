@@ -465,5 +465,173 @@ class FitnessTestResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+# ---------------------------------------------------------------------------
+# Compass: 価値観 × マインドセットの自己理解・ギャップ・介入
+# 次元定義 (枠組み定数) は scoring/identity/dimensions.py に持ち、これらの
+# テーブルは「理想プロファイル・現在地・測定結果・作品・内省ログ」だけを永続化する
+# (Learning のカリキュラム/進捗分離と同じ思想)。
+# ---------------------------------------------------------------------------
+
+
+class IdentityArchetype(Base):
+    """理想プロファイル (なりたい型)。シングルトン id=1、UI/CLI から差し替え可能。
+
+    target_profile: {dimension_id: 0-100} の目標値。weights: {dimension_id: 重み}。
+    値は personal/aspirational target なので、未設定なら config の既定にフォールバックする。
+    """
+
+    __tablename__ = "identity_archetype"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    weights: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IdentityDimensionScore(Base):
+    """次元ごとの現在地 (最新値のみ)。
+
+    sjt_baseline: 直近 SJT 本測のベースライン (0-100)。
+    current_estimate: ベースライン + 意思決定ログ観測の EWMA 合成 (0-100)。
+    components: 内訳 (観測履歴の要約など) を JSON で保持しデバッグ可能にする。
+    """
+
+    __tablename__ = "identity_dimension_score"
+
+    dimension_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    sjt_baseline: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_estimate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    components: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IdentityAssessment(Base):
+    """SJT 本測 1 セッションの結果 (会話履歴はフロント保持、サーバは結果のみ)。
+
+    result: {dimension_id: 0-100} の推定。kind は将来の測定種別拡張用 ("sjt" 等)。
+    """
+
+    __tablename__ = "identity_assessment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), default="sjt")
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class IdentityDecisionLog(Base):
+    """日々の意思決定ログ。短文を LLM が次元 × 信号 (-1..+1) に紐づける。
+
+    inferred: [{"dimension_id": str, "signal": float, "rationale": str}] を JSON で保持。
+    現在地の EWMA 補正に観測として供給する。
+    """
+
+    __tablename__ = "identity_decision_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    text: Mapped[str] = mapped_column(String(1000))
+    inferred: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MediaItem(Base):
+    """介入に使う作品 (映画/TV/マンガ/本)。
+
+    映画/TV は IMDb CSV 取り込み (source="imdb", ext_id=tt...)、マンガ/本は手動登録。
+    dimension_tags: {dimension_id: 0-1 確信度} で「効く次元」を保持 (手タグ + LLM 拡張)。
+    """
+
+    __tablename__ = "media_item"
+    __table_args__ = (UniqueConstraint("source", "ext_id", name="uq_media_item_source_ext"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(16), index=True)  # imdb | manual
+    ext_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # IMDb const tt...
+    kind: Mapped[str] = mapped_column(String(8))  # film | tv | manga | book
+    title: Mapped[str] = mapped_column(String(300))
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    dimension_tags: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tag_source: Mapped[str | None] = mapped_column(String(16), nullable=True)  # curated | llm
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MediaLog(Base):
+    """作品ごとの状態と「作品 → 内省 → 実行意図」ループの記録。
+
+    status: watchlist (未消化) | seen (消化済み)。
+    intention: 観た後に生成した if-then の小さな実行意図。
+    intention_done / intention_rating: 完遂と有用度 (-1/0/+1)。AdviceFeedback と同型の
+    outcome ループで再測定へ還元する。dimension_id は紐づく主次元。
+    """
+
+    __tablename__ = "media_log"
+
+    media_item_id: Mapped[int] = mapped_column(
+        ForeignKey("media_item.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(12), default="watchlist")
+    rating: Mapped[float | None] = mapped_column(Float, nullable=True)  # IMDb 個人評価等
+    seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dimension_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reflection: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    intention: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    intention_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    intention_rating: Mapped[int] = mapped_column(Integer, default=0)  # -1 / 0 / +1
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GoodActionLog(Base):
+    """個別の良い行動イベント(手動ワンタップ & 自動取込)。"""
+
+    __tablename__ = "good_action_log"
+    __table_args__ = (UniqueConstraint("dedup_key", name="uq_good_action_dedup"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, index=True)  # UTC naive
+    kind: Mapped[str] = mapped_column(String(32), index=True)  # meditation|journaling|...
+    source: Mapped[str] = mapped_column(String(16))  # manual|apple_health|github|garmin
+    value: Mapped[float] = mapped_column(Float, default=1.0)
+    dedup_key: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 自動取込の冪等用
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class GardenDaily(Base):
+    """日次の草1マス。冪等 upsert(再計算可能)。"""
+
+    __tablename__ = "garden_daily"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    intensity: Mapped[float] = mapped_column(Float, default=0.0)
+    level: Mapped[int] = mapped_column(Integer, default=0)  # 0-4
+    contributions: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {kind: weighted}
+    streak_len: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GithubContributionDaily(Base):
+    """GitHub の日次コミット数。"""
+
+    __tablename__ = "github_contribution_daily"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    commit_count: Mapped[int] = mapped_column(Integer, default=0)
+    repo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GardenConfig(Base):
+    """GitHub 連携の認証情報(シングルトン id=1)。UI から設定。"""
+
+    __tablename__ = "garden_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    github_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    github_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere
