@@ -1497,7 +1497,7 @@ export const api = {
       method: "DELETE",
     }),
   gardenSync: () =>
-    request<{ status: string; recomputed_days?: number }>("/api/garden/sync", {
+    request<{ status: string; reason?: string; recomputed_days?: number }>("/api/garden/sync", {
       method: "POST",
     }),
   identitySjtTurn: (messages: ChatMsg[]) =>

@@ -68,19 +68,23 @@ def _fetch_calendar(username: str | None, token: str, days: int) -> dict | None:
                 },
             )
             r.raise_for_status()
-            return r.json()
+            return r.json(), None
+    except httpx.HTTPStatusError as exc:
+        reason = "unauthorized" if exc.response.status_code in (401, 403) else "http_error"
+        logger.warning("github_fetch_failed", error=str(exc), reason=reason)
+        return None, reason
     except Exception as exc:
-        logger.warning("github_fetch_failed", error=str(exc))
-        return None
+        logger.warning("github_fetch_failed", error=str(exc), reason="fetch_failed")
+        return None, "fetch_failed"
 
 
 def sync_github(session: Session, *, days: int = 365) -> dict:
     username, token = resolve_github_credentials(session)
     if not token:
         return {"status": "skipped", "reason": "no_credentials"}
-    payload = _fetch_calendar(username, token, days)
+    payload, reason = _fetch_calendar(username, token, days)
     if payload is None:
-        return {"status": "error"}
+        return {"status": "error", "reason": reason}
     calendar = parse_contribution_calendar(payload)
     upserted = 0
     for d, count in calendar.items():
