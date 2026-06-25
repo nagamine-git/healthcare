@@ -34,7 +34,7 @@ import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
-import { TodaySummary } from "../components/TodaySummary";
+import { CockpitHero } from "../components/CockpitHero";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
 
@@ -284,20 +284,14 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== ファーストビュー: 計器盤ランプ + 今の要点サマリ (常設) ===== */}
+      {/* ===== コックピットのヒーロー: プライマリ・ディスプレイ + 今日の一手 + becoming 要約 ===== */}
+      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
+
+      {/* ===== 計器盤ランプ(警告)===== */}
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
-      />
-      <TodaySummary
-        total={score?.total ?? null}
-        headline={data.advice?.payload?.headline}
-        subs={[
-          { label: "睡眠", value: score?.sleep ?? null },
-          { label: "自律神経", value: score?.hrv ?? null },
-          { label: "エネルギー", value: score?.body_battery ?? null },
-        ]}
       />
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
