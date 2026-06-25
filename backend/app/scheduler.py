@@ -34,6 +34,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     from app.ingest.github_sync import github_sync_job
     from app.llm.client import morning_advice_job
     from app.notifications.service import notification_tick_job
+    from app.scoring.becoming.jobs import becoming_snapshot_job
     from app.scoring.garden.jobs import garden_recompute_job
     from app.scoring.identity.jobs import identity_monthly_job, identity_weekly_job
     from app.scoring.recompute import recompute_today_job, refresh_baselines_job
@@ -105,6 +106,14 @@ def setup_scheduler() -> AsyncIOScheduler:
         garden_recompute_job,
         _parse_cron(settings.scheduler_garden_recompute_cron),
         id="garden_recompute",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=600,
+    )
+    scheduler.add_job(
+        becoming_snapshot_job,
+        _parse_cron(settings.scheduler_becoming_snapshot_cron),
+        id="becoming_snapshot",
         coalesce=True,
         max_instances=1,
         misfire_grace_time=600,
