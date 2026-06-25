@@ -1160,6 +1160,110 @@ export type ActivityDay = {
 };
 export type ActivitySignal = { days: ActivityDay[] };
 
+// --- Compass (価値観 × マインドセット) ---
+export type IdentityDimensionDef = {
+  id: string;
+  layer: "values" | "mindset";
+  name: string;
+  description: string;
+  research_basis: string;
+};
+export type IdentityGapDimension = {
+  id: string;
+  layer: "values" | "mindset" | null;
+  name: string;
+  current: number | null;
+  target: number;
+  proximity: number | null;
+  gap: number | null;
+  weight: number;
+};
+export type IdentityGapReport = {
+  dimensions: IdentityGapDimension[];
+  layers: { values: number | null; mindset: number | null };
+  overall: number | null;
+  weakest: string[];
+  archetype_name?: string;
+};
+export type IdentityRecCategory = "rewatch" | "watchlist" | "new";
+export type IdentityRecommendation = {
+  media_item_id: number;
+  title: string;
+  kind: string;
+  year: number | null;
+  category: IdentityRecCategory;
+  rating: number | null;
+  imdb_url: string | null;
+  reason_dimension: string;
+  reason: string;
+  score: number;
+};
+export type IdentityDecisionSignal = {
+  dimension_id: string;
+  signal: number;
+  rationale: string;
+};
+export type IdentityIntention = {
+  media_item_id: number;
+  title: string | null;
+  dimension_id: string | null;
+  intention: string | null;
+  done: boolean;
+  rating: number;
+  seen_at: string | null;
+};
+export type IdentityResponse = {
+  date: string;
+  catalog: IdentityDimensionDef[];
+  report: IdentityGapReport;
+  recommendations: IdentityRecommendation[];
+  recent_logs: Array<{ id: number; date: string; text: string; inferred: IdentityDecisionSignal[] }>;
+  intentions: IdentityIntention[];
+  library: { total: number; seen: number; untagged: number };
+};
+export type SjtAssessed = { dimension_id: string; score: number; confidence: number };
+export type SjtTurnResult = {
+  assessed: SjtAssessed[];
+  next_scenario: { situation: string; options: string[] };
+  done: boolean;
+  comment: string;
+};
+export type ReflectResult = {
+  next_question: string;
+  intention: string;
+  intention_dimension_id: string;
+  comment: string;
+};
+export type ChatMsg = { role: "user" | "assistant"; content: string };
+
+export type GardenGridCell = {
+  date: string;
+  level: number;
+  intensity: number;
+  contributions: Record<string, number>;
+};
+export type GardenToday = {
+  level: number;
+  intensity: number;
+  contributions: Record<string, number>;
+  actions: string[];
+};
+export type GardenCatalogItem = {
+  kind: string;
+  source: string;
+  evidence: string;
+  dimensions: string[];
+};
+export type GardenResponse = {
+  date: string;
+  grid: GardenGridCell[];
+  streak: number;
+  today: GardenToday;
+  catalog: GardenCatalogItem[];
+  weakest_hint: { dimension_id: string; name: string; kinds: string[] } | null;
+  github: { connected: boolean; username: string | null };
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -1368,6 +1472,77 @@ export const api = {
       body: JSON.stringify({}),
     }),
   weather: () => request<WeatherForecast>("/api/weather"),
+  identity: () => request<IdentityResponse>("/api/identity"),
+  garden: () => request<GardenResponse>("/api/garden"),
+  gardenLog: (kind: string, opts?: { note?: string; ts_iso?: string }) =>
+    request<{ today: GardenToday }>("/api/garden/log", {
+      method: "POST",
+      body: JSON.stringify({ kind, ...opts }),
+    }),
+  gardenConfig: (github_username: string, github_token: string) =>
+    request<{ connected: boolean; username: string | null }>("/api/garden/config", {
+      method: "POST",
+      body: JSON.stringify({ github_username, github_token }),
+    }),
+  identitySjtTurn: (messages: ChatMsg[]) =>
+    request<SjtTurnResult>("/api/identity/sjt", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
+  identitySjtCommit: (result: Record<string, number>) =>
+    request<IdentityGapReport>("/api/identity/sjt/commit", {
+      method: "POST",
+      body: JSON.stringify({ result }),
+    }),
+  identityDecisionLog: (text: string, date?: string) =>
+    request<{ inferred: IdentityDecisionSignal[]; report: IdentityGapReport }>(
+      "/api/identity/decision-log",
+      { method: "POST", body: JSON.stringify({ text, date }) },
+    ),
+  identityImdbImport: (csv: string, list_kind: "ratings" | "watchlist") =>
+    request<{ status: string; items: number; seen: number; watchlist: number }>(
+      "/api/identity/imdb-import",
+      { method: "POST", body: JSON.stringify({ csv, list_kind }) },
+    ),
+  identityAddMedia: (body: {
+    title: string;
+    kind: "film" | "tv" | "manga" | "book";
+    year?: number;
+    overview?: string;
+    status?: "watchlist" | "seen";
+  }) =>
+    request<{ status: string; media_item_id: number; tags: Record<string, number> }>(
+      "/api/identity/media",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  identityTagUntagged: (limit = 5) =>
+    request<{ status: string; tagged: number; failed: number; remaining: number }>(
+      "/api/identity/media/tag-untagged",
+      { method: "POST", body: JSON.stringify({ limit }) },
+    ),
+  identitySuggestNew: (n = 8) =>
+    request<{ status: string; created: number; suggestions: Array<{ title: string; kind: string; year: number | null; dimension_id: string; reason: string }> }>(
+      "/api/identity/suggest-new",
+      { method: "POST", body: JSON.stringify({ n }) },
+    ),
+  identityReflect: (mediaItemId: number, messages: ChatMsg[]) =>
+    request<ReflectResult>(`/api/identity/media/${mediaItemId}/reflect`, {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
+  identitySaveIntention: (
+    mediaItemId: number,
+    body: { intention: string; dimension_id?: string; reflection?: string },
+  ) =>
+    request<{ status: string }>(`/api/identity/media/${mediaItemId}/intention`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  identityIntentionFeedback: (mediaItemId: number, done: boolean, rating: number) =>
+    request<{ status: string }>(`/api/identity/media/${mediaItemId}/intention/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ done, rating }),
+    }),
 };
 
 export type PushConfig = { enabled: boolean; vapid_public_key: string | null };
@@ -1382,12 +1557,29 @@ export type WeatherIcon =
   | "snow"
   | "storm"
   | "unknown";
+export type LaundryNext = {
+  start: string;
+  start_label: string;
+  dry_by: string;
+  dry_by_label: string;
+  minutes: number;
+  within_5h: boolean;
+  wind_caution?: boolean;
+  blocked_by: string | null;
+};
+export type WindNow = {
+  speed: number | null;
+  gust: number | null;
+  dir: string | null;
+  level: "ok" | "caution" | "hazard";
+};
 export type LaundryAdvice = {
   level: "ok" | "caution" | "no" | "unknown";
   can_now: boolean;
   now_text: string;
   window: { start: string; end: string } | null;
   window_text: string;
+  next?: LaundryNext | null;
 };
 export type WeatherHourly = {
   time: string;
@@ -1399,6 +1591,8 @@ export type WeatherHourly = {
   icon: WeatherIcon;
   humidity: number | null;
   wind: number | null;
+  gust: number | null;
+  wind_dir: string | null;
 };
 export type WeatherDaily = {
   date: string;
@@ -1408,6 +1602,7 @@ export type WeatherDaily = {
   t_max: number | null;
   t_min: number | null;
   precip_prob_max: number | null;
+  uv_max: number | null;
 };
 export type WeatherSummary = {
   code: number | null;
@@ -1416,6 +1611,8 @@ export type WeatherSummary = {
   t_max: number | null;
   t_min: number | null;
   precip_prob_max: number | null;
+  uv_max: number | null;
+  wind: WindNow | null;
   laundry: LaundryAdvice;
 };
 export type WeatherForecast = {

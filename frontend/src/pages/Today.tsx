@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings as SettingsIcon } from "lucide-react";
-import { api } from "../lib/api";
+import { Compass as CompassIcon, Settings as SettingsIcon } from "lucide-react";
+import { api, type GardenGridCell } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { DayStory } from "../components/DayStory";
 import { AdviceCard } from "../components/AdviceCard";
@@ -106,6 +106,7 @@ export function TodayPage({ onOpenDebug }: Props) {
     queryFn: api.gcalStatus,
     retry: false,
   });
+  const gardenQ = useQuery({ queryKey: ["garden"], queryFn: api.garden, retry: false });
 
   // ページ open 時、データが古ければ自動でフル更新
   // (last_data_update が 30 分以上前 / 未取得)
@@ -192,6 +193,24 @@ export function TodayPage({ onOpenDebug }: Props) {
           <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
           <button
             type="button"
+            onClick={() => (window.location.hash = "#identity")}
+            aria-label="Compass"
+            title="Compass (価値観×マインドセット)"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:text-slate-200"
+          >
+            <CompassIcon size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => (window.location.hash = "#garden")}
+            aria-label="理想の庭"
+            title="理想の庭 (ゲーミフィケーション)"
+            className="rounded-lg p-1.5 text-base leading-none text-slate-400 transition-colors hover:text-slate-200"
+          >
+            🌱
+          </button>
+          <button
+            type="button"
             onClick={() => setTab(tab === "settings" ? "summary" : "settings")}
             aria-label="設定"
             title="設定"
@@ -240,6 +259,11 @@ export function TodayPage({ onOpenDebug }: Props) {
                 hidden: !gcalStatus.data?.configured,
               },
               {
+                label: "Compass (価値観×マインド)",
+                description: "理想とのギャップと作品による介入",
+                onClick: () => (window.location.hash = "#identity"),
+              },
+              {
                 label: "Debug ビュー",
                 description: "ソース別の生データを確認",
                 onClick: () => onOpenDebug?.(),
@@ -270,6 +294,33 @@ export function TodayPage({ onOpenDebug }: Props) {
         isRefreshing={dataRefresh.isPending}
         onRefresh={() => dataRefresh.mutate()}
       />
+
+      {gardenQ.data && (
+        <button
+          type="button"
+          onClick={() => (window.location.hash = "#garden")}
+          className="w-full rounded-xl bg-slate-900/70 p-3 text-left transition-colors hover:bg-slate-900"
+        >
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-xs tracking-wider text-slate-400">🌱 理想の庭</span>
+            <span className="text-sm font-bold text-emerald-400">
+              {gardenQ.data.streak}日連続
+            </span>
+          </div>
+          <div className="flex gap-[2px]">
+            {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => (
+              <div
+                key={c.date}
+                className={`h-2 w-2 rounded-sm ${
+                  ["bg-slate-800", "bg-emerald-900", "bg-emerald-700", "bg-emerald-500", "bg-emerald-300"][
+                    c.level
+                  ]
+                }`}
+              />
+            ))}
+          </div>
+        </button>
+      )}
 
       {/* ===== タブナビ (sticky) ===== */}
       <div className="sticky top-0 z-20 -mx-1 bg-slate-950/80 py-1 backdrop-blur">

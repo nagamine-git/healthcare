@@ -31,8 +31,11 @@ def setup_scheduler() -> AsyncIOScheduler:
 
     # Lazy imports keep optional deps out of unit tests.
     from app.ingest.garmin_sync import sync_garmin_job
+    from app.ingest.github_sync import github_sync_job
     from app.llm.client import morning_advice_job
     from app.notifications.service import notification_tick_job
+    from app.scoring.garden.jobs import garden_recompute_job
+    from app.scoring.identity.jobs import identity_monthly_job, identity_weekly_job
     from app.scoring.recompute import recompute_today_job, refresh_baselines_job
 
     scheduler.add_job(
@@ -73,6 +76,38 @@ def setup_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         max_instances=1,
         misfire_grace_time=120,
+    )
+    scheduler.add_job(
+        identity_weekly_job,
+        _parse_cron(settings.scheduler_identity_weekly_cron),
+        id="identity_weekly",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        identity_monthly_job,
+        _parse_cron(settings.scheduler_identity_monthly_cron),
+        id="identity_monthly",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        github_sync_job,
+        _parse_cron(settings.scheduler_github_sync_cron),
+        id="github_sync",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=600,
+    )
+    scheduler.add_job(
+        garden_recompute_job,
+        _parse_cron(settings.scheduler_garden_recompute_cron),
+        id="garden_recompute",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=600,
     )
 
     scheduler.start()

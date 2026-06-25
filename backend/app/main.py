@@ -17,6 +17,8 @@ from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
+from app.api import garden as garden_api
+from app.api import identity as identity_api
 from app.api import imputation as imputation_api
 from app.api import learning as learning_api
 from app.api import life as life_api
@@ -81,11 +83,13 @@ def create_app() -> FastAPI:
     app.include_router(push_api.router)
     app.include_router(food_api.router)
     app.include_router(fitness_api.router)
+    app.include_router(garden_api.router)
     app.include_router(body_distribution_api.router)
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)
     app.include_router(timeline_api.router)
     app.include_router(weather_api.router)
+    app.include_router(identity_api.router)
     app.include_router(debug.router)
     return app
 
