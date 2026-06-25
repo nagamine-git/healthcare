@@ -21,6 +21,17 @@ function kindLabel(k: string): string {
   return KIND_LABEL[k] ?? k;
 }
 
+function syncErrorMessage(reason?: string): string {
+  switch (reason) {
+    case "unauthorized":
+      return "同期失敗: GitHub にトークンが拒否されました(401/403)。read:user スコープの有効な classic トークンを入れ直してください。";
+    case "no_credentials":
+      return "同期失敗: トークンが未設定です。";
+    default:
+      return "同期失敗: GitHub への接続に失敗しました。少し待って再試行してください。";
+  }
+}
+
 function ContributionGrid({
   grid,
   selected,
@@ -232,8 +243,14 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
                 {syncMut.isPending ? "同期中…" : "今すぐ同期(過去1年を再取得)"}
               </button>
             )}
-            {syncMut.isSuccess && !syncMut.isPending && (
-              <p className="mt-1 text-xs text-slate-500">同期完了</p>
+            {syncMut.data && !syncMut.isPending && (
+              syncMut.data.status === "ok" ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  同期完了{syncMut.data.recomputed_days ? `(${syncMut.data.recomputed_days}日分)` : ""}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-red-400">{syncErrorMessage(syncMut.data.reason)}</p>
+              )
             )}
           </div>
         </>

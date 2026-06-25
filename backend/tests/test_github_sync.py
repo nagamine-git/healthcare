@@ -56,7 +56,7 @@ def test_sync_github_upserts(mem_session, monkeypatch):
     mem_session.flush()
     import app.ingest.github_sync as gs
 
-    monkeypatch.setattr(gs, "_fetch_calendar", lambda user, token, days: SAMPLE)
+    monkeypatch.setattr(gs, "_fetch_calendar", lambda user, token, days: (SAMPLE, None))
     out = sync_github(mem_session, days=30)
     assert out["status"] == "ok"
     assert mem_session.get(GithubContributionDaily, date(2026, 6, 25)).commit_count == 5
@@ -64,12 +64,23 @@ def test_sync_github_upserts(mem_session, monkeypatch):
     assert mem_session.query(GithubContributionDaily).filter_by(date=date(2026, 6, 25)).count() == 1
 
 
+def test_sync_github_reports_unauthorized(mem_session, monkeypatch):
+    mem_session.add(GardenConfig(id=1, github_username="octocat", github_token="badtok"))
+    mem_session.flush()
+    import app.ingest.github_sync as gs
+
+    monkeypatch.setattr(gs, "_fetch_calendar", lambda user, token, days: (None, "unauthorized"))
+    out = sync_github(mem_session)
+    assert out["status"] == "error"
+    assert out["reason"] == "unauthorized"
+
+
 def test_sync_and_backfill_creates_garden_rows(mem_session, monkeypatch):
     mem_session.add(GardenConfig(id=1, github_username="octocat", github_token="tok"))
     mem_session.flush()
     import app.ingest.github_sync as gs
 
-    monkeypatch.setattr(gs, "_fetch_calendar", lambda user, token, days: SAMPLE)
+    monkeypatch.setattr(gs, "_fetch_calendar", lambda user, token, days: (SAMPLE, None))
     monkeypatch.setattr(gs, "app_today", lambda: date(2026, 6, 25))
     out = sync_and_backfill(mem_session, days=2)
     assert out["status"] == "ok"
