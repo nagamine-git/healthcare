@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { TodayPage } from "./pages/Today";
 import { DebugPage } from "./pages/Debug";
+import { IdentityPage } from "./pages/Identity";
+import { GardenPage } from "./pages/Garden";
 
-type View = "today" | "debug";
+type View = "today" | "debug" | "identity" | "garden";
 
 function viewFromHash(): View {
-  return window.location.hash === "#debug" ? "debug" : "today";
+  if (window.location.hash === "#debug") return "debug";
+  if (window.location.hash === "#identity") return "identity";
+  if (window.location.hash === "#garden") return "garden";
+  return "today";
 }
 
 export default function App() {
@@ -24,6 +29,18 @@ export default function App() {
       <div aria-hidden className="status-bar-scrim" />
       {view === "debug" ? (
         <DebugPage
+          onBack={() => {
+            window.location.hash = "";
+          }}
+        />
+      ) : view === "identity" ? (
+        <IdentityPage
+          onBack={() => {
+            window.location.hash = "";
+          }}
+        />
+      ) : view === "garden" ? (
+        <GardenPage
           onBack={() => {
             window.location.hash = "";
           }}
