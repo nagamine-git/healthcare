@@ -314,36 +314,41 @@ function DecayCurve({
           安全閾値 0.5 mg/L を点線で表示
         </span>
       </div>
-      <div className="relative h-20">
-        <div
-          className="absolute left-0 right-0 border-t border-dashed border-rose-500/40"
-          style={{ bottom: `${(0.5 / maxConc) * 100}%` }}
-        />
-        <div className="flex h-full items-end gap-[2px] overflow-x-auto pb-1">
-          {curve.map((p) => {
-            const h = Math.max(2, (p.concentration_mg_per_l / maxConc) * 72);
-            const overThreshold = p.concentration_mg_per_l > 0.5;
-            return (
-              <div
-                key={p.time}
-                className="flex shrink-0 flex-col items-center"
-                style={{ width: 14 }}
-                title={`${p.time}: ${p.concentration_mg_per_l.toFixed(2)} mg/L (残量 ${p.residual_mg} mg)`}
-              >
+      <div className="overflow-x-auto pb-1">
+        <div className="relative h-20">
+          {/* 安全閾値 0.5 mg/L の点線(バーと同じ 80px プロット領域の % で配置) */}
+          <div
+            className="pointer-events-none absolute inset-x-0 z-10 border-t border-dashed border-rose-500/40"
+            style={{ bottom: `${Math.min(100, (0.5 / maxConc) * 100)}%` }}
+          />
+          <div className="flex h-full items-end gap-[2px]">
+            {curve.map((p) => {
+              const h = Math.max(2, (p.concentration_mg_per_l / maxConc) * 100);
+              const overThreshold = p.concentration_mg_per_l > 0.5;
+              return (
                 <div
-                  className={`w-full rounded-sm ${
+                  key={p.time}
+                  className={`shrink-0 rounded-sm ${
                     overThreshold ? "bg-rose-400" : "bg-emerald-400"
                   }`}
-                  style={{ height: `${h}px` }}
+                  style={{ width: 14, height: `${h}%` }}
+                  title={`${p.time}: ${p.concentration_mg_per_l.toFixed(2)} mg/L (残量 ${p.residual_mg} mg)`}
                 />
-                {p.time.endsWith(":00") && (
-                  <span className="mt-1 text-[8px] tabular-nums text-slate-500">
-                    {p.time.split(":")[0]}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        </div>
+        {/* 時刻ラベルを別行に分離してバーのベースラインを揃える */}
+        <div className="mt-1 flex gap-[2px]">
+          {curve.map((p) => (
+            <span
+              key={p.time}
+              className="shrink-0 text-center text-[8px] tabular-nums text-slate-500"
+              style={{ width: 14 }}
+            >
+              {p.time.endsWith(":00") ? p.time.split(":")[0] : ""}
+            </span>
+          ))}
         </div>
       </div>
     </div>
