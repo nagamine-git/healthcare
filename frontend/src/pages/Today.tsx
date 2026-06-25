@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Compass as CompassIcon, Settings as SettingsIcon } from "lucide-react";
 import { api, type GardenGridCell } from "../lib/api";
+import { gardenCellStyle } from "../lib/gardenColor";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { DayStory } from "../components/DayStory";
 import { AdviceCard } from "../components/AdviceCard";
@@ -308,16 +309,16 @@ export function TodayPage({ onOpenDebug }: Props) {
             </span>
           </div>
           <div className="flex gap-[2px]">
-            {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => (
-              <div
-                key={c.date}
-                className={`h-2 w-2 rounded-sm ${
-                  ["bg-slate-800", "bg-emerald-900", "bg-emerald-700", "bg-emerald-500", "bg-emerald-300"][
-                    c.level
-                  ]
-                }`}
-              />
-            ))}
+            {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => {
+              const style = gardenCellStyle(c.level, c.focus);
+              return (
+                <div
+                  key={c.date}
+                  style={style ?? undefined}
+                  className={`h-2 w-2 rounded-sm ${style ? "" : "bg-slate-800"}`}
+                />
+              );
+            })}
           </div>
         </button>
       )}

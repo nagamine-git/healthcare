@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from app.scoring.garden.compute import bucket_level, compute_garden_day, weight_factor
+from app.scoring.garden.compute import (
+    bucket_level,
+    cell_focus,
+    compute_garden_day,
+    weight_factor,
+)
 
 CATALOG = [
     {"kind": "coding", "source": "github",
@@ -44,6 +49,19 @@ def test_compute_garden_day_sums_weighted_contributions():
     assert out["contributions"]["coding"] == 3.6
     assert out["contributions"]["meditation"] == 1.2
     assert out["level"] == 4
+
+
+def test_cell_focus_from_contributions():
+    # coding: gap80 → wf1.8, contrib=2.0*1.8=3.6 → focus_k=0.8
+    # meditation: gap0 → wf1.0, contrib=1.2 → focus_k=0.0
+    # 重み付き平均 focus = (3.6*0.8 + 1.2*0) / 4.8 = 0.6
+    contributions = {"coding": 3.6, "meditation": 1.2}
+    assert cell_focus(contributions, CATALOG, gamma=1.0) == 0.6
+
+
+def test_cell_focus_empty_or_zero_gamma():
+    assert cell_focus({}, CATALOG, gamma=1.0) == 0.0
+    assert cell_focus({"coding": 3.6}, CATALOG, gamma=0.0) == 0.0
 
 
 def test_compute_garden_day_empty():

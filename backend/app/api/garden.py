@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.db import session_scope
 from app.ingest.github_sync import sync_and_backfill
 from app.models.health import GardenConfig, GardenDaily, GoodActionLog
+from app.scoring.garden.compute import cell_focus
 from app.scoring.garden.recompute import gaps_from_report, recompute_garden_for_date
 from app.scoring.identity.store import build_gap_report
 from app.scoring.timewindow import app_today
@@ -55,9 +56,11 @@ async def get_garden() -> dict:
             .order_by(GardenDaily.date)
             .all()
         )
+        gamma = settings.garden_gap_gamma
         grid = [
             {"date": r.date.isoformat(), "level": r.level,
-             "intensity": r.intensity, "contributions": r.contributions or {}}
+             "intensity": r.intensity, "contributions": r.contributions or {},
+             "focus": cell_focus(r.contributions or {}, settings.garden_catalog, gamma)}
             for r in rows
         ]
         today_row = session.get(GardenDaily, today)

@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type GardenGridCell } from "../lib/api";
+import { gardenCellStyle } from "../lib/gardenColor";
 
-const LEVEL_BG = [
-  "bg-slate-800",
-  "bg-emerald-900",
-  "bg-emerald-700",
-  "bg-emerald-500",
-  "bg-emerald-300",
-];
 const KIND_LABEL: Record<string, string> = {
   coding: "コーディング",
   exercise: "運動",
@@ -52,28 +46,52 @@ function ContributionGrid({
   }
   const weeks: string[][] = [];
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+  const monthLabel = (week: string[], wi: number): string => {
+    const first = new Date(week[0] + "T00:00:00");
+    const prev = wi > 0 ? new Date(weeks[wi - 1][0] + "T00:00:00") : null;
+    if (!prev || first.getMonth() !== prev.getMonth()) return `${first.getMonth() + 1}月`;
+    return "";
+  };
+
   return (
-    <div className="flex gap-[3px] overflow-x-auto pb-2">
-      {weeks.map((week, wi) => (
-        <div key={wi} className="flex flex-col gap-[3px]">
-          {week.map((d) => {
-            const cell = byDate.get(d);
-            const level = cell?.level ?? 0;
-            const isSel = d === selected;
-            return (
-              <button
-                key={d}
-                type="button"
-                onClick={() => onSelect(d)}
-                title={d}
-                className={`h-[11px] w-[11px] rounded-sm ${LEVEL_BG[level]} ${
-                  isSel ? "ring-2 ring-white" : ""
-                }`}
-              />
-            );
-          })}
-        </div>
-      ))}
+    <div className="overflow-x-auto pb-2">
+      {/* 月ラベル(週列に合わせて表示) */}
+      <div className="mb-1 flex gap-[3px]">
+        {weeks.map((week, wi) => (
+          <div
+            key={wi}
+            className="w-[11px] shrink-0 overflow-visible whitespace-nowrap text-[8px] text-slate-500"
+          >
+            {monthLabel(week, wi)}
+          </div>
+        ))}
+      </div>
+      {/* 草マス本体 */}
+      <div className="flex gap-[3px]">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex flex-col gap-[3px]">
+            {week.map((d) => {
+              const cell = byDate.get(d);
+              const level = cell?.level ?? 0;
+              const style = gardenCellStyle(level, cell?.focus ?? 0);
+              const isSel = d === selected;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => onSelect(d)}
+                  title={d}
+                  style={style ?? undefined}
+                  className={`h-[11px] w-[11px] rounded-sm ${style ? "" : "bg-slate-800"} ${
+                    isSel ? "ring-2 ring-white" : ""
+                  }`}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -123,6 +141,18 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
               <span className="text-2xl font-bold text-emerald-400">{q.data.streak}日</span>
             </div>
             <ContributionGrid grid={q.data.grid} selected={selected} onSelect={setSelected} />
+            {/* 凡例: 色=重点度 / 濃さ=量 の2軸 */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-slate-500">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm" style={gardenCellStyle(4, 0) ?? undefined} />
+                白=今は重点でない努力
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm" style={gardenCellStyle(4, 1) ?? undefined} />
+                緑=重点(盲点)に効く
+              </span>
+              <span>濃さ=量</span>
+            </div>
             {selected && (
               <div className="mt-2 border-t border-slate-800 pt-2 text-sm">
                 <span className="text-slate-400">{selected}: </span>
@@ -132,6 +162,9 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
                       .map(([k, v]) => `${kindLabel(k)} (+${v.toFixed(1)})`)
                       .join("・")}
                     <span className="ml-1 text-slate-500">= {selectedCell.intensity.toFixed(1)}</span>
+                    <span className="ml-1 text-slate-500">
+                      / 重点度 {Math.round(selectedCell.focus * 100)}%
+                    </span>
                   </span>
                 ) : (
                   <span className="text-slate-500">記録なし</span>
