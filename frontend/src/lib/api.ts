@@ -1273,6 +1273,46 @@ export type GardenResponse = {
   recent_logs: GardenLog[];
 };
 
+export type BecomingLoop = {
+  capacity_utilization: number | null;
+  action_alignment: number | null;
+  identity_movement: number | null;
+  diagnosis: "flywheel_turning" | "wasted_capacity" | "spinning" | "building";
+};
+export type BecomingTrajectory = {
+  eta_days: number | null;
+  bottleneck_dimension: string | null;
+  bottleneck_name: string | null;
+  confidence: "low" | "medium";
+  per_dimension: Array<{
+    id: string;
+    name?: string;
+    current: number | null;
+    target: number;
+    slope_per_day: number | null;
+    time_to_target_days: number | null;
+  }>;
+};
+export type BecomingResponse = {
+  date: string;
+  loop_week: BecomingLoop;
+  trajectory: BecomingTrajectory;
+  history: Array<{
+    date: string;
+    condition: number | null;
+    garden_focus: number | null;
+    garden_intensity: number | null;
+    overall_proximity: number | null;
+  }>;
+};
+export type BecomingOneMove = {
+  move: string;
+  if_then: string;
+  dimension_id: string;
+  rationale: string;
+  fallback?: boolean;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -1501,6 +1541,9 @@ export const api = {
     request<{ status: string; reason?: string; recomputed_days?: number }>("/api/garden/sync", {
       method: "POST",
     }),
+  becoming: () => request<BecomingResponse>("/api/becoming"),
+  becomingOneMove: () => request<BecomingOneMove>("/api/becoming/one-move", { method: "POST" }),
+  becomingBackfill: () => request<{ filled: number }>("/api/becoming/backfill", { method: "POST" }),
   identitySjtTurn: (messages: ChatMsg[]) =>
     request<SjtTurnResult>("/api/identity/sjt", {
       method: "POST",

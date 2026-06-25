@@ -212,6 +212,15 @@ export function TodayPage({ onOpenDebug }: Props) {
           </button>
           <button
             type="button"
+            onClick={() => (window.location.hash = "#becoming")}
+            aria-label="becoming"
+            title="becoming (三層フライホイール + 到達予測)"
+            className="rounded-lg p-1.5 text-base leading-none text-slate-400 transition-colors hover:text-slate-200"
+          >
+            🧭
+          </button>
+          <button
+            type="button"
             onClick={() => setTab(tab === "settings" ? "summary" : "settings")}
             aria-label="設定"
             title="設定"
