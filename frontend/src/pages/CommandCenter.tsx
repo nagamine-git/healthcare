@@ -27,6 +27,9 @@ export function CommandCenter({ onOpenSettings }: { onOpenSettings?: () => void 
   const moveMut = useMutation({ mutationFn: () => api.becomingOneMove() });
 
   const score = today.data?.score ?? null;
+  const pressure = today.data?.pressure ?? null;
+  const caffeine = today.data?.caffeine ?? null;
+  const tonight = today.data?.tonight_plan ?? null;
   const alerts = (today.data?.alerts ?? []).filter((a) => a.severity !== "info");
   const loop = becoming.data?.loop_week;
   const traj = becoming.data?.trajectory;
@@ -180,13 +183,48 @@ export function CommandCenter({ onOpenSettings }: { onOpenSettings?: () => void 
         )}
       </Panel>
 
-      {/* ナビ */}
-      <nav className="grid grid-cols-4 gap-2 pt-1">
-        <NavTile label="今日" hash="#today" />
-        <NavTile label="庭" hash="#garden" />
-        <NavTile label="Compass" hash="#identity" />
-        <NavTile label="becoming" hash="#becoming" />
-      </nav>
+      {/* ===== 環境 / カフェイン / 今夜(at-a-glance)===== */}
+      <div className="grid grid-cols-2 gap-3">
+        {pressure && (
+          <Panel title="ENVIRONMENT" onClick={() => go("#today")}>
+            <div className="flex items-center gap-2">
+              <Pill tone={RISK_TONE[pressure.risk_level]}>{RISK_LABEL[pressure.risk_level]}</Pill>
+              {pressure.delta_24h_hpa != null && (
+                <span className="telemetry-num text-sm text-ink-dim">
+                  {pressure.delta_24h_hpa > 0 ? "+" : ""}
+                  {pressure.delta_24h_hpa.toFixed(1)} hPa/24h
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-ink-faint">{pressure.risk_reason}</p>
+          </Panel>
+        )}
+
+        {caffeine && (
+          <Panel title="CAFFEINE" onClick={() => go("#today")}>
+            <Stat
+              size="sm"
+              tone={caffeine.available ? "prog" : "act"}
+              value={caffeine.available ? "飲める" : "控える"}
+            />
+            {caffeine.existing_residual_mg != null && (
+              <p className="mt-1 text-xs text-ink-faint">
+                体内残量 {Math.round(caffeine.existing_residual_mg)} mg
+              </p>
+            )}
+          </Panel>
+        )}
+      </div>
+
+      {tonight && (
+        <Panel title="TONIGHT" onClick={() => go("#today")}>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <Stat size="sm" label="就寝" value={tonight.bedtime} />
+            <Stat size="sm" label="入浴" value={tonight.bath} />
+            <Stat size="sm" label="夕食〆" value={tonight.dinner_cutoff} />
+          </div>
+        </Panel>
+      )}
     </main>
   );
 }
@@ -194,6 +232,19 @@ export function CommandCenter({ onOpenSettings }: { onOpenSettings?: () => void 
 function pct(v: number | null): string {
   return v === null ? "—" : `${Math.round(v * 100)}`;
 }
+
+const RISK_TONE: Record<string, "prog" | "act" | "risk" | "neutral"> = {
+  calm: "prog",
+  watch: "neutral",
+  warning: "act",
+  severe: "risk",
+};
+const RISK_LABEL: Record<string, string> = {
+  calm: "気圧 安定",
+  watch: "気圧 注意",
+  warning: "気圧 警戒",
+  severe: "気圧 厳重",
+};
 
 function FlywheelMark({ turning }: { turning: boolean }) {
   return (
@@ -210,13 +261,3 @@ function FlywheelMark({ turning }: { turning: boolean }) {
   );
 }
 
-function NavTile({ label, hash }: { label: string; hash: string }) {
-  return (
-    <button
-      onClick={() => go(hash)}
-      className="rounded-lg border border-hairline bg-hull py-2 text-xs text-ink-dim transition-colors hover:border-ink-faint hover:text-ink"
-    >
-      {label}
-    </button>
-  );
-}

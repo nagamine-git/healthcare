@@ -5,6 +5,7 @@ import { IdentityPage } from "./pages/Identity";
 import { GardenPage } from "./pages/Garden";
 import { BecomingPage } from "./pages/Becoming";
 import { CommandCenter } from "./pages/CommandCenter";
+import { BottomNav } from "./components/ui/BottomNav";
 
 type View = "home" | "today" | "debug" | "identity" | "garden" | "becoming";
 
@@ -60,6 +61,9 @@ export default function App() {
       ) : (
         <CommandCenter onOpenSettings={() => (window.location.hash = "#today")} />
       )}
+      {/* 全画面に常設のナビ(コンテンツが隠れないよう各ページ末尾に余白を確保) */}
+      <div className="h-16" aria-hidden />
+      <BottomNav current={view} />
     </>
   );
 }
