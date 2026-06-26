@@ -88,6 +88,15 @@ async def get_life() -> dict[str, Any]:
     return _state(_today())
 
 
+@router.get("/api/life/tree")
+async def get_life_tree() -> dict[str, Any]:
+    """4層モデル(目的→目標→ドメイン木)の集約。"""
+    from app.scoring.life.tree import compute_life_tree
+
+    with session_scope() as session:
+        return compute_life_tree(session, app_today())
+
+
 class WeightsIn(BaseModel):
     weights: dict[str, float]
 

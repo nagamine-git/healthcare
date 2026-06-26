@@ -633,6 +633,21 @@ class GardenConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class Goal(Base):
+    """中期目標(Layer 1)。capital_weights でドメインの重点ウェイトを駆動する。"""
+
+    __tablename__ = "goal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200))
+    horizon: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    capital_weights: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metric: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    target: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class BecomingSnapshot(Base):
     """三層(身体・行動・アイデンティティ)の日次スナップショット。
 

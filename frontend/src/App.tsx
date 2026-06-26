@@ -4,15 +4,17 @@ import { DebugPage } from "./pages/Debug";
 import { IdentityPage } from "./pages/Identity";
 import { GardenPage } from "./pages/Garden";
 import { BecomingPage } from "./pages/Becoming";
+import { LifePage } from "./pages/Life";
 import { BottomNav } from "./components/ui/BottomNav";
 
-type View = "home" | "debug" | "identity" | "garden" | "becoming";
+type View = "home" | "debug" | "identity" | "garden" | "becoming" | "life";
 
 function viewFromHash(): View {
   if (window.location.hash === "#debug") return "debug";
   if (window.location.hash === "#identity") return "identity";
   if (window.location.hash === "#garden") return "garden";
   if (window.location.hash === "#becoming") return "becoming";
+  if (window.location.hash === "#life") return "life";
   return "home";
 }
 
@@ -38,6 +40,8 @@ export default function App() {
         <GardenPage onBack={() => (window.location.hash = "")} />
       ) : view === "becoming" ? (
         <BecomingPage onBack={() => (window.location.hash = "")} />
+      ) : view === "life" ? (
+        <LifePage onBack={() => (window.location.hash = "")} />
       ) : (
         <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
       )}
