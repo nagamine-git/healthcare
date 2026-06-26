@@ -23,6 +23,11 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
   });
   const manualKinds = (garden.data?.catalog ?? []).filter((c) => c.source === "manual");
   const loggedToday = new Set(Object.keys(garden.data?.today.contributions ?? {}));
+  const weakest = garden.data?.weakest_hint ?? null;
+  const effSet = new Set(weakest?.kinds ?? []);
+  const hasFocus = effSet.size > 0;
+  const effectiveKinds = hasFocus ? manualKinds.filter((c) => effSet.has(c.kind)) : manualKinds;
+  const otherKinds = hasFocus ? manualKinds.filter((c) => !effSet.has(c.kind)) : [];
   const loop = becoming.data?.loop_week;
   const traj = becoming.data?.trajectory;
   const diag = loop ? DIAGNOSIS[loop.diagnosis] : null;
@@ -50,33 +55,63 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
             「決める」を押すと、盲点に効く今日いちばんの一手が出ます。
           </p>
         )}
-        {/* 手札: 手動で記録できる行動(控えめに)。タップでその場で1件記録。 */}
-        {manualKinds.length > 0 && (
-          <div className="mt-3 border-t border-hairline pt-2">
-            <span className="telemetry-label">手札(タップで記録)</span>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {manualKinds.map((c) => {
-                const done = loggedToday.has(c.kind);
-                return (
-                  <button
-                    key={c.kind}
-                    disabled={logMut.isPending}
-                    onClick={() => logMut.mutate(c.kind)}
-                    className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
-                      done
-                        ? "border-prog-700 text-prog-300"
-                        : "border-hairline text-ink-faint hover:border-ink-faint hover:text-ink-dim"
-                    }`}
-                  >
-                    {done ? "✓ " : "+ "}
-                    {kindLabel(c.kind)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </Panel>
+
+      {/* 今日効く行動: 伸びしろに効くものは緑で目立たせ、その他は白で区別。タップで記録。 */}
+      {manualKinds.length > 0 && (
+        <Panel title="今日効く行動" glow="prog">
+          {weakest?.name && (
+            <p className="mb-2 text-xs text-ink-dim">
+              いまの伸びしろ
+              <span className="font-semibold text-prog-300">「{weakest.name}」</span>
+              に効く。タップで記録。
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {effectiveKinds.map((c) => {
+              const done = loggedToday.has(c.kind);
+              return (
+                <button
+                  key={c.kind}
+                  disabled={logMut.isPending}
+                  onClick={() => logMut.mutate(c.kind)}
+                  className={`rounded-full px-3 py-1 text-sm font-medium shadow-glow-prog transition-colors disabled:opacity-50 ${
+                    done ? "bg-prog-500 text-void" : "bg-prog-700 text-ink hover:bg-prog-500"
+                  }`}
+                >
+                  {done ? "✓ " : "+ "}
+                  {kindLabel(c.kind)}
+                </button>
+              );
+            })}
+          </div>
+          {otherKinds.length > 0 && (
+            <>
+              <p className="mt-3 telemetry-label">その他(今日は重点でない)</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {otherKinds.map((c) => {
+                  const done = loggedToday.has(c.kind);
+                  return (
+                    <button
+                      key={c.kind}
+                      disabled={logMut.isPending}
+                      onClick={() => logMut.mutate(c.kind)}
+                      className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
+                        done
+                          ? "border-prog-700 text-prog-300"
+                          : "border-hairline text-ink-faint hover:border-ink-faint hover:text-ink-dim"
+                      }`}
+                    >
+                      {done ? "✓ " : "+ "}
+                      {kindLabel(c.kind)}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </Panel>
+      )}
 
       {/* プライマリ・ディスプレイ(コンディション) */}
       <Panel onClick={() => go("#today")}>

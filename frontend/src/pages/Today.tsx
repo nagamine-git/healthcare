@@ -255,17 +255,19 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== 最上部: 今すぐ効くアラート(安全網)+ 計器盤ランプ ===== */}
+      {/* ===== 最上部: 今すぐ効くアラート(安全網)===== */}
       {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
       <MigraineRiskBanner />
+
+      {/* ===== ファーストビュー: 今日やること + 今日効く行動 + コンディション + 歩み ===== */}
+      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
+
+      {/* ===== 計器盤ランプ(警告のスナップショット)===== */}
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
       />
-
-      {/* ===== コックピットのヒーロー: 今日の一手 + プライマリ・ディスプレイ + 歩み 要約 ===== */}
-      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
 
       {/* ===== 人生の最適化ツリー(目的→目標→ドメイン)===== */}
       <LifeTreePanel />
