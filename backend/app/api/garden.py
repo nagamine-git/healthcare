@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -19,6 +20,12 @@ from app.scoring.timewindow import app_today
 router = APIRouter()
 
 _GRID_DAYS = 371  # 約53週
+
+
+def _app_date(ts: datetime) -> date:
+    """UTC naive な ts をアプリ TZ(JST)の日付へ。"""
+    tz = ZoneInfo(get_settings().app_tz)
+    return ts.replace(tzinfo=UTC).astimezone(tz).date()
 
 
 class GardenLogIn(BaseModel):
@@ -122,7 +129,7 @@ async def add_garden_log(body: GardenLogIn) -> dict:
         ts = datetime.fromisoformat(body.ts_iso)
         if ts.tzinfo is not None:
             ts = ts.astimezone(UTC).replace(tzinfo=None)
-        target = ts.date()
+        target = _app_date(ts)
     else:
         ts = datetime.now(UTC).replace(tzinfo=None)
         target = app_today()
@@ -142,7 +149,7 @@ async def delete_garden_log(log_id: int) -> dict:
         row = session.get(GoodActionLog, log_id)
         if row is None:
             raise HTTPException(status_code=404, detail="not found")
-        target = row.ts.date()
+        target = _app_date(row.ts)
         session.delete(row)
         session.flush()
         recomputed = recompute_garden_for_date(session, target)

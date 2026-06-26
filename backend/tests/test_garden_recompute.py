@@ -147,3 +147,4 @@ class _FakeSettings:
     garden_level_thresholds: ClassVar[list[float]] = [0.0, 1.0, 2.5, 4.5]
     garden_good_sleep_min = 420
     garden_steps_goal = 8000
+    app_tz = "Asia/Tokyo"

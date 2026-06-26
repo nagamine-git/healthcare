@@ -1587,6 +1587,10 @@ export const api = {
     }),
   becoming: () => request<BecomingResponse>("/api/becoming"),
   lifeTree: () => request<LifeTreeResponse>("/api/life/tree"),
+  journalCalendar: () =>
+    request<{ events: { hour: number; minute: number; summary: string; busy: boolean }[] }>(
+      "/api/journal/calendar",
+    ),
   checkup: () => request<CheckupResponse>("/api/checkup"),
   checkupUpload: (body: { text?: string; image_base64?: string; media_type?: string; date?: string }) =>
     request<CheckupResponse>("/api/checkup", { method: "POST", body: JSON.stringify(body) }),

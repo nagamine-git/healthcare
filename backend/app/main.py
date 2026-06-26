@@ -22,6 +22,7 @@ from app.api import food as food_api
 from app.api import garden as garden_api
 from app.api import identity as identity_api
 from app.api import imputation as imputation_api
+from app.api import journal as journal_api
 from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(garden_api.router)
     app.include_router(becoming_api.router)
     app.include_router(checkup_api.router)
+    app.include_router(journal_api.router)
     app.include_router(body_distribution_api.router)
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)

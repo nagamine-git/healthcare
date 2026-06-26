@@ -375,6 +375,13 @@ function RecommendationsPanel({
   const qc = useQueryClient();
   const [filter, setFilter] = useState<"all" | IdentityRecommendation["category"]>("all");
   const [kind, setKind] = useState<KindFilter>("all");
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleExpand = (id: number) =>
+    setExpanded((s) => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   const suggest = useMutation({
     mutationFn: () => api.identitySuggestNew(10),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["identity"] }),
@@ -440,37 +447,44 @@ function RecommendationsPanel({
       ) : (
         <div className="space-y-2">
           {shown.map((r, i) => (
-            <div key={r.media_item_id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-800/40 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 w-7 text-right text-[11px] font-semibold tabular-nums text-slate-400">
-                    #{i + 1}
-                  </span>
-                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] ${CATEGORY_BADGE[r.category]}`}>
+            <div key={r.media_item_id} className="flex items-start justify-between gap-3 rounded-lg bg-slate-800/40 px-3 py-2">
+              <div className="min-w-0 flex-1 space-y-1">
+                {/* バッジ行 */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-semibold tabular-nums text-slate-400">#{i + 1}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] ${CATEGORY_BADGE[r.category]}`}>
                     {CATEGORY_LABEL[r.category]}
                   </span>
-                  <span className="shrink-0 text-[10px] text-slate-400">{KIND_LABEL[r.kind] ?? r.kind}</span>
-                  <span className="truncate text-sm text-slate-200">
-                    {r.title} {r.year && <span className="text-[10px] text-slate-500">({r.year})</span>}
-                  </span>
-                  {r.rating != null && (
-                    <span className="shrink-0 text-[10px] text-amber-300/80">★{r.rating}</span>
-                  )}
+                  <span className="text-[10px] text-slate-400">{KIND_LABEL[r.kind] ?? r.kind}</span>
+                  {r.rating != null && <span className="text-[10px] text-amber-300/80">★{r.rating}</span>}
                 </div>
+                {/* タイトル: 2行表示、クリックで全文 */}
+                <button
+                  onClick={() => toggleExpand(r.media_item_id)}
+                  className="block w-full text-left text-sm text-slate-200"
+                  title={r.title}
+                  style={
+                    expanded.has(r.media_item_id)
+                      ? undefined
+                      : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }
+                  }
+                >
+                  {r.title} {r.year && <span className="text-[10px] text-slate-500">({r.year})</span>}
+                </button>
+                <div className="text-[10px] text-slate-500">{r.reason}</div>
                 {/* レバレッジ相対バー (リスト内の最大を 100%) */}
-                <div className="ml-9 mt-1 h-1 w-full max-w-[200px] overflow-hidden rounded-full bg-slate-700/50">
+                <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-slate-700/50">
                   <div
                     className="h-full rounded-full bg-emerald-400/70"
                     style={{ width: `${Math.round((r.score / maxScore) * 100)}%` }}
                   />
                 </div>
-                <div className="ml-9 mt-0.5 text-[10px] text-slate-500">{r.reason}</div>
                 {r.imdb_url && (
                   <a
                     href={r.imdb_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-amber-300/90 hover:text-amber-200"
+                    className="inline-flex items-center gap-1 text-[10px] text-amber-300/90 hover:text-amber-200"
                     title="IMDbで評価して「観た記録」にする"
                   >
                     <span className="rounded bg-amber-400/20 px-1 font-bold tracking-tight">IMDb</span>
