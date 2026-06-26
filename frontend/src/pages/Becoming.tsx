@@ -21,30 +21,35 @@ export function BecomingPage({ onBack }: { onBack: () => void }) {
       <button onClick={onBack} className="telemetry-label hover:text-ink">
         ← 戻る
       </button>
-      <h1 className="text-xl font-bold text-ink">becoming — 三層フライホイール</h1>
+      <h1 className="text-xl font-bold text-ink">歩み — 前に進めてる?</h1>
+      <p className="text-xs text-ink-faint">
+        最近ちゃんと前進できているか、今のペースで理想にいつ届くかを見る画面です。
+      </p>
       {q.isLoading && <p className="text-ink-dim">読み込み中…</p>}
       {q.isError && <p className="text-risk">取得に失敗しました</p>}
       {q.data && loop && traj && diag && (
         <>
-          <Panel title="今週のフライホイール">
+          <Panel title="今週の好循環(エンジンは回ってる?)">
             <div className="grid grid-cols-3 gap-2 text-center">
-              <Stat size="sm" label="資本活用率" tone="prog" value={`${pct(loop.capacity_utilization)}%`} />
-              <Stat size="sm" label="行動整合度" tone="prog" value={`${pct(loop.action_alignment)}%`} />
+              <Stat size="sm" label="動ける日に動けた" tone="prog" value={`${pct(loop.capacity_utilization)}%`} />
+              <Stat size="sm" label="伸びしろに効く行動" tone="prog" value={`${pct(loop.action_alignment)}%`} />
               <Stat
                 size="sm"
-                label="前進量"
+                label="実際に近づいた"
                 tone={loop.identity_movement && loop.identity_movement > 0 ? "prog" : "neutral"}
                 value={loop.identity_movement === null ? "—" : loop.identity_movement.toFixed(1)}
               />
             </div>
-            <p className="mt-3 text-xs text-ink-faint">活用=動けた日に攻めたか / 整合=盲点に向いたか / 前進=実際に近づいたか</p>
+            <p className="mt-3 text-xs text-ink-faint">
+              「体調が良い日に行動できたか → その行動が伸びしろに効いていたか → 結果、理想に近づいたか」の好循環チェック。
+            </p>
             <div className="mt-2">
               <Pill tone={diag.tone}>{diag.long}</Pill>
             </div>
           </Panel>
 
           <Panel
-            title="今日の一手(盲点ねらい)"
+            title="今日の一手(いちばん効く行動)"
             glow="act"
             action={
               <Button variant="primary" disabled={moveMut.isPending} onClick={() => moveMut.mutate()}>
@@ -66,7 +71,7 @@ export function BecomingPage({ onBack }: { onBack: () => void }) {
             )}
           </Panel>
 
-          <Panel title="North Star — 理想プロファイル到達予測" onClick={undefined}>
+          <Panel title="ゴールまで(このペースの到達予測)" onClick={undefined}>
             <div className="flex items-baseline justify-between">
               <span className="telemetry-num text-3xl font-bold text-prog-300">
                 {traj.eta_days === null ? "—" : etaLabel(traj.eta_days)}
@@ -80,7 +85,7 @@ export function BecomingPage({ onBack }: { onBack: () => void }) {
             )}
             {traj.bottleneck_name && (
               <p className="mt-1 text-sm text-ink-dim">
-                ボトルネック: <span className="font-semibold text-ink">{traj.bottleneck_name}</span>
+                いちばんの伸びしろ: <span className="font-semibold text-ink">{traj.bottleneck_name}</span>
               </p>
             )}
             {traj.per_dimension.length > 0 && (
