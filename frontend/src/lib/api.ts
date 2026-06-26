@@ -1306,6 +1306,7 @@ export type BecomingResponse = {
   }>;
 };
 export type BecomingOneMove = {
+  theme?: string;
   move: string;
   if_then: string;
   dimension_id: string;
