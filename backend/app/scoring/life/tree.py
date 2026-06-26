@@ -12,9 +12,26 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models.health import DailyScore, DomainWeight, GardenDaily, Goal
+from app.models.health import DailyScore, DomainWeight, GardenDaily, Goal, MediaLog
 from app.scoring.achievement import upper_achievement
 from app.scoring.identity.store import build_gap_report
+
+# capital → そこに効く garden 行動種別(最適配分の提案で使う)。
+CAPITAL_ACTION_KINDS: dict[str, list[str]] = {
+    "body": ["aerobic", "strength", "sleep", "steps", "nature", "healthy_meal"],
+    "mind": ["meditation", "journaling", "reflection", "gratitude"],
+    "intellect": ["reading", "learning"],
+    "creation": ["coding", "creative", "deepwork"],
+    "relationships": ["social", "family"],
+    "economy": ["finance"],
+}
+
+# ドメイン相互関係(辺): from が上がると to にも効く、を一言で。
+DOMAIN_EDGES: list[dict] = [
+    {"from": "body", "to": ["mind", "intellect", "creation"], "note": "睡眠・運動は心/知/創すべての土台"},
+    {"from": "mind", "to": ["creation", "relationships"], "note": "整った心が良い仕事と関係を生む"},
+    {"from": "economy", "to": ["mind"], "note": "経済基盤の安定が不安を減らす"},
+]
 
 # MECE な capital と葉。各葉は signal(達成度の出し方)を持つ。
 # signal: "score:<field>" = DailyScore 由来 / "garden:k1,k2" = 行動頻度 / "none" = 未計測(null)
@@ -33,7 +50,7 @@ LIFE_TREE: list[dict] = [
     {"key": "intellect", "label": "知的資本", "leaves": [
         {"label": "学習", "signal": "garden:learning"},
         {"label": "読書", "signal": "garden:reading"},
-        {"label": "作品インプット", "signal": "none"},
+        {"label": "作品インプット", "signal": "media"},
     ]},
     {"key": "creation", "label": "創造・仕事", "leaves": [
         {"label": "制作・コーディング", "signal": "garden:coding"},
@@ -125,7 +142,47 @@ def _leaf_achievement(
     if signal.startswith("garden:"):
         kinds = signal.split(":", 1)[1].split(",")
         return freq_achievement(session, kinds, target, window, target_days)
+    if signal == "media":
+        # 直近 window 日で観た作品数 → 目標 2 本で 100%(Compass の作品インプット)
+        start = target - timedelta(days=window - 1)
+        seen = (
+            session.query(MediaLog)
+            .filter(
+                MediaLog.status == "seen",
+                MediaLog.seen_at.isnot(None),
+                MediaLog.seen_at >= datetime(start.year, start.month, start.day),
+            )
+            .count()
+        )
+        return round(upper_achievement(float(seen), 0.0, 2.0), 1)
     return None
+
+
+def recommend_allocation(capitals: list[dict], weights: dict[str, float]) -> list[dict]:
+    """今日エネルギーを効かせるべき領域を優先度順に提案(純関数)。
+
+    優先度: フロア割れ(最低ライン)を最優先、次に 重み×伸びしろ。
+    未計測(achievement=None)は「始めてみる」として中位。
+    """
+    scored = []
+    for c in capitals:
+        a = c["achievement"]
+        w = weights.get(c["key"], 1.0)
+        if c.get("breach"):
+            priority = 1000 + w * (100 - (a or 0))
+            reason = "最低ラインを下回っている(まず立て直す)"
+        elif a is None:
+            priority = w * 50
+            reason = "まだ記録がない(始めてみる)"
+        else:
+            priority = w * (100 - a)
+            reason = "重点 × 伸びしろが大きい" if w >= 1.5 else "伸びしろがある"
+        scored.append({
+            "capital": c["key"], "label": c["label"], "reason": reason,
+            "kinds": CAPITAL_ACTION_KINDS.get(c["key"], []), "_p": priority,
+        })
+    scored.sort(key=lambda x: x["_p"], reverse=True)
+    return [{k: v for k, v in s.items() if k != "_p"} for s in scored[:3]]
 
 
 def active_goal(session: Session) -> dict:
@@ -180,5 +237,7 @@ def compute_life_tree(session: Session, target: date) -> dict:
         "purpose": purpose,
         "goal": goal,
         **tree,
+        "allocation": recommend_allocation(tree["capitals"], weights),
+        "edges": DOMAIN_EDGES,
         "generated_at": datetime.utcnow().isoformat(),
     }

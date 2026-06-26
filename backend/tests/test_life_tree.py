@@ -7,7 +7,26 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.models.health import Base, GardenDaily, Goal
-from app.scoring.life.tree import active_goal, aggregate_tree, freq_achievement
+from app.scoring.life.tree import (
+    active_goal,
+    aggregate_tree,
+    freq_achievement,
+    recommend_allocation,
+)
+
+
+def test_recommend_allocation_prioritizes_breach_then_focus():
+    caps = [
+        {"key": "body", "label": "身体資本", "achievement": 30.0, "breach": True},
+        {"key": "creation", "label": "創造・仕事", "achievement": 40.0, "breach": False},
+        {"key": "mind", "label": "精神状態", "achievement": 90.0, "breach": False},
+    ]
+    weights = {"body": 1.0, "creation": 2.5, "mind": 1.0}
+    out = recommend_allocation(caps, weights)
+    # breach の body が最優先、次に 重み大×伸びしろの creation
+    assert out[0]["capital"] == "body"
+    assert out[1]["capital"] == "creation"
+    assert "kinds" in out[0] and out[0]["kinds"]
 
 
 def test_aggregate_tree_life_score_and_breach():

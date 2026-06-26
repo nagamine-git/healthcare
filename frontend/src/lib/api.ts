@@ -1339,6 +1339,8 @@ export type LifeTreeResponse = {
   life_score: number | null;
   focus_capital: string | null;
   breaches: string[];
+  allocation: { capital: string; label: string; reason: string; kinds: string[] }[];
+  edges: { from: string; to: string[]; note: string }[];
   generated_at: string;
 };
 
@@ -1572,6 +1574,8 @@ export const api = {
     }),
   becoming: () => request<BecomingResponse>("/api/becoming"),
   lifeTree: () => request<LifeTreeResponse>("/api/life/tree"),
+  lifeGoal: (body: { title: string; horizon?: string | null; capital_weights: Record<string, number> }) =>
+    request<LifeTreeResponse>("/api/life/goal", { method: "PUT", body: JSON.stringify(body) }),
   becomingOneMove: () => request<BecomingOneMove>("/api/becoming/one-move", { method: "POST" }),
   becomingBackfill: () => request<{ filled: number }>("/api/becoming/backfill", { method: "POST" }),
   identitySjtTurn: (messages: ChatMsg[]) =>

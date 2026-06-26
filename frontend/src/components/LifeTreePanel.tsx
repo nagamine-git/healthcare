@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, type LifeCapital } from "../lib/api";
+import { kindLabel } from "../lib/labels";
 import { BarGauge, Panel, Pill, RingGauge } from "./ui/cockpit";
 
 function go(hash: string) {
@@ -78,6 +79,39 @@ export function LifeTreePanel() {
           目標で重点に寄せつつ、各領域の最低ラインは守る。
         </p>
       </Panel>
+
+      {/* 今日の最適配分(F4) */}
+      {d.allocation.length > 0 && (
+        <Panel title="今日はここに効かせる" glow="act">
+          <ol className="space-y-2">
+            {d.allocation.map((a, i) => (
+              <li key={a.capital} className="text-sm">
+                <span className="telemetry-num text-act-300">{i + 1}.</span>{" "}
+                <span className="font-semibold text-ink">{a.label}</span>
+                <span className="ml-1 text-xs text-ink-faint">— {a.reason}</span>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {a.kinds.slice(0, 4).map((k) => (
+                    <span key={k} className="rounded-full border border-hairline px-1.5 text-[10px] text-ink-faint">
+                      {kindLabel(k)}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Panel>
+      )}
+
+      {/* 相互関係(辺)— 一言ヒント */}
+      {d.edges.length > 0 && (
+        <Panel title="領域のつながり">
+          <ul className="space-y-1 text-xs text-ink-dim">
+            {d.edges.map((e) => (
+              <li key={e.from}>・{e.note}</li>
+            ))}
+          </ul>
+        </Panel>
+      )}
     </div>
   );
 }
