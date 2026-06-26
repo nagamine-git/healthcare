@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Button, Panel } from "../components/ui/cockpit";
+import { CheckinCard } from "../components/CheckinCard";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -17,7 +18,7 @@ function fmtHeader(dateStr: string): string {
   return `${yy}.${mm}.${dd}(${WD[base.getDay()]}) ${hh}:${mi}`;
 }
 
-function Heading({ children }: { children: string }) {
+function Heading({ children }: { children: ReactNode }) {
   return (
     <div className="mt-3 border-b border-hairline pb-1 text-xs font-semibold tracking-wider text-ink-dim">
       {children}
@@ -42,18 +43,31 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
   const alerts = (today.data?.alerts ?? []).filter((a) => a.severity !== "info");
   const breaches = (life.data?.capitals ?? []).filter((c) => c.breach).map((c) => c.label);
 
-  // スケジュール: チェックイン(今)〜就寝まで。予定は時刻に配置。
-  const nowHour = new Date().getHours();
-  const bedRaw = today.data?.tonight_plan?.bedtime; // "HH:MM"
-  let bedHour = bedRaw ? parseInt(bedRaw.slice(0, 2), 10) : 23;
-  if (bedHour <= nowHour) bedHour += 24; // 日跨ぎ
-  const hours: number[] = [];
-  for (let h = nowHour; h <= bedHour; h++) hours.push(h);
-  const eventsByHour = new Map<number, { summary: string; minute: number }[]>();
+  // スケジュール: チェックイン(今)〜「自由時間の終わり」(就寝準備の開始)まで。
+  // 残り時間が長いほど粗い間隔(3h/2h/1h)。就寝準備以降は何もできない前提で除外。
+  const now = new Date();
+  const nowH = now.getHours() + now.getMinutes() / 60;
+  const tp = today.data?.tonight_plan;
+  const hm = (s?: string) =>
+    s && s.length >= 5 ? parseInt(s.slice(0, 2), 10) + parseInt(s.slice(3, 5), 10) / 60 : null;
+  // 自由時間の終わり = 入浴開始(就寝準備の入口)。無ければ就寝1時間前。
+  let freeEnd = hm(tp?.bath_start) ?? (hm(tp?.bedtime) ?? 23) - 1;
+  if (freeEnd <= nowH) freeEnd += 24;
+  const remaining = freeEnd - nowH;
+  const interval = remaining < 8 ? 1 : remaining < 12 ? 2 : 3;
+  const blocks: number[] = [];
+  for (let h = Math.floor(nowH); h < freeEnd; h += interval) blocks.push(h);
+  const evByBlock = new Map<number, { summary: string; hour: number; minute: number }[]>();
   for (const e of cal.data?.events ?? []) {
-    const h = e.hour < nowHour ? e.hour + 24 : e.hour;
-    (eventsByHour.get(h) ?? eventsByHour.set(h, []).get(h)!).push({ summary: e.summary, minute: e.minute });
+    const eh = e.hour < Math.floor(nowH) ? e.hour + 24 : e.hour;
+    if (eh >= freeEnd || blocks.length === 0 || eh < blocks[0]) continue;
+    let b = blocks[0];
+    for (const x of blocks) if (x <= eh) b = x;
+    (evByBlock.get(b) ?? evByBlock.set(b, []).get(b)!).push({
+      summary: e.summary, hour: e.hour, minute: e.minute,
+    });
   }
+  const freeEndDisp = Math.round(freeEnd) % 24;
 
   return (
     <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
@@ -82,7 +96,7 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="mt-1 flex items-center justify-between">
-            <Heading>勝ちタスク候補</Heading>
+            <Heading>勝ちタスク候補(早めに片付けると勝ち)</Heading>
           </div>
           <div className="mt-1 flex items-center gap-2">
             <span className="flex-1 text-act-300">
@@ -93,24 +107,24 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
             </Button>
           </div>
 
-          <Heading>スケジュール(チェックイン〜就寝 / ○=予定)</Heading>
+          <Heading>スケジュール(自由時間 {interval}h刻み / ○=予定)</Heading>
           <div className="mt-1 space-y-0.5">
-            {hours.map((h) => {
-              const evs = eventsByHour.get(h) ?? [];
-              const disp = h % 24;
+            {blocks.map((h) => {
+              const evs = evByBlock.get(h) ?? [];
               return (
                 <div key={h} className="flex gap-2">
-                  <span className="w-6 shrink-0 tabular-nums text-ink-faint">{disp}</span>
+                  <span className="w-6 shrink-0 tabular-nums text-ink-faint">{h % 24}</span>
                   {evs.length > 0 ? (
-                    <span className="flex-1">
+                    <span className="min-w-0 flex-1 space-y-0.5">
                       {evs.map((ev, i) => (
                         <button
                           key={i}
                           onClick={() => setOpenEvent(ev.summary)}
-                          className="mr-2 max-w-full truncate text-left text-prog-300"
+                          className="block max-w-full truncate text-left text-prog-300"
                           title={ev.summary}
                         >
-                          ○ {ev.summary}
+                          ○ {String(ev.hour).padStart(2, "0")}:{String(ev.minute).padStart(2, "0")}{" "}
+                          {ev.summary}
                         </button>
                       ))}
                     </span>
@@ -120,9 +134,13 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
                 </div>
               );
             })}
+            <div className="mt-1 text-ink-faint/60">🌙 {freeEndDisp}時〜 就寝準備(自由時間はここまで)</div>
           </div>
         </div>
       </Panel>
+
+      {/* 今日の調子(5段階)— 既存の主観チェックイン */}
+      <CheckinCard />
 
       {openEvent && (
         <div className="rounded-lg border border-prog-700 bg-hull p-3 text-sm text-ink">
