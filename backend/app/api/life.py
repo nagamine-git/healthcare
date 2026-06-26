@@ -97,6 +97,32 @@ async def get_life_tree() -> dict[str, Any]:
         return compute_life_tree(session, app_today())
 
 
+class GoalIn(BaseModel):
+    title: str
+    horizon: str | None = None
+    capital_weights: dict[str, float] = {}
+
+
+@router.put("/api/life/goal")
+async def put_goal(body: GoalIn) -> dict[str, Any]:
+    """active な目標を更新(無ければ作成)。重点ウェイトを駆動する。"""
+    from app.models.health import Goal
+    from app.scoring.life.tree import compute_life_tree
+
+    with session_scope() as session:
+        row = (
+            session.query(Goal).filter(Goal.active.is_(True)).order_by(Goal.id.desc()).first()
+        )
+        if row is None:
+            row = Goal(active=True)
+            session.add(row)
+        row.title = body.title
+        row.horizon = body.horizon
+        row.capital_weights = {k: max(0.0, float(v)) for k, v in body.capital_weights.items()}
+        session.flush()
+        return compute_life_tree(session, app_today())
+
+
 class WeightsIn(BaseModel):
     weights: dict[str, float]
 
