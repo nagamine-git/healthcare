@@ -1,7 +1,8 @@
 """Life Optimization OS のドメイン木(Layer 2)の算出。
 
-MECE な capital(資本/状態)ごとに達成度 0-100 を出し、目標由来の重点ウェイトで
-life_score を合成、維持フロア割れを検出する。capital 達成度は既存シグナルを再利用。
+MECE な capital(資本/状態)を葉(leaf)単位の達成度に分解して算出し、capital へロールアップ。
+目標由来の重点ウェイトで life_score を合成、維持フロア割れを検出する。
+達成度は既存シグナル(健康サブスコア / garden 行動頻度 / Compass)を再利用。
 """
 
 from __future__ import annotations
@@ -11,43 +12,65 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models.health import DomainWeight, GardenDaily, Goal
-from app.scoring import domains
+from app.models.health import DailyScore, DomainWeight, GardenDaily, Goal
 from app.scoring.achievement import upper_achievement
 from app.scoring.identity.store import build_gap_report
 
-# MECE な capital とその葉(フェーズ1は葉はラベルのみ)。
+# MECE な capital と葉。各葉は signal(達成度の出し方)を持つ。
+# signal: "score:<field>" = DailyScore 由来 / "garden:k1,k2" = 行動頻度 / "none" = 未計測(null)
 LIFE_TREE: list[dict] = [
-    {"key": "body", "label": "身体資本", "leaves": ["睡眠", "運動", "栄養", "体組成", "回復"]},
-    {"key": "mind", "label": "精神状態", "leaves": ["ストレス・情動", "内省"]},
-    {"key": "intellect", "label": "知的資本", "leaves": ["学習", "読書", "作品インプット"]},
-    {"key": "creation", "label": "創造・仕事", "leaves": ["制作・コーディング", "ディープワーク", "発信"]},
-    {"key": "relationships", "label": "関係資本", "leaves": ["家族", "友人・人脈"]},
-    {"key": "economy", "label": "経済資本", "leaves": ["家計", "投資・資産"]},
+    {"key": "body", "label": "身体資本", "leaves": [
+        {"label": "睡眠", "signal": "score:sleep"},
+        {"label": "運動", "signal": "garden:aerobic,strength"},
+        {"label": "栄養", "signal": "garden:healthy_meal"},
+        {"label": "体組成", "signal": "score:bodycomp"},
+        {"label": "回復(自律神経)", "signal": "score:recovery"},
+    ]},
+    {"key": "mind", "label": "精神状態", "leaves": [
+        {"label": "ストレス・情動", "signal": "none"},
+        {"label": "内省", "signal": "garden:meditation,journaling,reflection,gratitude"},
+    ]},
+    {"key": "intellect", "label": "知的資本", "leaves": [
+        {"label": "学習", "signal": "garden:learning"},
+        {"label": "読書", "signal": "garden:reading"},
+        {"label": "作品インプット", "signal": "none"},
+    ]},
+    {"key": "creation", "label": "創造・仕事", "leaves": [
+        {"label": "制作・コーディング", "signal": "garden:coding"},
+        {"label": "ディープワーク", "signal": "garden:deepwork"},
+        {"label": "発信", "signal": "garden:creative"},
+    ]},
+    {"key": "relationships", "label": "関係資本", "leaves": [
+        {"label": "家族", "signal": "garden:family"},
+        {"label": "友人・人脈", "signal": "garden:social"},
+    ]},
+    {"key": "economy", "label": "経済資本", "leaves": [
+        {"label": "家計", "signal": "garden:finance"},
+        {"label": "投資・資産", "signal": "none"},
+    ]},
 ]
 
-# capital → 達成度を頻度から測る garden 行動種別(body は health サブで別計算)。
-CAPITAL_KINDS: dict[str, list[str]] = {
-    "mind": ["meditation", "journaling", "reflection", "gratitude"],
-    "intellect": ["reading", "learning"],
-    "creation": ["coding", "creative", "deepwork"],
-    "relationships": ["social", "family"],
-    "economy": ["finance"],
-}
+
+def _mean(vals: list[float]) -> float | None:
+    present = [v for v in vals if v is not None]
+    return round(sum(present) / len(present), 1) if present else None
 
 
 def aggregate_tree(
-    achievements: dict[str, float | None],
+    capitals_in: list[dict],
     weights: dict[str, float],
     floors: dict[str, float],
 ) -> dict:
-    """capital 達成度・重み・フロアから木・life_score・breach を組む(純関数)。"""
+    """capital(達成度・葉つき)・重み・フロアから木・life_score・breach を組む(純関数)。
+
+    capitals_in: [{key, label, achievement, leaves:[{label, achievement}]}]
+    """
     capitals = []
     num = den = 0.0
     breaches: list[str] = []
-    for node in LIFE_TREE:
+    for node in capitals_in:
         k = node["key"]
-        a = achievements.get(k)
+        a = node["achievement"]
         w = weights.get(k, 1.0)
         fl = floors.get(k, 0.0)
         breach = a is not None and a < fl
@@ -56,10 +79,7 @@ def aggregate_tree(
         if a is not None:
             num += w * a
             den += w
-        capitals.append({
-            "key": k, "label": node["label"], "achievement": a,
-            "weight": w, "floor": fl, "breach": breach, "leaves": node["leaves"],
-        })
+        capitals.append({**node, "weight": w, "floor": fl, "breach": breach})
     life_score = round(num / den, 1) if den > 0 else None
     focus_capital = max(capitals, key=lambda c: c["weight"])["key"] if capitals else None
     return {
@@ -85,6 +105,29 @@ def freq_achievement(
     return round(upper_achievement(days, 0.0, float(target_days)), 1)
 
 
+def _leaf_achievement(
+    session: Session, signal: str, target: date, window: int, target_days: int,
+    score: DailyScore | None,
+) -> float | None:
+    if signal == "none":
+        return None
+    if signal.startswith("score:"):
+        if score is None:
+            return None
+        field = signal.split(":", 1)[1]
+        if field == "sleep":
+            return score.sleep_sub
+        if field == "recovery":
+            return _mean([score.hrv_sub, score.bb_sub])
+        if field == "bodycomp":
+            return _mean([score.weight_sub, score.body_fat_sub])
+        return None
+    if signal.startswith("garden:"):
+        kinds = signal.split(":", 1)[1].split(",")
+        return freq_achievement(session, kinds, target, window, target_days)
+    return None
+
+
 def active_goal(session: Session) -> dict:
     """active な Goal を返す。無ければ config 既定から seed して返す。"""
     row = session.query(Goal).filter(Goal.active.is_(True)).order_by(Goal.id.desc()).first()
@@ -105,21 +148,27 @@ def active_goal(session: Session) -> dict:
 def compute_life_tree(session: Session, target: date) -> dict:
     s = get_settings()
     win, tgt = s.life_freq_window_days, s.life_freq_target_days
-    achievements: dict[str, float | None] = {
-        "body": domains.health_achievement(target),
-        "mind": freq_achievement(session, CAPITAL_KINDS["mind"], target, win, tgt),
-        "intellect": freq_achievement(session, CAPITAL_KINDS["intellect"], target, win, tgt),
-        "creation": freq_achievement(session, CAPITAL_KINDS["creation"], target, win, tgt),
-        "relationships": freq_achievement(session, CAPITAL_KINDS["relationships"], target, win, tgt),
-        "economy": freq_achievement(session, CAPITAL_KINDS["economy"], target, win, tgt),
-    }
+    score = session.get(DailyScore, target)
+
+    capitals_in = []
+    for node in LIFE_TREE:
+        leaves = []
+        for leaf in node["leaves"]:
+            a = _leaf_achievement(session, leaf["signal"], target, win, tgt, score)
+            leaves.append({"label": leaf["label"], "achievement": a})
+        capital_ach = _mean([leaf["achievement"] for leaf in leaves])
+        capitals_in.append({
+            "key": node["key"], "label": node["label"],
+            "achievement": capital_ach, "leaves": leaves,
+        })
+
     goal = active_goal(session)
     weights = dict(goal["capital_weights"])
     for dw in session.query(DomainWeight).all():
         if dw.domain in weights:
             weights[dw.domain] = dw.weight
 
-    tree = aggregate_tree(achievements, weights, s.life_capital_floors)
+    tree = aggregate_tree(capitals_in, weights, s.life_capital_floors)
 
     report = build_gap_report(session)
     purpose = {

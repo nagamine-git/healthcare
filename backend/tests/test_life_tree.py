@@ -11,12 +11,18 @@ from app.scoring.life.tree import active_goal, aggregate_tree, freq_achievement
 
 
 def test_aggregate_tree_life_score_and_breach():
-    ach = {"body": 50.0, "mind": 80.0, "intellect": 60.0,
-           "creation": 90.0, "relationships": 40.0, "economy": None}
+    caps = [
+        {"key": "body", "label": "身体資本", "achievement": 50.0, "leaves": []},
+        {"key": "mind", "label": "精神状態", "achievement": 80.0, "leaves": []},
+        {"key": "intellect", "label": "知的資本", "achievement": 60.0, "leaves": []},
+        {"key": "creation", "label": "創造・仕事", "achievement": 90.0, "leaves": []},
+        {"key": "relationships", "label": "関係資本", "achievement": 40.0, "leaves": []},
+        {"key": "economy", "label": "経済資本", "achievement": None, "leaves": []},
+    ]
     weights = {"creation": 3.0, "body": 1.0, "mind": 1.0, "intellect": 1.0,
                "relationships": 1.0, "economy": 1.0}
     floors = {"body": 55.0, "relationships": 40.0}
-    out = aggregate_tree(ach, weights, floors)
+    out = aggregate_tree(caps, weights, floors)
     # economy は None → 除外。focus は最大重みの creation。
     assert out["focus_capital"] == "creation"
     # body=50<55 で breach、relationships=40 は >=40 で breach しない

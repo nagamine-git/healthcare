@@ -56,10 +56,21 @@ export function LifeTreePanel() {
                 <span className="ml-auto telemetry-num text-xs text-ink-faint">×{c.weight}</span>
               </div>
               <BarGauge
-                label={c.leaves.join(" / ")}
+                label=""
                 value={c.achievement}
                 tone={c.breach ? "risk" : c.key === focus ? "act" : "prog"}
               />
+              {/* 葉(各領域)の達成度を小さく内訳表示 */}
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                {c.leaves.map((leaf) => (
+                  <span key={leaf.label} className="text-[10px] text-ink-faint">
+                    {leaf.label}
+                    <span className="ml-1 telemetry-num text-ink-dim">
+                      {leaf.achievement === null ? "—" : Math.round(leaf.achievement)}
+                    </span>
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </div>
