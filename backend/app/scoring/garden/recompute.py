@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -31,9 +32,15 @@ def gaps_from_report(report: dict) -> dict[str, float | None]:
 
 
 def _day_bounds(target: date) -> tuple[datetime, datetime]:
-    """target 日の素朴な [start, end)。DB は UTC naive、既存の手動ログ系と同じ素朴さ。"""
-    start = datetime(target.year, target.month, target.day)
-    return start, start + timedelta(days=1)
+    """target 日(アプリ TZ=JST)に対応する UTC naive の [start, end)。
+
+    ts は UTC naive で保存されるため、JST 日の境界を UTC に変換して比較する
+    (JST 早朝=UTC 前日 を取りこぼさない)。
+    """
+    tz = ZoneInfo(get_settings().app_tz)
+    start_local = datetime(target.year, target.month, target.day, tzinfo=tz)
+    start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
+    return start_utc, start_utc + timedelta(days=1)
 
 
 def active_kinds_for_date(session: Session, target: date, catalog: list[dict]) -> set[str]:
