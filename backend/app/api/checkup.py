@@ -57,25 +57,35 @@ async def post_checkup(body: CheckupIn) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="抽出に失敗しました(LLM 未設定または読取不可)")
 
     items = get_settings().checkup_items
-    values = evaluate(extracted.get("values", []), items)
-    if not values:
-        raise HTTPException(status_code=422, detail="有効な項目を検出できませんでした")
-
-    if body.date:
-        d = date_type.fromisoformat(body.date)
-    elif extracted.get("date"):
-        d = date_type.fromisoformat(extracted["date"])
-    else:
-        d = app_today()
-
+    source = "image" if body.image_base64 else "text"
+    exams = extracted.get("exams") or []
+    stored = 0
     with session_scope() as session:
-        row = HealthCheckup(
-            date=d, values=values, raw_text=(body.text or "")[:4000],
-            source="image" if body.image_base64 else "text",
-        )
-        session.add(row)
+        for exam in exams:
+            values = evaluate(exam.get("values", []), items)
+            if not values:
+                continue
+            # 実施日: exam > body.date > 今日
+            if exam.get("date"):
+                d = date_type.fromisoformat(exam["date"])
+            elif body.date:
+                d = date_type.fromisoformat(body.date)
+            else:
+                d = app_today()
+            # 同一実施日は upsert(再アップロードで重複させない)
+            row = session.query(HealthCheckup).filter(HealthCheckup.date == d).first()
+            if row is None:
+                row = HealthCheckup(date=d)
+                session.add(row)
+            row.values = values
+            row.source = source
+            row.raw_text = (body.text or "")[:4000]
+            stored += 1
+        if stored == 0:
+            raise HTTPException(status_code=422, detail="有効な項目を検出できませんでした")
         session.flush()
         payload = _latest_payload(session)
+    payload["stored"] = stored
     return payload
 
 

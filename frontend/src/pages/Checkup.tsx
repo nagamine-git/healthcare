@@ -130,11 +130,20 @@ export function CheckupPage({ onBack }: { onBack: () => void }) {
         </Panel>
       )}
 
-      {q.data && q.data.history.length > 1 && (
-        <Panel title="履歴">
-          <ul className="text-xs text-ink-faint">
+      {q.data && q.data.history.length > 0 && (
+        <Panel title="記録(実施日ごと)">
+          <ul className="divide-y divide-hairline/60">
             {q.data.history.map((h) => (
-              <li key={h.id}>{h.date}</li>
+              <li key={h.id} className="flex items-center justify-between py-1.5 text-sm">
+                <span className="telemetry-num text-ink-dim">{h.date}</span>
+                <button
+                  disabled={del.isPending}
+                  onClick={() => del.mutate(h.id)}
+                  className="text-xs text-ink-faint hover:text-risk disabled:opacity-50"
+                >
+                  削除
+                </button>
+              </li>
             ))}
           </ul>
         </Panel>
