@@ -173,20 +173,41 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
           )}
 
           <div className="rounded-lg bg-hull p-4">
-            <p className="mb-2 text-sm text-ink-dim">今日の行動を記録</p>
+            <p className="mb-2 text-sm text-ink-dim">
+              今日の行動を記録 <span className="text-xs text-ink-faint">(緑=今日効く / 白=その他)</span>
+            </p>
             <div className="flex flex-wrap gap-2">
-              {q.data.catalog
-                .filter((c) => c.source === "manual")
-                .map((c) => (
-                  <button
-                    key={c.kind}
-                    disabled={logMut.isPending}
-                    onClick={() => logMut.mutate(c.kind)}
-                    className="rounded-full bg-prog-700 px-3 py-1 text-sm hover:bg-prog-500 disabled:opacity-50"
-                  >
-                    + {kindLabel(c.kind)}
-                  </button>
-                ))}
+              {(() => {
+                const effSet = new Set(q.data.weakest_hint?.kinds ?? []);
+                const hasFocus = effSet.size > 0;
+                const logged = new Set(Object.keys(q.data.today.contributions ?? {}));
+                const manual = q.data.catalog.filter((c) => c.source === "manual");
+                const sorted = [...manual].sort(
+                  (a, b) => Number(effSet.has(b.kind)) - Number(effSet.has(a.kind)),
+                );
+                return sorted.map((c) => {
+                  const eff = !hasFocus || effSet.has(c.kind);
+                  const done = logged.has(c.kind);
+                  const cls = eff
+                    ? done
+                      ? "bg-prog-500 text-void"
+                      : "bg-prog-700 text-ink hover:bg-prog-500"
+                    : done
+                      ? "border border-prog-700 text-prog-300"
+                      : "border border-hairline text-ink-faint hover:text-ink-dim";
+                  return (
+                    <button
+                      key={c.kind}
+                      disabled={logMut.isPending}
+                      onClick={() => logMut.mutate(c.kind)}
+                      className={`rounded-full px-3 py-1 text-sm transition-colors disabled:opacity-50 ${cls}`}
+                    >
+                      {done ? "✓ " : "+ "}
+                      {kindLabel(c.kind)}
+                    </button>
+                  );
+                });
+              })()}
             </div>
           </div>
 
