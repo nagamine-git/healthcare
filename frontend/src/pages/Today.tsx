@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Compass as CompassIcon, Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { api, type GardenGridCell } from "../lib/api";
 import { gardenCellStyle } from "../lib/gardenColor";
 import { SubScoreRadar } from "../components/SubScoreRadar";
@@ -183,43 +183,13 @@ export function TodayPage({ onOpenDebug }: Props) {
 
   return (
     <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-3">
-      <header className="safe-area-top flex items-center justify-between pb-1">
-        <div className="flex items-baseline gap-3">
-          <span className="text-xs tracking-wider text-slate-300">Ascend</span>
-          <span className="text-[10px] tabular-nums text-slate-500">
-            最終更新 {relativeMinutes(data.last_data_update_at, now)}
-            {dataRefresh.isPending && <span className="ml-1 text-emerald-400">(更新中…)</span>}
-          </span>
+      <header className="safe-area-top flex items-center justify-between gap-2 pb-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold tracking-wider text-ink">Ascend</span>
+          {dataRefresh.isPending && <span className="text-[10px] text-prog-300">更新中…</span>}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs tabular-nums text-slate-500">{data.date}</span>
-          <button
-            type="button"
-            onClick={() => (window.location.hash = "#identity")}
-            aria-label="Compass"
-            title="Compass (価値観×マインドセット)"
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:text-slate-200"
-          >
-            <CompassIcon size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => (window.location.hash = "#garden")}
-            aria-label="理想の庭"
-            title="理想の庭 (ゲーミフィケーション)"
-            className="rounded-lg p-1.5 text-base leading-none text-slate-400 transition-colors hover:text-slate-200"
-          >
-            🌱
-          </button>
-          <button
-            type="button"
-            onClick={() => (window.location.hash = "#becoming")}
-            aria-label="becoming"
-            title="becoming (三層フライホイール + 到達予測)"
-            className="rounded-lg p-1.5 text-base leading-none text-slate-400 transition-colors hover:text-slate-200"
-          >
-            🧭
-          </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="whitespace-nowrap text-xs tabular-nums text-ink-faint">{data.date}</span>
           <button
             type="button"
             onClick={() => setTab(tab === "settings" ? "summary" : "settings")}
