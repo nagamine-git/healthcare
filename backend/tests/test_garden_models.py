@@ -26,7 +26,7 @@ def test_garden_tables_have_expected_columns():
 def test_garden_config_defaults_present():
     s = get_settings()
     kinds = {c["kind"] for c in s.garden_catalog}
-    assert {"coding", "exercise", "meditation", "journaling", "reflection"} <= kinds
+    assert {"coding", "aerobic", "strength", "sleep", "reading", "meditation", "social"} <= kinds
     assert s.garden_gap_gamma >= 0
     assert len(s.garden_level_thresholds) == 4
     for c in s.garden_catalog:

@@ -295,15 +295,47 @@ class Settings(BaseSettings):
     omdb_api_key: str | None = None
 
     # --- Garden(ゲーミフィケーション)---
-    # personal: 行動カタログ(理想像への紐付けを含むので個人依存)。
+    # personal: 行動カタログ(生活全般の「いい行動」。理想像への紐付けを含むので個人依存)。
+    # source: 自動取得元 or "manual"。自動 = github / garmin_aerobic / garmin_strength /
+    #         sleep / steps / learning。データ源が無い生活ドメインのみ manual。
     garden_catalog: list[dict] = Field(
         default_factory=lambda: [
+            # --- 認知・創造(founder のアウトプット)---
             {"kind": "coding", "source": "github",
              "dimensions": ["self_direction", "proactivity", "ownership", "effectuation"],
              "base": 2.0, "evidence": "創造的アウトプット=founder 主体性の直接証拠"},
-            {"kind": "exercise", "source": "garmin",
-             "dimensions": ["risk_tolerance", "need_for_achievement"],
+            {"kind": "creative", "source": "manual",
+             "dimensions": ["self_direction", "ownership", "risk_tolerance"],
+             "base": 1.8, "evidence": "作品/発信を世に出す=オーナーシップの実践"},
+            {"kind": "deepwork", "source": "manual",
+             "dimensions": ["need_for_achievement", "self_direction"],
+             "base": 1.6, "evidence": "ディープワーク=高価値産出 (Newport 2016)"},
+            {"kind": "reading", "source": "manual",
+             "dimensions": ["growth_mindset", "effectuation", "universalism"],
+             "base": 1.4, "evidence": "読書→知識・視点・言語ネットワーク"},
+            {"kind": "learning", "source": "learning",
+             "dimensions": ["growth_mindset", "self_direction"],
+             "base": 1.4, "evidence": "意図的学習→成長マインドセット"},
+            # --- 身体(脳と気力の土台)---
+            {"kind": "aerobic", "source": "garmin_aerobic",
+             "dimensions": ["risk_tolerance", "need_for_achievement", "growth_mindset"],
              "base": 1.5, "evidence": "有酸素運動→BDNF・実行機能 (Erickson 2011)"},
+            {"kind": "strength", "source": "garmin_strength",
+             "dimensions": ["need_for_achievement", "ownership"],
+             "base": 1.5, "evidence": "筋トレ→自己効力感・実行機能・代謝"},
+            {"kind": "sleep", "source": "sleep",
+             "dimensions": ["internal_locus", "growth_mindset"],
+             "base": 1.3, "evidence": "十分な睡眠→記憶定着・情動制御"},
+            {"kind": "steps", "source": "steps",
+             "dimensions": ["growth_mindset"],
+             "base": 1.0, "evidence": "活動量→脳血流・気分"},
+            {"kind": "nature", "source": "manual",
+             "dimensions": ["growth_mindset"],
+             "base": 1.0, "evidence": "自然・朝日→注意回復・概日リズム"},
+            {"kind": "healthy_meal", "source": "manual",
+             "dimensions": ["internal_locus"],
+             "base": 1.0, "evidence": "自炊・整った食事→自己調整・血糖安定"},
+            # --- メンタル・内省 ---
             {"kind": "meditation", "source": "manual",
              "dimensions": ["internal_locus", "growth_mindset"],
              "base": 1.2, "evidence": "瞑想→前頭前野・情動制御・HRV (Tang 2015)"},
@@ -313,8 +345,24 @@ class Settings(BaseSettings):
             {"kind": "reflection", "source": "manual",
              "dimensions": ["growth_mindset", "ownership"],
              "base": 1.0, "evidence": "省察的実践 (Schön 1983)"},
+            {"kind": "gratitude", "source": "manual",
+             "dimensions": ["universalism", "growth_mindset"],
+             "base": 0.9, "evidence": "感謝の記録→主観的幸福・向社会性"},
+            # --- 人・生活(主体性/関係/基盤)---
+            {"kind": "social", "source": "manual",
+             "dimensions": ["proactivity", "benevolence"],
+             "base": 1.3, "evidence": "人に会う/声をかける=社会資本・主体性"},
+            {"kind": "family", "source": "manual",
+             "dimensions": ["benevolence", "security"],
+             "base": 1.1, "evidence": "家族との時間→関係資本・回復"},
+            {"kind": "finance", "source": "manual",
+             "dimensions": ["security", "ownership", "need_for_achievement"],
+             "base": 1.1, "evidence": "家計・投資の前進→基盤づくり・主体性"},
         ]
     )
+    # 自動判定のしきい値。
+    garden_good_sleep_min: int = 420  # この分以上で「十分な睡眠」を 1 行動とみなす
+    garden_steps_goal: int = 8000  # この歩数以上で「よく歩いた」を 1 行動とみなす
     # tuning: ギャップ連動の効き具合。盲点(gap最大)は重み最大 (1+gamma) 倍。
     garden_gap_gamma: float = 1.0
     # intensity→level 0-4 の境界。

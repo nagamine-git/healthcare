@@ -4,18 +4,25 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.health import (
+    DailySummary,
     GardenDaily,
     GithubContributionDaily,
     GoodActionLog,
+    LearningSectionProgress,
+    SleepSession,
     Workout,
 )
 from app.scoring.garden.compute import compute_garden_day
 from app.scoring.identity.store import build_gap_report
+
+
+def _is_strength(workout_type: str | None) -> bool:
+    return bool(workout_type) and "strength" in workout_type.lower()
 
 
 def gaps_from_report(report: dict) -> dict[str, float | None]:
@@ -30,7 +37,11 @@ def _day_bounds(target: date) -> tuple[datetime, datetime]:
 
 
 def active_kinds_for_date(session: Session, target: date, catalog: list[dict]) -> set[str]:
-    """その日に観測された行動種別の集合。"""
+    """その日に観測された行動種別の集合。
+
+    source 別に自動検出する。データ源の無い "manual" は GoodActionLog で拾う。
+    """
+    settings = get_settings()
     sources = {c["kind"]: c["source"] for c in catalog}
     start, end = _day_bounds(target)
     active: set[str] = set()
@@ -43,19 +54,36 @@ def active_kinds_for_date(session: Session, target: date, catalog: list[dict]) -
     ).scalars().all()
     active.update(log_kinds)
 
-    # GitHub: commit_count>0 → source==github の kind を active 化
+    # --- 自動検出: 各 source が満たされたか ---
     gh = session.get(GithubContributionDaily, target)
-    if gh is not None and (gh.commit_count or 0) > 0:
-        active.update(k for k, src in sources.items() if src == "github")
-
-    # Garmin: その日に Workout があれば source==garmin の kind を active 化
-    workout_exists = session.execute(
+    workout_types = session.execute(
+        select(Workout.type).where(Workout.start >= start, Workout.start < end)
+    ).scalars().all()
+    sleep = session.get(SleepSession, target)
+    summary = session.get(DailySummary, target)
+    learned = session.execute(
         select(func.count())
-        .select_from(Workout)
-        .where(Workout.start >= start, Workout.start < end)
+        .select_from(LearningSectionProgress)
+        .where(
+            or_(
+                LearningSectionProgress.read_at.between(start, end),
+                LearningSectionProgress.rustlings_at.between(start, end),
+                LearningSectionProgress.explained_at.between(start, end),
+            )
+        )
     ).scalar_one()
-    if workout_exists:
-        active.update(k for k, src in sources.items() if src == "garmin")
+
+    detected = {
+        "github": gh is not None and (gh.commit_count or 0) > 0,
+        "garmin_aerobic": any(not _is_strength(t) for t in workout_types),
+        "garmin_strength": any(_is_strength(t) for t in workout_types),
+        "sleep": sleep is not None and (sleep.total_min or 0) >= settings.garden_good_sleep_min,
+        "steps": summary is not None and (summary.steps or 0) >= settings.garden_steps_goal,
+        "learning": learned > 0,
+    }
+    for kind, src in sources.items():
+        if detected.get(src):
+            active.add(kind)
 
     return {k for k in active if k in sources}
 

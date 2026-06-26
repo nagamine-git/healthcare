@@ -46,10 +46,29 @@ def test_active_kinds_collects_manual_workout_and_github(mem_session):
     mem_session.flush()
     catalog = [
         {"kind": "coding", "source": "github", "dimensions": [], "base": 2.0, "evidence": ""},
-        {"kind": "exercise", "source": "garmin", "dimensions": [], "base": 1.5, "evidence": ""},
+        {"kind": "aerobic", "source": "garmin_aerobic", "dimensions": [], "base": 1.5, "evidence": ""},
         {"kind": "meditation", "source": "manual", "dimensions": [], "base": 1.2, "evidence": ""},
     ]
-    assert active_kinds_for_date(mem_session, d, catalog) == {"coding", "exercise", "meditation"}
+    assert active_kinds_for_date(mem_session, d, catalog) == {"coding", "aerobic", "meditation"}
+
+
+def test_active_kinds_detects_strength_sleep_steps(mem_session):
+    from app.models.health import DailySummary, SleepSession
+
+    d = date(2026, 6, 25)
+    mem_session.add(Workout(id="s1", source="garmin", start=datetime(2026, 6, 25, 8, 0),
+                            type="strength_training"))
+    mem_session.add(SleepSession(date=d, source="garmin", total_min=460))
+    mem_session.add(DailySummary(date=d, steps=9000))
+    mem_session.flush()
+    catalog = [
+        {"kind": "strength", "source": "garmin_strength", "dimensions": [], "base": 1.5, "evidence": ""},
+        {"kind": "sleep", "source": "sleep", "dimensions": [], "base": 1.3, "evidence": ""},
+        {"kind": "steps", "source": "steps", "dimensions": [], "base": 1.0, "evidence": ""},
+        {"kind": "aerobic", "source": "garmin_aerobic", "dimensions": [], "base": 1.5, "evidence": ""},
+    ]
+    # 筋トレのみ(有酸素なし)+ 十分な睡眠 + 歩数達成
+    assert active_kinds_for_date(mem_session, d, catalog) == {"strength", "sleep", "steps"}
 
 
 def test_active_kinds_github_zero_commits_not_active(mem_session):
@@ -126,3 +145,5 @@ class _FakeSettings:
     ]
     garden_gap_gamma = 1.0
     garden_level_thresholds: ClassVar[list[float]] = [0.0, 1.0, 2.5, 4.5]
+    garden_good_sleep_min = 420
+    garden_steps_goal = 8000
