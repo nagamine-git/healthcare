@@ -1313,6 +1313,7 @@ export type BecomingOneMove = {
   fallback?: boolean;
 };
 
+export type LifeLeaf = { label: string; achievement: number | null };
 export type LifeCapital = {
   key: string;
   label: string;
@@ -1320,7 +1321,7 @@ export type LifeCapital = {
   weight: number;
   floor: number;
   breach: boolean;
-  leaves: string[];
+  leaves: LifeLeaf[];
 };
 export type LifeTreeResponse = {
   purpose: {
