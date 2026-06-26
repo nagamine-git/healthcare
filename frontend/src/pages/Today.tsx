@@ -259,6 +259,15 @@ export function TodayPage({ onOpenDebug }: Props) {
       {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
       <MigraineRiskBanner />
 
+      {/* ===== 朝のリチュアル: 今日の紙(手書きテンプレ)への入口 ===== */}
+      <button
+        type="button"
+        onClick={() => (window.location.hash = "#journal")}
+        className="w-full rounded-xl border border-hairline bg-hull p-3 text-left text-sm text-ink-dim transition-colors hover:border-ink-faint"
+      >
+        📝 今日の紙(手書き用テンプレ)を開く → <span className="text-ink-faint">テーマ・勝ちタスク候補つき</span>
+      </button>
+
       {/* ===== ファーストビュー: 今日やること + 今日効く行動 + コンディション + 歩み ===== */}
       <CockpitHero score={score} headline={data.advice?.payload?.headline} />
 
