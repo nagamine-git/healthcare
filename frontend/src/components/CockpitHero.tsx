@@ -46,7 +46,10 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
       >
         {moveMut.data ? (
           <div className="space-y-1">
-            <p className="text-lg font-semibold leading-snug text-ink">{moveMut.data.move}</p>
+            <p className="text-lg font-semibold leading-snug text-ink">
+              {moveMut.data.theme && <span className="text-prog-300">{moveMut.data.theme}: </span>}
+              {moveMut.data.move}
+            </p>
             <p className="text-sm text-act-300">if-then: {moveMut.data.if_then}</p>
             <p className="text-xs text-ink-faint">{moveMut.data.rationale}</p>
           </div>

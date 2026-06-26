@@ -39,6 +39,7 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
     ?? life.data?.capitals.find((c) => c.key === life.data?.focus_capital)?.label
     ?? "—";
   const winning = move.data?.move ?? null;
+  const winTheme = move.data?.theme ?? themeKeyword;
   const condition = today.data?.score?.total ?? null;
   const alerts = (today.data?.alerts ?? []).filter((a) => a.severity !== "info");
   const breaches = (life.data?.capitals ?? []).filter((c) => c.breach).map((c) => c.label);
@@ -85,26 +86,23 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
           <div className="mt-1 space-y-0.5 text-ink-faint">
             <div>感謝する人: <span className="text-ink-faint/40">________</span></div>
             <div>話した人: <span className="text-ink-faint/40">________</span></div>
-            <div className="text-ink">
-              ・<span className="text-prog-300">{themeKeyword}</span>:{" "}
-              {winning ? (
-                <span className="text-act-300">{winning}</span>
-              ) : (
-                <span className="text-ink-faint/60">(下で候補を出す)</span>
-              )}
+            {/* テーマ:勝ちタスク を1行に統合(例: 起業家: ユーザー候補5人に連絡をとる)*/}
+            <div className="flex items-start gap-2">
+              <span className="flex-1 text-ink">
+                ・<span className="font-semibold text-prog-300">{winTheme}</span>:{" "}
+                {winning ? (
+                  <span className="text-act-300">{winning}</span>
+                ) : (
+                  <span className="text-ink-faint/60">(候補を出す →)</span>
+                )}
+              </span>
+              <Button variant="subtle" disabled={move.isPending} onClick={() => move.mutate()}>
+                {move.isPending ? "生成中…" : winning ? "別案" : "出す"}
+              </Button>
             </div>
-          </div>
-
-          <div className="mt-1 flex items-center justify-between">
-            <Heading>勝ちタスク候補(早めに片付けると勝ち)</Heading>
-          </div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="flex-1 text-act-300">
-              {winning ?? "(今日いちばん効く一手を提案します)"}
-            </span>
-            <Button variant="subtle" disabled={move.isPending} onClick={() => move.mutate()}>
-              {move.isPending ? "生成中…" : winning ? "別案" : "出す"}
-            </Button>
+            <div className="text-[10px] text-ink-faint/60">
+              早く片付くほど“今日は勝ち”。テーマは紙で自分の言葉に書き換えてOK。
+            </div>
           </div>
 
           <Heading>スケジュール(自由時間 {interval}h刻み / ○=予定)</Heading>

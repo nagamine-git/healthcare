@@ -19,6 +19,9 @@ _SYSTEM = """\
 診断・いちばん埋めたい盲点次元をふまえ、**今日いちばん効く具体的な一手を1つだけ**提案します。
 
 # 指示
+- **theme(短い一言)+ move(具体タスク)**をセットで出す。`theme: move` が
+  「起業家: ユーザー候補5人に連絡をとる」「探求者: Rust 3.3 を終わらせる」
+  「成長: イーロンの自伝を5分読む」のように一行で読めること。theme は役割/状態の2〜5字。
 - 抽象論や複数提案は禁止。今日のうちに実行できる**1つの具体行動**に絞る。
 - **1日の早い時間に片付けられる、明確に「完了」と言える行動**にする(所要は長くても1〜2時間、
   できれば午前中〜早い時間に終えられる単位)。だらだら続く曖昧な目標やノルマにしない。
@@ -36,12 +39,17 @@ ONE_MOVE_TOOL: dict[str, Any] = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "move": {"type": "string", "description": "今日の具体的な一手(1文)"},
+            "theme": {
+                "type": "string",
+                "description": "今日の自分を表す短い一言テーマ(2〜5字、役割/状態)。"
+                "例: 復活 / 起業家 / 探求者 / 成長。『テーマ: タスク』で読めるように。",
+            },
+            "move": {"type": "string", "description": "今日の具体的な一手(1文、早く完了できる単位)"},
             "if_then": {"type": "string", "description": "実行意図『◯◯したら、△△する』"},
             "dimension_id": {"type": "string", "description": "狙う盲点次元のid"},
             "rationale": {"type": "string", "description": "なぜ効くか(1文)"},
         },
-        "required": ["move", "if_then", "dimension_id", "rationale"],
+        "required": ["theme", "move", "if_then", "dimension_id", "rationale"],
     },
 }
 

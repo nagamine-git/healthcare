@@ -59,6 +59,7 @@ async def post_one_move() -> dict:
         # LLM 未設定/失敗時の構造化フォールバック
         name = dim.name_ja if dim else "理想"
         move = {
+            "theme": name,
             "move": f"{name}を前進させる行動を、今日ひとつ実行する。",
             "if_then": "退勤したら、まず10分その行動に着手する。",
             "dimension_id": bottleneck_id or "",
