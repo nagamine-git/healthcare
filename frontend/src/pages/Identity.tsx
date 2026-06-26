@@ -32,7 +32,7 @@ export function IdentityPage({ onBack }: Props) {
   const [reflectTarget, setReflectTarget] = useState<IdentityRecommendation | null>(null);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 pb-24 text-slate-100">
+    <div className="safe-area-top mx-auto max-w-3xl space-y-4 px-4 pb-24 text-ink">
       <header className="safe-area-top flex items-center justify-between pb-1">
         <button
           onClick={onBack}
