@@ -82,21 +82,27 @@ export function WeatherPanel() {
           <WIcon icon={s.icon} size={40} />
           <div className="flex-1">
             <div className="text-base font-medium text-slate-100">{s.label}</div>
-            <div className="text-sm tabular-nums text-slate-300">
-              <span className="text-rose-300">{s.t_max != null ? `${Math.round(s.t_max)}°` : "--"}</span>
-              {" / "}
-              <span className="text-sky-300">{s.t_min != null ? `${Math.round(s.t_min)}°` : "--"}</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm tabular-nums text-slate-300">
+              <span className="whitespace-nowrap">
+                <span className="text-rose-300">{s.t_max != null ? `${Math.round(s.t_max)}°` : "--"}</span>
+                {" / "}
+                <span className="text-sky-300">{s.t_min != null ? `${Math.round(s.t_min)}°` : "--"}</span>
+              </span>
               {s.precip_prob_max != null && (
-                <span className="ml-2 text-sky-400">☔ {s.precip_prob_max}%</span>
+                <span className="whitespace-nowrap text-sky-400">☔ {s.precip_prob_max}%</span>
               )}
               {s.uv_max != null && (
-                <span className="ml-2" style={{ color: uvColor(s.uv_max) }} title={`UV指数 ${uvLabel(s.uv_max)}`}>
+                <span
+                  className="whitespace-nowrap"
+                  style={{ color: uvColor(s.uv_max) }}
+                  title={`UV指数 ${uvLabel(s.uv_max)}`}
+                >
                   ☀️ UV {Math.round(s.uv_max)}
                 </span>
               )}
               {s.wind && s.wind.speed != null && (
                 <span
-                  className={`ml-2 ${
+                  className={`whitespace-nowrap ${
                     s.wind.level === "hazard"
                       ? "text-rose-400"
                       : s.wind.level === "caution"
