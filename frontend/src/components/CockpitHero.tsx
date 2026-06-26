@@ -1,22 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, type BecomingLoop, type SubScores } from "../lib/api";
+import { api, type SubScores } from "../lib/api";
+import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
+import { KIND_LABEL } from "../lib/labels";
 import { BarGauge, Button, Panel, Pill, RingGauge, Stat } from "./ui/cockpit";
 
-const DIAGNOSIS: Record<BecomingLoop["diagnosis"], { short: string; tone: "prog" | "act" | "neutral" }> = {
-  flywheel_turning: { short: "回っている", tone: "prog" },
-  wasted_capacity: { short: "資本の浪費", tone: "act" },
-  spinning: { short: "空回り", tone: "act" },
-  building: { short: "構築中", tone: "neutral" },
-};
-
-function etaLabel(days: number | null): string {
-  if (days === null) return "—";
-  if (days >= 60) return `${Math.round(days / 30)}ヶ月`;
-  return `${days}日`;
-}
-function pct(v: number | null): string {
-  return v === null ? "—" : `${Math.round(v * 100)}`;
-}
 function go(hash: string) {
   window.location.hash = hash;
 }
@@ -52,6 +39,21 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
             「決める」を押すと、盲点に効く今日いちばんの一手が出ます。
           </p>
         )}
+        {/* 手札: 他に取りうる行動(控えめに)。タップで記録画面へ。 */}
+        <div className="mt-3 border-t border-hairline pt-2">
+          <span className="telemetry-label">他の手札</span>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {Object.entries(KIND_LABEL).map(([kind, label]) => (
+              <button
+                key={kind}
+                onClick={() => go("#garden")}
+                className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </Panel>
 
       {/* プライマリ・ディスプレイ(コンディション) */}
