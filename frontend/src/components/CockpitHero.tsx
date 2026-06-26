@@ -93,39 +93,39 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
         )}
       </Panel>
 
-      {/* フライホイール + North Star */}
+      {/* 好循環 + ゴールまで(タップで「歩み」へ) */}
       <div className="grid grid-cols-2 gap-3">
-        <Panel title="FLYWHEEL" onClick={() => go("#becoming")}>
+        <Panel title="今週の好循環" onClick={() => go("#becoming")}>
           {loop && diag ? (
             <>
               <Pill tone={diag.tone}>{diag.short}</Pill>
               <div className="mt-2 grid grid-cols-3 gap-1 text-center">
-                <Stat size="sm" label="活用" value={pct(loop.capacity_utilization)} />
-                <Stat size="sm" label="整合" value={pct(loop.action_alignment)} />
+                <Stat size="sm" label="動けた" value={pct(loop.capacity_utilization)} />
+                <Stat size="sm" label="効く行動" value={pct(loop.action_alignment)} />
                 <Stat
                   size="sm"
-                  label="前進"
+                  label="近づいた"
                   tone={loop.identity_movement && loop.identity_movement > 0 ? "prog" : "neutral"}
                   value={loop.identity_movement === null ? "—" : loop.identity_movement.toFixed(1)}
                 />
               </div>
             </>
           ) : (
-            <p className="text-sm text-ink-faint">構築中</p>
+            <p className="text-sm text-ink-faint">記録が貯まると表示</p>
           )}
         </Panel>
-        <Panel title="NORTH STAR" onClick={() => go("#becoming")}>
+        <Panel title="ゴールまで" onClick={() => go("#becoming")}>
           {traj ? (
             <>
               <Stat
                 size="lg"
                 value={etaLabel(traj.eta_days)}
                 tone="prog"
-                delta={traj.confidence === "low" ? "低信頼(蓄積中)" : undefined}
+                delta={traj.confidence === "low" ? "蓄積中" : undefined}
               />
               {traj.bottleneck_name && (
                 <p className="mt-1 text-xs text-ink-dim">
-                  壁: <span className="text-ink">{traj.bottleneck_name}</span>
+                  伸びしろ: <span className="text-ink">{traj.bottleneck_name}</span>
                 </p>
               )}
             </>
