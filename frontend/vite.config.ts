@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "Healthcare Dashboard",
-        short_name: "Healthcare",
+        name: "Ascend",
+        short_name: "Ascend",
         description: "Personal healthcare dashboard (tailnet only)",
         theme_color: "#0f172a",
         background_color: "#0f172a",

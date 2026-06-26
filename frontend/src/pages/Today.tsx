@@ -35,6 +35,7 @@ import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { CockpitHero } from "../components/CockpitHero";
+import { LifeTreePanel } from "../components/LifeTreePanel";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
 
@@ -184,7 +185,7 @@ export function TodayPage({ onOpenDebug }: Props) {
     <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-3">
       <header className="safe-area-top flex items-center justify-between pb-1">
         <div className="flex items-baseline gap-3">
-          <span className="text-xs tracking-wider text-slate-300">Healthcare</span>
+          <span className="text-xs tracking-wider text-slate-300">Ascend</span>
           <span className="text-[10px] tabular-nums text-slate-500">
             最終更新 {relativeMinutes(data.last_data_update_at, now)}
             {dataRefresh.isPending && <span className="ml-1 text-emerald-400">(更新中…)</span>}
@@ -293,8 +294,11 @@ export function TodayPage({ onOpenDebug }: Props) {
         igniteSignal={data.last_data_update_at ?? data.date}
       />
 
-      {/* ===== コックピットのヒーロー: 今日の一手 + プライマリ・ディスプレイ + becoming 要約 ===== */}
+      {/* ===== コックピットのヒーロー: 今日の一手 + プライマリ・ディスプレイ + 歩み 要約 ===== */}
       <CockpitHero score={score} headline={data.advice?.payload?.headline} />
+
+      {/* ===== 人生の最適化ツリー(目的→目標→ドメイン)===== */}
+      <LifeTreePanel />
 
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
