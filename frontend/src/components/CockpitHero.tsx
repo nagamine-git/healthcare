@@ -1,7 +1,7 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type SubScores } from "../lib/api";
 import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
-import { KIND_LABEL } from "../lib/labels";
+import { kindLabel } from "../lib/labels";
 import { BarGauge, Button, Panel, Pill, RingGauge, Stat } from "./ui/cockpit";
 
 function go(hash: string) {
@@ -10,8 +10,19 @@ function go(hash: string) {
 
 /** Today の最上部に載るコックピットのヒーロー: プライマリ・ディスプレイ + 今日の一手 + becoming 要約。 */
 export function CockpitHero({ score, headline }: { score: SubScores | null; headline?: string }) {
+  const qc = useQueryClient();
   const becoming = useQuery({ queryKey: ["becoming"], queryFn: api.becoming, retry: false });
+  const garden = useQuery({ queryKey: ["garden"], queryFn: api.garden, retry: false });
   const moveMut = useMutation({ mutationFn: () => api.becomingOneMove() });
+  const logMut = useMutation({
+    mutationFn: (kind: string) => api.gardenLog(kind),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["garden"] });
+      qc.invalidateQueries({ queryKey: ["becoming"] });
+    },
+  });
+  const manualKinds = (garden.data?.catalog ?? []).filter((c) => c.source === "manual");
+  const loggedToday = new Set(Object.keys(garden.data?.today.contributions ?? {}));
   const loop = becoming.data?.loop_week;
   const traj = becoming.data?.trajectory;
   const diag = loop ? DIAGNOSIS[loop.diagnosis] : null;
@@ -39,21 +50,32 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
             「決める」を押すと、盲点に効く今日いちばんの一手が出ます。
           </p>
         )}
-        {/* 手札: 他に取りうる行動(控えめに)。タップで記録画面へ。 */}
-        <div className="mt-3 border-t border-hairline pt-2">
-          <span className="telemetry-label">他の手札</span>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {Object.entries(KIND_LABEL).map(([kind, label]) => (
-              <button
-                key={kind}
-                onClick={() => go("#garden")}
-                className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-ink-faint hover:text-ink-dim"
-              >
-                {label}
-              </button>
-            ))}
+        {/* 手札: 手動で記録できる行動(控えめに)。タップでその場で1件記録。 */}
+        {manualKinds.length > 0 && (
+          <div className="mt-3 border-t border-hairline pt-2">
+            <span className="telemetry-label">手札(タップで記録)</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {manualKinds.map((c) => {
+                const done = loggedToday.has(c.kind);
+                return (
+                  <button
+                    key={c.kind}
+                    disabled={logMut.isPending}
+                    onClick={() => logMut.mutate(c.kind)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
+                      done
+                        ? "border-prog-700 text-prog-300"
+                        : "border-hairline text-ink-faint hover:border-ink-faint hover:text-ink-dim"
+                    }`}
+                  >
+                    {done ? "✓ " : "+ "}
+                    {kindLabel(c.kind)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </Panel>
 
       {/* プライマリ・ディスプレイ(コンディション) */}
