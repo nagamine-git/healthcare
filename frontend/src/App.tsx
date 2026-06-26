@@ -41,8 +41,7 @@ export default function App() {
       ) : (
         <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
       )}
-      {/* 全画面に常設のナビ(コンテンツが隠れないよう末尾に余白) */}
-      <div className="h-16" aria-hidden />
+      {/* 全画面に常設のナビ(各ページが .pb-nav で下余白を確保) */}
       <BottomNav current={view} />
     </>
   );

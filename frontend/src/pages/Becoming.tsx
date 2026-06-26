@@ -17,7 +17,7 @@ export function BecomingPage({ onBack }: { onBack: () => void }) {
   const diag = loop ? DIAGNOSIS[loop.diagnosis] : null;
 
   return (
-    <div className="safe-area-top mx-auto max-w-3xl space-y-4 px-4 pb-4">
+    <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
       <button onClick={onBack} className="telemetry-label hover:text-ink">
         ← 戻る
       </button>
