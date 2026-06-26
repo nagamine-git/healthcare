@@ -24,28 +24,46 @@ def test_checkup_get_empty(app_client):
     assert r.json()["latest"] is None
 
 
-def test_checkup_post_extracts_and_flags(app_client, monkeypatch):
-    # LLM 抽出をモック(LDL 高値・HbA1c 正常)
+def test_checkup_post_stores_multiple_exams_by_date(app_client, monkeypatch):
+    # 1枚に2検査日(今回・前回)が含まれるケースをモック
     async def fake_extract(**kwargs):
         return {
-            "date": "2026-04-01",
-            "values": [
-                {"key": "ldl_c", "value": 160, "unit": "mg/dL"},
-                {"key": "hba1c", "value": 5.2, "unit": "%"},
-                {"key": "junk", "value": 1, "unit": "x"},
+            "exams": [
+                {"date": "2026-04-01", "values": [
+                    {"key": "ldl_c", "value": 160, "unit": "mg/dL"},
+                    {"key": "junk", "value": 1, "unit": "x"},
+                ]},
+                {"date": "2025-04-01", "values": [
+                    {"key": "ldl_c", "value": 110, "unit": "mg/dL"},
+                ]},
             ],
         }
 
     import app.api.checkup as capi
 
     monkeypatch.setattr(capi, "extract_checkup", fake_extract)
-    r = app_client.post("/api/checkup", json={"text": "LDL 160 HbA1c 5.2"})
+    r = app_client.post("/api/checkup", json={"text": "..."})
     assert r.status_code == 200
-    latest = r.json()["latest"]
-    assert latest["date"] == "2026-04-01"
-    flags = {v["key"]: v["flag"] for v in latest["values"]}
-    assert flags == {"ldl_c": "high", "hba1c": "normal"}  # junk は除外
-    assert "LDL" in latest["summary"]
+    body = r.json()
+    assert body["stored"] == 2
+    # 最新(2026-04-01)が表示、履歴に2件
+    assert body["latest"]["date"] == "2026-04-01"
+    assert {v["key"]: v["flag"] for v in body["latest"]["values"]} == {"ldl_c": "high"}
+    assert len(body["history"]) == 2
+
+
+def test_checkup_reupload_same_date_upserts(app_client, monkeypatch):
+    async def fake_extract(**kwargs):
+        return {"exams": [{"date": "2026-04-01", "values": [
+            {"key": "ldl_c", "value": 160, "unit": "mg/dL"}]}]}
+
+    import app.api.checkup as capi
+
+    monkeypatch.setattr(capi, "extract_checkup", fake_extract)
+    app_client.post("/api/checkup", json={"text": "a"})
+    r = app_client.post("/api/checkup", json={"text": "b"})
+    # 同一日付は upsert(重複しない)
+    assert len(r.json()["history"]) == 1
 
 
 def test_checkup_post_requires_input(app_client):

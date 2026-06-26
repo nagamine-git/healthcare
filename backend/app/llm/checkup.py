@@ -15,33 +15,45 @@ logger = get_logger(__name__)
 _SYSTEM = """\
 あなたは健康診断結果を読み取る専門家です。与えられたテキストまたは画像から、下記の
 科学的に有効な項目だけを数値で抽出します。該当しない/読めない項目は出さない。
-単位は結果記載のものに合わせる。検査日が分かれば date(YYYY-MM-DD)を返す。
+単位は結果記載のものに合わせる。
+
+重要: 1 枚の用紙に「今回・前回」など複数の検査日の結果が並んでいることがあります。
+その場合は **検査日ごとに分けて** exams に複数の要素として返してください(列やラベルで
+どの検査日の値かを判断する)。各 exam の date は分かれば YYYY-MM-DD。
 必ず submit_checkup ツールで返すこと。
 """
 
 
 def _tool(keys: list[str]) -> dict[str, Any]:
+    value_item = {
+        "type": "object",
+        "properties": {
+            "key": {"type": "string", "enum": keys},
+            "value": {"type": "number"},
+            "unit": {"type": "string"},
+        },
+        "required": ["key", "value", "unit"],
+    }
     return {
         "name": "submit_checkup",
-        "description": "健康診断から有効項目を構造化抽出する。",
+        "description": "健康診断から、検査日ごとに有効項目を構造化抽出する。",
         "input_schema": {
             "type": "object",
             "properties": {
-                "date": {"type": ["string", "null"], "description": "検査日 YYYY-MM-DD"},
-                "values": {
+                "exams": {
                     "type": "array",
+                    "description": "検査日ごとの結果(複数可)",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "key": {"type": "string", "enum": keys},
-                            "value": {"type": "number"},
-                            "unit": {"type": "string"},
+                            "date": {"type": ["string", "null"], "description": "検査日 YYYY-MM-DD"},
+                            "values": {"type": "array", "items": value_item},
                         },
-                        "required": ["key", "value", "unit"],
+                        "required": ["values"],
                     },
                 },
             },
-            "required": ["values"],
+            "required": ["exams"],
         },
     }
 
