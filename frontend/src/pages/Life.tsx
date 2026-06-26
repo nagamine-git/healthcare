@@ -106,6 +106,12 @@ export function LifePage({ onBack }: { onBack: () => void }) {
       </p>
       <LifeTreePanel />
       <GoalEditor />
+      <button
+        onClick={() => (window.location.hash = "#checkup")}
+        className="w-full rounded-xl border border-hairline bg-hull p-3 text-left text-sm text-ink-dim transition-colors hover:border-ink-faint"
+      >
+        🩺 健康診断の結果を取り込む(身体資本の判断材料)→
+      </button>
     </div>
   );
 }
