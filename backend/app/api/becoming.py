@@ -43,6 +43,8 @@ async def post_one_move() -> dict:
     dim = get_dimension(bottleneck_id) if bottleneck_id else None
     history = report.get("history", [])
     condition = history[-1]["condition"] if history else None
+    from app.api.checkup import latest_checkup_summary
+
     state = {
         "condition": condition,
         "diagnosis": report["loop_week"]["diagnosis"],
@@ -50,6 +52,7 @@ async def post_one_move() -> dict:
         "bottleneck_name": dim.name_ja if dim else None,
         "bottleneck_desc": dim.description if dim else None,
         "kinds": _kinds_for_dimension(bottleneck_id),
+        "checkup": latest_checkup_summary(),
     }
     move = await generate_one_move(state)
     if move is None:

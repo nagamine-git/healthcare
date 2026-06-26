@@ -1344,6 +1344,19 @@ export type LifeTreeResponse = {
   generated_at: string;
 };
 
+export type CheckupValue = {
+  key: string;
+  label: string;
+  category: string;
+  value: number | null;
+  unit: string;
+  flag: "normal" | "high" | "low" | "unknown";
+};
+export type CheckupResponse = {
+  latest: { id: number; date: string; values: CheckupValue[]; summary: string } | null;
+  history: { id: number; date: string }[];
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -1574,6 +1587,11 @@ export const api = {
     }),
   becoming: () => request<BecomingResponse>("/api/becoming"),
   lifeTree: () => request<LifeTreeResponse>("/api/life/tree"),
+  checkup: () => request<CheckupResponse>("/api/checkup"),
+  checkupUpload: (body: { text?: string; image_base64?: string; media_type?: string; date?: string }) =>
+    request<CheckupResponse>("/api/checkup", { method: "POST", body: JSON.stringify(body) }),
+  checkupDelete: (id: number) =>
+    request<CheckupResponse>(`/api/checkup/${id}`, { method: "DELETE" }),
   lifeGoal: (body: { title: string; horizon?: string | null; capital_weights: Record<string, number> }) =>
     request<LifeTreeResponse>("/api/life/goal", { method: "PUT", body: JSON.stringify(body) }),
   becomingOneMove: () => request<BecomingOneMove>("/api/becoming/one-move", { method: "POST" }),

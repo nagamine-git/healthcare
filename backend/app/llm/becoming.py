@@ -55,7 +55,8 @@ async def generate_one_move(state: dict) -> dict | None:
         f"フライホイール診断: {state.get('diagnosis')}\n"
         f"いちばん埋めたい盲点次元: {state.get('bottleneck_id')} "
         f"({state.get('bottleneck_name')} — {state.get('bottleneck_desc')})\n"
-        f"その次元に効く行動カテゴリ: {', '.join(state.get('kinds', [])) or 'なし'}"
+        f"その次元に効く行動カテゴリ: {', '.join(state.get('kinds', [])) or 'なし'}\n"
+        f"健康診断の所見: {state.get('checkup') or '未取込'}"
     )
     try:
         client = AsyncAnthropic(api_key=api_key)

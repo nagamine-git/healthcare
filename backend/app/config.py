@@ -364,6 +364,27 @@ class Settings(BaseSettings):
     garden_good_sleep_min: int = 420  # この分以上で「十分な睡眠」を 1 行動とみなす
     garden_steps_goal: int = 8000  # この歩数以上で「よく歩いた」を 1 行動とみなす
 
+    # --- 健康診断(clinical: 成人の基準値。科学的に有効・行動につながる項目に限定)---
+    # band [lo, hi]: 下回ると low / 上回ると high。片側は None。成人男性既定。
+    checkup_items: list[dict] = Field(
+        default_factory=lambda: [
+            {"key": "bmi", "label": "BMI", "unit": "", "category": "体格", "lo": 18.5, "hi": 25.0},
+            {"key": "sbp", "label": "収縮期血圧", "unit": "mmHg", "category": "血圧", "lo": 90, "hi": 129},
+            {"key": "dbp", "label": "拡張期血圧", "unit": "mmHg", "category": "血圧", "lo": 60, "hi": 84},
+            {"key": "ldl_c", "label": "LDLコレステロール", "unit": "mg/dL", "category": "脂質", "lo": None, "hi": 119},
+            {"key": "hdl_c", "label": "HDLコレステロール", "unit": "mg/dL", "category": "脂質", "lo": 40, "hi": None},
+            {"key": "tg", "label": "中性脂肪", "unit": "mg/dL", "category": "脂質", "lo": None, "hi": 149},
+            {"key": "fasting_glucose", "label": "空腹時血糖", "unit": "mg/dL", "category": "血糖", "lo": 70, "hi": 99},
+            {"key": "hba1c", "label": "HbA1c", "unit": "%", "category": "血糖", "lo": None, "hi": 5.5},
+            {"key": "ast", "label": "AST(GOT)", "unit": "U/L", "category": "肝機能", "lo": None, "hi": 30},
+            {"key": "alt", "label": "ALT(GPT)", "unit": "U/L", "category": "肝機能", "lo": None, "hi": 30},
+            {"key": "ggt", "label": "γ-GTP", "unit": "U/L", "category": "肝機能", "lo": None, "hi": 50},
+            {"key": "egfr", "label": "eGFR", "unit": "mL/min", "category": "腎機能", "lo": 60, "hi": None},
+            {"key": "uric_acid", "label": "尿酸", "unit": "mg/dL", "category": "代謝", "lo": None, "hi": 7.0},
+            {"key": "hemoglobin", "label": "ヘモグロビン", "unit": "g/dL", "category": "血液", "lo": 13.5, "hi": 17.5},
+        ]
+    )
+
     # --- Life Optimization OS(目的→目標→ドメイン木→行動)---
     life_freq_window_days: int = 14  # 行動頻度の集計窓
     life_freq_target_days: int = 7  # この日数で頻度達成度 100%

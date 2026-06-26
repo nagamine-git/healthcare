@@ -633,6 +633,19 @@ class GardenConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class HealthCheckup(Base):
+    """健康診断結果(テキスト/画像から抽出)。values は [{key,value,unit,flag}]。"""
+
+    __tablename__ = "health_checkup"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # image|text|manual
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Goal(Base):
     """中期目標(Layer 1)。capital_weights でドメインの重点ウェイトを駆動する。"""
 
