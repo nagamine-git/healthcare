@@ -127,11 +127,11 @@ function PressureCard({ pressure }: { pressure: Pressure }) {
           {PRESSURE_LABEL[pressure.risk_level]}
         </span>
       </div>
-      <div className="mt-1 flex items-baseline gap-2">
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
         <span className="font-mono text-2xl tabular-nums">
           {pressure.current_hpa?.toFixed(1) ?? "--"}
         </span>
-        <span className="text-xs opacity-60">hPa</span>
+        <span className="whitespace-nowrap text-xs opacity-60">hPa</span>
       </div>
       <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono text-[10px] tabular-nums opacity-80">
         {pressure.delta_24h_hpa != null && (
@@ -163,11 +163,11 @@ function AirCard({ air }: { air: AirQuality }) {
           {AIR_LABEL[air.risk_level]}
         </span>
       </div>
-      <div className="mt-1 flex items-baseline gap-2">
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
         <span className="font-mono text-2xl tabular-nums">
           {air.pm2_5?.toFixed(1) ?? "--"}
         </span>
-        <span className="text-xs opacity-60">μg/m³ (PM2.5)</span>
+        <span className="whitespace-nowrap text-[10px] opacity-60">μg/m³ (PM2.5)</span>
       </div>
       <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums opacity-80">
         {air.aqi != null && <span>AQI {air.aqi}</span>}
