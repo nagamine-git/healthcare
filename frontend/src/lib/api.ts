@@ -1313,6 +1313,34 @@ export type BecomingOneMove = {
   fallback?: boolean;
 };
 
+export type LifeCapital = {
+  key: string;
+  label: string;
+  achievement: number | null;
+  weight: number;
+  floor: number;
+  breach: boolean;
+  leaves: string[];
+};
+export type LifeTreeResponse = {
+  purpose: {
+    overall: number | null;
+    layers: { values: number | null; mindset: number | null } | null;
+    archetype_name?: string | null;
+  };
+  goal: {
+    id: number;
+    title: string;
+    horizon: string | null;
+    capital_weights: Record<string, number>;
+  } | null;
+  capitals: LifeCapital[];
+  life_score: number | null;
+  focus_capital: string | null;
+  breaches: string[];
+  generated_at: string;
+};
+
 export const api = {
   today: (coords?: { lat: number; lon: number } | null) => {
     const q =
@@ -1542,6 +1570,7 @@ export const api = {
       method: "POST",
     }),
   becoming: () => request<BecomingResponse>("/api/becoming"),
+  lifeTree: () => request<LifeTreeResponse>("/api/life/tree"),
   becomingOneMove: () => request<BecomingOneMove>("/api/becoming/one-move", { method: "POST" }),
   becomingBackfill: () => request<{ filled: number }>("/api/becoming/backfill", { method: "POST" }),
   identitySjtTurn: (messages: ChatMsg[]) =>

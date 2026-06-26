@@ -1,5 +1,6 @@
 const ITEMS: { key: string; label: string; hash: string }[] = [
   { key: "home", label: "ホーム", hash: "" },
+  { key: "life", label: "人生", hash: "#life" },
   { key: "garden", label: "庭", hash: "#garden" },
   { key: "identity", label: "羅針盤", hash: "#identity" },
   { key: "becoming", label: "becoming", hash: "#becoming" },

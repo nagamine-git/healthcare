@@ -363,6 +363,28 @@ class Settings(BaseSettings):
     # 自動判定のしきい値。
     garden_good_sleep_min: int = 420  # この分以上で「十分な睡眠」を 1 行動とみなす
     garden_steps_goal: int = 8000  # この歩数以上で「よく歩いた」を 1 行動とみなす
+
+    # --- Life Optimization OS(目的→目標→ドメイン木→行動)---
+    life_freq_window_days: int = 14  # 行動頻度の集計窓
+    life_freq_target_days: int = 7  # この日数で頻度達成度 100%
+    # personal: 各 capital の維持フロア(これを割ると警告)。
+    life_capital_floors: dict[str, float] = Field(
+        default_factory=lambda: {
+            "body": 55, "mind": 45, "intellect": 40,
+            "creation": 40, "relationships": 40, "economy": 35,
+        }
+    )
+    # personal: 既定の目標(seed)。capital_weights が重点ウェイトを駆動。
+    life_default_goal: dict = Field(
+        default_factory=lambda: {
+            "title": "AI 活用でユニコーンを立ち上げる",
+            "horizon": "2年",
+            "capital_weights": {
+                "creation": 2.5, "economy": 1.5, "intellect": 1.5,
+                "mind": 1.2, "body": 1.0, "relationships": 1.0,
+            },
+        }
+    )
     # tuning: ギャップ連動の効き具合。盲点(gap最大)は重み最大 (1+gamma) 倍。
     garden_gap_gamma: float = 1.0
     # intensity→level 0-4 の境界。
