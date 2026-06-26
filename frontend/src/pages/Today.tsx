@@ -181,7 +181,7 @@ export function TodayPage({ onOpenDebug }: Props) {
   const weight = data.metrics.weight;
 
   return (
-    <main className="safe-area-x safe-area-bottom mx-auto max-w-5xl space-y-3">
+    <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-3">
       <header className="safe-area-top flex items-center justify-between pb-1">
         <div className="flex items-baseline gap-3">
           <span className="text-xs tracking-wider text-slate-300">Healthcare</span>

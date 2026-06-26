@@ -100,6 +100,12 @@ body {
   background: rgba(10, 14, 20, 0.85); /* void */
 }
 
+/* 固定ボトムナビ(高さ約56px)+ ホームインジケータを必ずクリアする下余白。
+   全ページ共通で使い、ページ側の pb-* / safe-area-bottom とは併用しない。 */
+.pb-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 72px);
+}
+
 /* 計器ラベル: 小さく・トラッキングを効かせた大文字キャプション */
 .telemetry-label {
   font-size: 10px;

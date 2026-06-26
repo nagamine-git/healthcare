@@ -115,7 +115,7 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
   const selectedCell = q.data?.grid.find((c) => c.date === selected) ?? null;
 
   return (
-    <div className="safe-area-top mx-auto max-w-3xl space-y-4 px-4 pb-4">
+    <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
       <button onClick={onBack} className="text-sm text-ink-dim">
         ← 戻る
       </button>
