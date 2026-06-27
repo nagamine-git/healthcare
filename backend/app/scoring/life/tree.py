@@ -217,6 +217,7 @@ def compute_life_tree(session: Session, target: date) -> dict:
         capitals_in.append({
             "key": node["key"], "label": node["label"],
             "achievement": capital_ach, "leaves": leaves,
+            "kinds": CAPITAL_ACTION_KINDS.get(node["key"], []),
         })
 
     goal = active_goal(session)

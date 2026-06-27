@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type LifeCapital } from "../lib/api";
 import { kindLabel } from "../lib/labels";
 import { BarGauge, Panel, Pill, RingGauge } from "./ui/cockpit";
@@ -9,7 +9,21 @@ function go(hash: string) {
 
 /** 目的→目標→ドメイン木(Life Optimization OS の中核ビュー)。home と #life で共用。 */
 export function LifeTreePanel() {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ["life-tree"], queryFn: api.lifeTree });
+  const garden = useQuery({ queryKey: ["garden"], queryFn: api.garden, retry: false });
+  const logMut = useMutation({
+    mutationFn: (kind: string) => api.gardenLog(kind),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["life-tree"] });
+      qc.invalidateQueries({ queryKey: ["garden"] });
+      qc.invalidateQueries({ queryKey: ["today"] });
+    },
+  });
+  const manualSet = new Set(
+    (garden.data?.catalog ?? []).filter((c) => c.source === "manual").map((c) => c.kind),
+  );
+  const loggedToday = new Set(Object.keys(garden.data?.today.contributions ?? {}));
   const d = q.data;
   if (!d) return null;
   const focus = d.focus_capital;
@@ -44,7 +58,7 @@ export function LifeTreePanel() {
       <Panel title="人生のドメイン(資本/状態)">
         {d.breaches.length > 0 && (
           <p className="mb-2 text-xs text-risk">
-            ⚠ 最低ラインを割っている領域があります(優先で立て直す)
+            ⚠ 最低ラインを割っている領域あり。下の「→ 立て直す」をタップで記録/実行。
           </p>
         )}
         <div className="space-y-3">
@@ -72,6 +86,40 @@ export function LifeTreePanel() {
                   </span>
                 ))}
               </div>
+              {/* 立て直しの具体策: 手動行動はタップで記録、自動計測は実行を促す */}
+              {c.breach && c.kinds.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-risk">→ 立て直す:</span>
+                  {c.kinds.map((k) => {
+                    const manual = manualSet.has(k);
+                    const done = loggedToday.has(k);
+                    if (!manual) {
+                      return (
+                        <span
+                          key={k}
+                          className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-ink-faint"
+                        >
+                          {kindLabel(k)}
+                          <span className="ml-1 text-ink-faint/60">(自動計測)</span>
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={k}
+                        disabled={logMut.isPending}
+                        onClick={() => logMut.mutate(k)}
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                          done ? "bg-prog-500 text-void" : "bg-prog-700 text-ink hover:bg-prog-500"
+                        }`}
+                      >
+                        {done ? "✓ " : "+ "}
+                        {kindLabel(k)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -89,12 +137,30 @@ export function LifeTreePanel() {
                 <span className="telemetry-num text-act-300">{i + 1}.</span>{" "}
                 <span className="font-semibold text-ink">{a.label}</span>
                 <span className="ml-1 text-xs text-ink-faint">— {a.reason}</span>
-                <div className="mt-0.5 flex flex-wrap gap-1">
-                  {a.kinds.slice(0, 4).map((k) => (
-                    <span key={k} className="rounded-full border border-hairline px-1.5 text-[10px] text-ink-faint">
-                      {kindLabel(k)}
-                    </span>
-                  ))}
+                <div className="mt-0.5 flex flex-wrap gap-1.5">
+                  {a.kinds.slice(0, 4).map((k) => {
+                    const manual = manualSet.has(k);
+                    const done = loggedToday.has(k);
+                    if (!manual) {
+                      return (
+                        <span key={k} className="rounded-full border border-hairline px-2 py-0.5 text-[10px] text-ink-faint">
+                          {kindLabel(k)}<span className="ml-1 text-ink-faint/60">(自動)</span>
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={k}
+                        disabled={logMut.isPending}
+                        onClick={(e) => { e.stopPropagation(); logMut.mutate(k); }}
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                          done ? "bg-prog-500 text-void" : "bg-prog-700 text-ink hover:bg-prog-500"
+                        }`}
+                      >
+                        {done ? "✓ " : "+ "}{kindLabel(k)}
+                      </button>
+                    );
+                  })}
                 </div>
               </li>
             ))}

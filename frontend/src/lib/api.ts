@@ -1323,6 +1323,7 @@ export type LifeCapital = {
   floor: number;
   breach: boolean;
   leaves: LifeLeaf[];
+  kinds: string[];
 };
 export type LifeTreeResponse = {
   purpose: {
