@@ -13,12 +13,54 @@ from app.scoring.caffeine import (
     blood_concentration,
     half_life_decay,
     max_dose_for_bedtime,
+    med_dosing_status,
     predict_decay_curve,
     predict_residual_decay_curve,
     recommend_caffeine,
 )
 
 JST = ZoneInfo("Asia/Tokyo")
+
+
+# ----- 鎮痛薬の服用間隔 -----
+
+
+def _med(last_taken, doses_today, now):
+    return med_dosing_status(
+        source="bufferin_premium", label="バファリン", last_taken=last_taken,
+        doses_today=doses_today, now=now, min_interval_h=4.0, max_per_day=3,
+    )
+
+
+def test_med_first_dose_ok():
+    now = datetime(2026, 6, 28, 9, 0, tzinfo=JST)
+    st = _med(None, 0, now)
+    assert st.can_take is True
+    assert st.minutes_until == 0
+
+
+def test_med_too_soon_blocks_with_next_time():
+    now = datetime(2026, 6, 28, 10, 0, tzinfo=JST)
+    last = datetime(2026, 6, 28, 9, 0, tzinfo=JST)  # 1h 前
+    st = _med(last, 1, now)
+    assert st.can_take is False
+    assert st.minutes_until == 180  # あと3時間
+    assert st.next_allowed == datetime(2026, 6, 28, 13, 0, tzinfo=JST)
+
+
+def test_med_after_interval_ok():
+    now = datetime(2026, 6, 28, 14, 0, tzinfo=JST)
+    last = datetime(2026, 6, 28, 9, 0, tzinfo=JST)  # 5h 前
+    st = _med(last, 1, now)
+    assert st.can_take is True
+
+
+def test_med_daily_max_blocks():
+    now = datetime(2026, 6, 28, 22, 0, tzinfo=JST)
+    last = datetime(2026, 6, 28, 15, 0, tzinfo=JST)  # 間隔は空いている
+    st = _med(last, 3, now)
+    assert st.can_take is False
+    assert "上限" in st.reason
 
 
 # ----- 基礎モデル -----

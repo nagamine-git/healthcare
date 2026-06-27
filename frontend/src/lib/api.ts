@@ -270,6 +270,19 @@ export type CaffeinePreset = {
 
 export type CaffeinePresets = Record<CaffeineSource, CaffeinePreset>;
 
+export type MedStatus = {
+  source: CaffeineSource;
+  label: string;
+  doses_today: number;
+  max_per_day: number;
+  min_interval_h: number;
+  last_taken_iso: string | null;
+  next_allowed_iso: string | null;
+  can_take: boolean;
+  minutes_until: number;
+  reason: string;
+};
+
 export type MigraineEpisode = {
   id: number;
   started_at: string;
@@ -1383,6 +1396,7 @@ export const api = {
   gcalSchedule: () => request<GcalScheduleResult>("/admin/gcal/schedule", { method: "POST" }),
   debugSources: (days = 14) => request<DebugSources>(`/api/debug/sources?days=${days}`),
   caffeinePresets: () => request<CaffeinePresets>("/api/caffeine/presets"),
+  caffeineMedStatus: () => request<{ meds: MedStatus[] }>("/api/caffeine/med-status"),
   caffeineList: (hours = 24) =>
     request<CaffeineIntakeList>(`/api/caffeine?hours=${hours}`),
   caffeineAdd: (

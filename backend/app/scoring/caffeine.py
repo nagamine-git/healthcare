@@ -45,11 +45,76 @@ from datetime import datetime, time, timedelta
 
 # カフェイン入り頭痛薬/鎮痛薬の source。食事性カフェインと分けて扱う (交絡・MOH 対策)。
 MEDICATION_CAFFEINE_SOURCES: frozenset[str] = frozenset({"ibuquick", "bufferin_premium"})
+# 鎮痛薬の表示名 (UI 用)。
+MEDICATION_LABELS: dict[str, str] = {"bufferin_premium": "バファリン", "ibuquick": "イブ"}
 
 
 def is_dietary_caffeine(source: str | None) -> bool:
     """食事性カフェイン (コーヒー/茶/エナジー等) なら True。頭痛薬等は False。"""
     return source not in MEDICATION_CAFFEINE_SOURCES
+
+
+@dataclass(frozen=True)
+class MedDosingStatus:
+    """鎮痛薬の服用可否。今飲めるか・次に飲める時刻・本日回数を表す。"""
+
+    source: str
+    label: str
+    doses_today: int
+    max_per_day: int
+    min_interval_h: float
+    last_taken: datetime | None
+    next_allowed: datetime | None
+    can_take: bool
+    minutes_until: int  # 次に飲めるまでの残り分 (今飲めるなら 0)
+    reason: str
+
+
+def med_dosing_status(
+    *,
+    source: str,
+    label: str,
+    last_taken: datetime | None,
+    doses_today: int,
+    now: datetime,
+    min_interval_h: float,
+    max_per_day: int,
+) -> MedDosingStatus:
+    """直近服用時刻・本日回数から、今飲めるか/次に飲める時刻を計算する。
+
+    用法: 服用間隔 `min_interval_h` 時間以上、1 日 `max_per_day` 回まで。
+    `last_taken`/`now` はいずれも同一 TZ の aware datetime を渡すこと。
+    """
+    next_allowed = last_taken + timedelta(hours=min_interval_h) if last_taken else None
+    interval_ok = next_allowed is None or now >= next_allowed
+    under_max = doses_today < max_per_day
+    can_take = interval_ok and under_max
+    minutes_until = 0
+    if next_allowed is not None and not interval_ok:
+        minutes_until = max(0, math.ceil((next_allowed - now).total_seconds() / 60))
+    if not under_max:
+        reason = f"本日の上限 {max_per_day} 回に到達。今日はこれ以上飲まない。"
+    elif not interval_ok and next_allowed is not None and last_taken is not None:
+        reason = (
+            f"前回 {last_taken:%H:%M} 服用。次は {next_allowed:%H:%M}"
+            f"(あと {minutes_until} 分)まで空ける。"
+        )
+    elif last_taken is not None:
+        reason = f"今飲んでOK(本日 {doses_today} 回)。"
+    else:
+        reason = "今飲んでOK(本日まだ)。"
+    return MedDosingStatus(
+        source=source,
+        label=label,
+        doses_today=doses_today,
+        max_per_day=max_per_day,
+        min_interval_h=min_interval_h,
+        last_taken=last_taken,
+        next_allowed=next_allowed,
+        can_take=can_take,
+        minutes_until=minutes_until,
+        reason=reason,
+    )
 
 
 # 既定の吸収半減期 (h)。ka≈4.9/h, tmax≈45min (Blanchard 1983)。config から上書き可。

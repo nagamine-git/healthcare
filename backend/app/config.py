@@ -180,6 +180,11 @@ class Settings(BaseSettings):
     # インスタントコーヒー 1g あたりカフェイン量 (AGF/Nescafe/UCC 平均 ≈ 60mg)
     instant_coffee_mg_per_g: float = 60.0
 
+    # --- 鎮痛薬の用法 (臨床: バファリン/イブクイック とも添付文書ベース) ---
+    # 服用間隔は 4 時間以上、1 日 3 回まで。早すぎる連用・過量を防ぐ。
+    med_min_interval_h: float = 4.0
+    med_max_doses_per_day: int = 3
+
     # --- 睡眠リズム目標 ---
     target_wake_time: str = "06:30"  # 平日想定の起床時刻 (HH:MM, JST)
     target_sleep_min: int = 480  # 8h を ideal とする (推奨 7-9h)

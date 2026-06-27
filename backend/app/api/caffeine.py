@@ -211,6 +211,63 @@ async def caffeine_presets() -> dict[str, Any]:
     return out
 
 
+@router.get("/api/caffeine/med-status")
+async def med_status() -> dict[str, Any]:
+    """鎮痛薬(バファリン/イブ)の服用可否。直近服用時刻・本日回数から
+    「今飲めるか / 次に飲める時刻」を計算して返す。"""
+    from app.scoring.caffeine import (
+        MEDICATION_LABELS,
+        med_dosing_status,
+    )
+
+    s = get_settings()
+    tz = ZoneInfo(s.app_tz)
+    now_local = datetime.now(tz)
+    day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start_utc_naive = day_start_local.astimezone(UTC).replace(tzinfo=None)
+
+    out: list[dict[str, Any]] = []
+    with session_scope() as session:
+        for source, label in MEDICATION_LABELS.items():
+            rows = list(
+                session.scalars(
+                    select(CaffeineIntake)
+                    .where(CaffeineIntake.source == source)
+                    .order_by(CaffeineIntake.ts.desc())
+                ).all()
+            )
+            last_taken = None
+            if rows:
+                ts = rows[0].ts
+                ts = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts
+                last_taken = ts.astimezone(tz)
+            doses_today = sum(1 for r in rows if r.ts >= day_start_utc_naive)
+            st = med_dosing_status(
+                source=source,
+                label=label,
+                last_taken=last_taken,
+                doses_today=doses_today,
+                now=now_local,
+                min_interval_h=s.med_min_interval_h,
+                max_per_day=s.med_max_doses_per_day,
+            )
+            out.append(
+                {
+                    "source": st.source,
+                    "label": st.label,
+                    "doses_today": st.doses_today,
+                    "max_per_day": st.max_per_day,
+                    "min_interval_h": st.min_interval_h,
+                    "last_taken_iso": st.last_taken.isoformat() if st.last_taken else None,
+                    "next_allowed_iso": st.next_allowed.isoformat() if st.next_allowed else None,
+                    "can_take": st.can_take,
+                    "minutes_until": st.minutes_until,
+                    "reason": st.reason,
+                }
+            )
+    return {"meds": out}
+
+
 def current_residual_mg(
     now_jst: datetime,
     half_life_h: float,
