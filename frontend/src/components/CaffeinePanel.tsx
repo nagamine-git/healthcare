@@ -338,17 +338,22 @@ function DecayCurve({
             })}
           </div>
         </div>
-        {/* 時刻ラベルを別行に分離してバーのベースラインを揃える */}
+        {/* 時刻ラベル: 時が変わった所に時を表示(起点が:00でなくても軸が出る) */}
         <div className="mt-1 flex gap-[2px]">
-          {curve.map((p) => (
-            <span
-              key={p.time}
-              className="shrink-0 text-center text-[8px] tabular-nums text-slate-500"
-              style={{ width: 14 }}
-            >
-              {p.time.endsWith(":00") ? p.time.split(":")[0] : ""}
-            </span>
-          ))}
+          {curve.map((p, i) => {
+            const hour = p.time.slice(0, 2);
+            const prevHour = i > 0 ? curve[i - 1].time.slice(0, 2) : null;
+            const show = hour !== prevHour;
+            return (
+              <span
+                key={p.time}
+                className="shrink-0 text-center text-[8px] tabular-nums text-slate-500"
+                style={{ width: 14 }}
+              >
+                {show ? `${hour}時` : ""}
+              </span>
+            );
+          })}
         </div>
       </div>
     </div>
