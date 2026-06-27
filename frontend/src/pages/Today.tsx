@@ -12,6 +12,7 @@ import { TonightPlanPanel } from "../components/TonightPlanPanel";
 import { FocusPanel } from "../components/FocusPanel";
 import { CaffeinePanel } from "../components/CaffeinePanel";
 import { MigrainePanel } from "../components/MigrainePanel";
+import { MedQuickLog } from "../components/MedQuickLog";
 import { MigraineTriggerPanel } from "../components/MigraineTriggerPanel";
 import { AlcoholPanel } from "../components/AlcoholPanel";
 import { EnvironmentPanel } from "../components/EnvironmentPanel";
@@ -259,7 +260,23 @@ export function TodayPage({ onOpenDebug }: Props) {
       {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
       <MigraineRiskBanner />
 
-      {/* ===== 朝のリチュアル: 今日の紙(手書きテンプレ)への入口 ===== */}
+      {/* ===== メニュー: セクション切替を最上部に固定(常時表示の要点は「総合」タブへ集約)===== */}
+      <div className="sticky top-0 z-20 -mx-1 bg-slate-950/80 py-1 backdrop-blur">
+        <div className="flex gap-1 rounded-xl bg-slate-900/70 p-1">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" onClick={() => setTab(t.key)}
+              className={`flex-1 rounded-lg py-1.5 text-[12px] font-medium transition-colors ${
+                tab === t.key ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ============ タブ: 総合 (サマリー) ============ */}
+      {tab === "summary" && (
+      <div className="space-y-3">
+      {/* 朝のリチュアル: 今日の紙 */}
       <button
         type="button"
         onClick={() => (window.location.hash = "#journal")}
@@ -268,17 +285,15 @@ export function TodayPage({ onOpenDebug }: Props) {
         📝 今日の紙(手書き用テンプレ)を開く → <span className="text-ink-faint">テーマ・勝ちタスク候補つき</span>
       </button>
 
-      {/* ===== ファーストビュー: 今日やること + 今日効く行動 + コンディション + 歩み ===== */}
+      {/* ファーストビュー: 今日やること + 今日効く + コンディション + 歩み */}
       <CockpitHero score={score} headline={data.advice?.payload?.headline} />
 
-      {/* ===== 計器盤ランプ(警告のスナップショット)===== */}
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
       />
 
-      {/* ===== 人生の最適化ツリー(目的→目標→ドメイン)===== */}
       <LifeTreePanel />
 
       <StaleBanner
@@ -295,9 +310,7 @@ export function TodayPage({ onOpenDebug }: Props) {
         >
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-xs tracking-wider text-slate-400">🌱 理想の庭</span>
-            <span className="text-sm font-bold text-emerald-400">
-              {gardenQ.data.streak}日連続
-            </span>
+            <span className="text-sm font-bold text-emerald-400">{gardenQ.data.streak}日連続</span>
           </div>
           <div className="flex gap-[2px]">
             {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => {
@@ -314,22 +327,6 @@ export function TodayPage({ onOpenDebug }: Props) {
         </button>
       )}
 
-      {/* ===== タブナビ (sticky) ===== */}
-      <div className="sticky top-0 z-20 -mx-1 bg-slate-950/80 py-1 backdrop-blur">
-        <div className="flex gap-1 rounded-xl bg-slate-900/70 p-1">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={`flex-1 rounded-lg py-1.5 text-[12px] font-medium transition-colors ${
-                tab === t.key ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ============ タブ: 総合 (サマリー) ============ */}
-      {tab === "summary" && (
-      <div className="space-y-3">
       <div id="weather-section">
         <SectionHeader label="天気" hint="今日の天気・降水確率 + 週間予報" />
         <WeatherPanel />
@@ -421,6 +418,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div className="space-y-3">
         <SectionHeader label="片頭痛" hint="リスク・誘因分析・記録" />
         <MigraineRiskBanner />
+        <MedQuickLog />
         <MigrainePanel />
         <MigraineTriggerPanel />
       </div>
