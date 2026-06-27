@@ -20,6 +20,11 @@ export function Label({ children }: { children: ReactNode }) {
   return <span className="telemetry-label">{children}</span>;
 }
 
+/** ロード中のプレースホルダ(レイアウトを保つ)。 */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-xl bg-panel/50 ${className}`} />;
+}
+
 /** cockpit カード。glow で計器の微発光を足す。 */
 export function Panel({
   title,

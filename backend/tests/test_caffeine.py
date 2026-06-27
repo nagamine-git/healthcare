@@ -257,9 +257,20 @@ def test_residual_decay_curve_halves_at_half_life():
     assert all(res[i] >= res[i + 1] for i in range(len(res) - 1))
 
 
-def test_residual_decay_curve_empty_when_no_residual():
+def test_residual_decay_curve_flat_baseline_when_no_residual():
+    # 残量0でも now→就寝のベースライン(全点0)を描く(グラフを毎日必ず描くため)
     start = datetime(2026, 6, 23, 12, 0, tzinfo=JST)
     bed = datetime(2026, 6, 24, 0, 0, tzinfo=JST)
-    assert predict_residual_decay_curve(
+    curve = predict_residual_decay_curve(
         residual_mg=0.0, start_time=start, bedtime=bed, body_weight_kg=70.0,
+    )
+    assert len(curve) > 0
+    assert all(p["concentration_mg_per_l"] == 0.0 for p in curve)
+
+
+def test_residual_decay_curve_empty_when_bedtime_past():
+    start = datetime(2026, 6, 23, 12, 0, tzinfo=JST)
+    bed = datetime(2026, 6, 23, 11, 0, tzinfo=JST)
+    assert predict_residual_decay_curve(
+        residual_mg=50.0, start_time=start, bedtime=bed, body_weight_kg=70.0,
     ) == []
