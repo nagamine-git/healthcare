@@ -16,13 +16,15 @@ const DIM_KEYS = ["mood", "energy", "stress", "soreness"] as const;
  */
 
 type DimKey = "mood" | "energy" | "stress" | "soreness";
-type Dim = { key: DimKey; label: string; goodHigh: boolean };
+type Dim = { key: DimKey; label: string; desc: string; goodHigh: boolean };
 
+// 4軸は医学的に別の構成概念(混同しない):
+// 気分=感情価 / 活力=エネルギー覚醒 / ストレス=緊張覚醒 / だるさ=身体的疲労。
 const DIMS: Dim[] = [
-  { key: "mood", label: "気分", goodHigh: true },
-  { key: "energy", label: "活力", goodHigh: true },
-  { key: "stress", label: "ストレス", goodHigh: false },
-  { key: "soreness", label: "筋肉痛", goodHigh: false },
+  { key: "mood", label: "気分", desc: "感情の快−不快", goodHigh: true },
+  { key: "energy", label: "活力", desc: "元気・冴え(↔疲れ)", goodHigh: true },
+  { key: "stress", label: "ストレス", desc: "張り詰め・緊張", goodHigh: false },
+  { key: "soreness", label: "だるさ", desc: "身体の重さ・筋肉痛", goodHigh: false },
 ];
 
 function filledColor(value: number, goodHigh: boolean): string {
@@ -131,7 +133,10 @@ export function CheckinCard() {
           const hint = suggested[d.key]; // 淡色のゴースト目安
           return (
             <div key={d.key} className="flex items-center gap-2">
-              <span className="w-14 text-[11px] text-slate-300">{d.label}</span>
+              <span className="w-24 shrink-0">
+                <span className="text-[11px] text-slate-300">{d.label}</span>
+                <span className="block text-[9px] leading-tight text-slate-500">{d.desc}</span>
+              </span>
               <div className="flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((lvl) => {
                   const isFilled = value != null && lvl <= value;

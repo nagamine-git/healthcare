@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Button, Panel } from "../components/ui/cockpit";
 import { CheckinCard } from "../components/CheckinCard";
@@ -165,6 +165,97 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
           )}
         </Panel>
       )}
+
+      <JournalArchive />
     </div>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** 手書きジャーナルの写真→文字起こし(要確認・修正)→ 保存・アーカイブ。 */
+function JournalArchive() {
+  const qc = useQueryClient();
+  const entries = useQuery({ queryKey: ["journal-entries"], queryFn: api.journalEntries });
+  const [draft, setDraft] = useState("");
+  const [source, setSource] = useState<"text" | "image">("text");
+
+  const transcribe = useMutation({
+    mutationFn: async (file: File) => {
+      const b64 = await fileToBase64(file);
+      return api.journalTranscribe(b64, file.type || "image/png");
+    },
+    onSuccess: (r) => {
+      setDraft(r.text);
+      setSource("image");
+    },
+  });
+  const save = useMutation({
+    mutationFn: () => api.journalEntryPut({ text: draft, source }),
+    onSuccess: () => {
+      setDraft("");
+      setSource("text");
+      qc.invalidateQueries({ queryKey: ["journal-entries"] });
+    },
+  });
+  const del = useMutation({
+    mutationFn: (date: string) => api.journalEntryDelete(date),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["journal-entries"] }),
+  });
+
+  return (
+    <Panel title="手書きを取り込む / 控え">
+      <label className="block">
+        <span className="telemetry-label">📷 手書きの写真から文字起こし</span>
+        <input
+          type="file"
+          accept="image/*"
+          disabled={transcribe.isPending}
+          onChange={(e) => e.target.files?.[0] && transcribe.mutate(e.target.files[0])}
+          className="mt-1 block w-full text-xs text-ink-dim file:mr-2 file:rounded file:border-0 file:bg-act file:px-3 file:py-1 file:text-void"
+        />
+      </label>
+      {transcribe.isPending && <p className="mt-1 text-xs text-ink-faint">文字起こし中…</p>}
+      {transcribe.isError && <p className="mt-1 text-xs text-risk">読み取れませんでした</p>}
+
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={6}
+        placeholder="ここに文字起こし結果が入ります。手書きは誤読しやすいので必ず確認・修正してから保存。直接入力もOK。"
+        className="mt-2 w-full rounded bg-panel px-2 py-1 font-mono text-xs text-ink"
+      />
+      <p className="mt-1 text-[10px] text-ink-faint">
+        ⚠ 自動文字起こしは精度が低い前提。`[?]` は読めなかった箇所。必ず確認・修正を。
+      </p>
+      <div className="mt-2">
+        <Button variant="primary" disabled={save.isPending || !draft.trim()} onClick={() => save.mutate()}>
+          {save.isPending ? "保存中…" : "今日の控えとして保存"}
+        </Button>
+      </div>
+
+      {(entries.data?.entries.length ?? 0) > 0 && (
+        <div className="mt-3 space-y-2 border-t border-hairline pt-2">
+          {entries.data!.entries.map((e) => (
+            <div key={e.date} className="text-xs">
+              <div className="flex items-center justify-between">
+                <span className="telemetry-num text-ink-dim">{e.date}</span>
+                <button onClick={() => del.mutate(e.date)} className="text-ink-faint hover:text-risk">
+                  削除
+                </button>
+              </div>
+              <pre className="mt-0.5 whitespace-pre-wrap font-mono text-[11px] text-ink-faint">{e.text}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }
