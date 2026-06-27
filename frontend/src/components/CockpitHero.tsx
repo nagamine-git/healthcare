@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type SubScores } from "../lib/api";
+import { api } from "../lib/api";
 import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
 import { kindLabel } from "../lib/labels";
-import { BarGauge, Button, Panel, Pill, RingGauge, Stat } from "./ui/cockpit";
+import { Button, Panel, Pill, Stat } from "./ui/cockpit";
 import { TopBookHint } from "./TopBookHint";
 
 function go(hash: string) {
   window.location.hash = hash;
 }
 
-/** Today の最上部に載るコックピットのヒーロー: プライマリ・ディスプレイ + 今日の一手 + becoming 要約。 */
-export function CockpitHero({ score, headline }: { score: SubScores | null; headline?: string }) {
+/** Today の最上部に載るコックピットのヒーロー: 今日の一手(主役)+ becoming 要約。
+ * コンディション/人生スコアは StatusStrip に分離。 */
+export function CockpitHero() {
   const qc = useQueryClient();
   const becoming = useQuery({ queryKey: ["becoming"], queryFn: api.becoming, retry: false });
   const garden = useQuery({ queryKey: ["garden"], queryFn: api.garden, retry: false });
@@ -112,21 +113,6 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
               })}
             </div>
           </div>
-        )}
-      </Panel>
-
-      {/* プライマリ・ディスプレイ(コンディション) */}
-      <Panel onClick={() => go("#today")}>
-        <div className="flex items-center gap-5">
-          <RingGauge value={score?.total ?? null} label="CONDITION" tone="prog" />
-          <div className="flex-1 space-y-2.5">
-            <BarGauge label="SLEEP" value={score?.sleep ?? null} />
-            <BarGauge label="AUTONOMIC" value={score?.hrv ?? null} />
-            <BarGauge label="ENERGY" value={score?.body_battery ?? null} />
-          </div>
-        </div>
-        {headline && (
-          <p className="mt-3 border-t border-hairline pt-2 text-sm text-ink-dim">{headline}</p>
         )}
       </Panel>
 

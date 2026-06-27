@@ -36,6 +36,7 @@ import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { CockpitHero } from "../components/CockpitHero";
+import { StatusStrip } from "../components/StatusStrip";
 import { Skeleton } from "../components/ui/cockpit";
 import { LifeTreePanel } from "../components/LifeTreePanel";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
@@ -302,8 +303,11 @@ export function TodayPage({ onOpenDebug }: Props) {
         📝 今日の紙(手書き用テンプレ)を開く → <span className="text-ink-faint">テーマ・勝ちタスク候補つき</span>
       </button>
 
-      {/* ファーストビュー: 今日やること + コンディション + 歩み */}
-      <CockpitHero score={score} headline={data.advice?.payload?.headline} />
+      {/* 主役: 今日やること(一手 + 効く行動) */}
+      <CockpitHero />
+
+      {/* 状態: 今日(身体リング) / 人生(進捗バー)を1枚に集約 */}
+      <StatusStrip score={score} headline={data.advice?.payload?.headline} />
 
       <LifeTreePanel />
 

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type LifeCapital } from "../lib/api";
 import { kindLabel } from "../lib/labels";
-import { BarGauge, Panel, Pill, RingGauge } from "./ui/cockpit";
+import { BarGauge, Panel, Pill } from "./ui/cockpit";
 
 function go(hash: string) {
   window.location.hash = hash;
@@ -30,29 +30,16 @@ export function LifeTreePanel() {
 
   return (
     <div className="space-y-3">
-      {/* 目的 + 人生スコア */}
-      <Panel onClick={() => go("#identity")}>
-        <div className="flex items-center gap-5">
-          <RingGauge value={d.life_score} label="LIFE SCORE" tone="prog" />
-          <div className="flex-1">
-            <span className="telemetry-label">目的(北極星)</span>
-            <p className="mt-0.5 text-sm font-semibold text-ink">
-              {d.purpose.archetype_name ?? "—"}
-            </p>
-            {d.purpose.overall !== null && (
-              <p className="mt-1 text-xs text-ink-dim">
-                理想への接近度 {Math.round(d.purpose.overall)}%
-              </p>
-            )}
-            {d.goal && (
-              <p className="mt-1 text-xs text-act-300">
-                目標: {d.goal.title}
-                {d.goal.horizon ? `(${d.goal.horizon})` : ""}
-              </p>
-            )}
-          </div>
-        </div>
-      </Panel>
+      {/* 目標(目的への接近度・人生スコアは StatusStrip に集約。ここは目標の詳細のみ) */}
+      {d.goal && (
+        <Panel onClick={() => go("#identity")}>
+          <span className="telemetry-label">目標 — {d.purpose.archetype_name ?? "目的"} へ</span>
+          <p className="mt-0.5 text-sm text-act-300">
+            {d.goal.title}
+            {d.goal.horizon ? `(${d.goal.horizon})` : ""}
+          </p>
+        </Panel>
+      )}
 
       {/* ドメイン木 */}
       <Panel title="人生のドメイン(資本/状態)">
