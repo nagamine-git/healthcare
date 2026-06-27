@@ -2,23 +2,36 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type CaffeineSource, type MedStatus } from "../lib/api";
 
 const DOSE = 2; // 1回2錠(バファリン/イブとも)
+const MED_SOURCES = new Set<string>(["bufferin_premium", "ibuquick"]);
+const MED_LABEL: Record<string, string> = { bufferin_premium: "バファリン", ibuquick: "イブ" };
 
 /** 鎮痛薬のワンタップ記録 + 服用間隔ガード(4時間以上・1日3回まで)。
  * 早すぎる/上限到達時は記録をブロックし、次に飲める時刻を出す。MOHリスクの判断材料にも。 */
 export function MedQuickLog() {
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ["med-status"], queryFn: api.caffeineMedStatus });
+  const intakes = useQuery({
+    queryKey: ["med-intakes"],
+    queryFn: () => api.caffeineList(72),
+  });
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["med-status"] });
+    qc.invalidateQueries({ queryKey: ["med-intakes"] });
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["migraine"] });
+    qc.invalidateQueries({ queryKey: ["caffeine"] });
+  };
   const log = useMutation({
     mutationFn: (source: CaffeineSource) => api.caffeineAdd(source, DOSE),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["med-status"] });
-      qc.invalidateQueries({ queryKey: ["today"] });
-      qc.invalidateQueries({ queryKey: ["migraine"] });
-      qc.invalidateQueries({ queryKey: ["caffeine"] });
-    },
+    onSuccess: invalidateAll,
+  });
+  const del = useMutation({
+    mutationFn: (id: number) => api.caffeineDelete(id),
+    onSuccess: invalidateAll,
   });
 
   const meds = status.data?.meds ?? [];
+  const medRecords = (intakes.data?.items ?? []).filter((r) => MED_SOURCES.has(r.source));
 
   return (
     <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-3">
@@ -44,6 +57,30 @@ export function MedQuickLog() {
       <p className="mt-1.5 text-[10px] text-slate-500">
         記録は体内カフェイン/薬の使用日数に反映(飲みすぎ＝MOHリスクの警告に効く)。
       </p>
+
+      {medRecords.length > 0 && (
+        <div className="mt-3 space-y-1 border-t border-slate-700/60 pt-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">最近の記録(3日)</p>
+          {medRecords.map((r) => (
+            <div key={r.id} className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-300">
+                <span className="tabular-nums text-slate-400">{fmtDT(r.ts_jst)}</span>{" "}
+                {MED_LABEL[r.source] ?? r.source}({r.amount}錠)
+              </span>
+              <button
+                disabled={del.isPending}
+                onClick={() => {
+                  if (window.confirm(`${fmtDT(r.ts_jst)} の ${MED_LABEL[r.source] ?? r.source} を削除しますか?`))
+                    del.mutate(r.id);
+                }}
+                className="text-slate-500 hover:text-rose-400 disabled:opacity-50"
+              >
+                削除
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -78,4 +115,11 @@ function MedRow({ m, pending, onLog }: { m: MedStatus; pending: boolean; onLog: 
 function fmt(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function fmtDT(iso: string): string {
+  const d = new Date(iso);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}/${dd} ${fmt(iso)}`;
 }
