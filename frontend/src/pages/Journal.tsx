@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Button, Panel } from "../components/ui/cockpit";
 import { CheckinCard } from "../components/CheckinCard";
+import { kindLabel } from "../lib/labels";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -42,7 +43,16 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
   const winTheme = move.data?.theme ?? themeKeyword;
   const condition = today.data?.score?.total ?? null;
   const alerts = (today.data?.alerts ?? []).filter((a) => a.severity !== "info");
-  const breaches = (life.data?.capitals ?? []).filter((c) => c.breach).map((c) => c.label);
+  const caps = life.data?.capitals ?? [];
+  // 今日のボトルネック = 最低ラインを割った領域の最弱(無ければ全体の最弱)。
+  const ach = (c: { achievement: number | null }) => c.achievement ?? 999;
+  const bottleneck =
+    [...caps].filter((c) => c.breach).sort((a, b) => ach(a) - ach(b))[0] ??
+    [...caps].sort((a, b) => ach(a) - ach(b))[0];
+  const manualSet = new Set(
+    (garden.data?.catalog ?? []).filter((c) => c.source === "manual").map((c) => c.kind),
+  );
+  const bnActions = (bottleneck?.kinds ?? []).filter((k) => manualSet.has(k)).slice(0, 2);
 
   // スケジュール: チェックイン(今)〜「自由時間の終わり」(就寝準備の開始)まで。
   // 残り時間が長いほど粗い間隔(3h/2h/1h)。就寝準備以降は何もできない前提で除外。
@@ -149,7 +159,7 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {(breaches.length > 0 || alerts.length > 0 || condition !== null) && (
+      {(bottleneck || alerts.length > 0 || condition !== null) && (
         <Panel title="今日 意識する線(アプリからの読み出し)">
           {condition !== null && (
             <p className="text-sm text-ink-dim">
@@ -160,8 +170,18 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
           {alerts.map((a) => (
             <p key={a.code} className="mt-1 text-sm text-risk">⚠ {a.title} — {a.action}</p>
           ))}
-          {breaches.length > 0 && (
-            <p className="mt-1 text-sm text-act-300">立て直す領域: {breaches.join(" / ")}</p>
+          {bottleneck && (
+            <p className="mt-1 text-sm text-ink-dim">
+              ボトルネック <span className="text-act-300">{bottleneck.label}</span>
+              <span className="ml-1 telemetry-num text-ink-faint">
+                {Math.round(bottleneck.achievement ?? 0)}
+              </span>
+              {bnActions.length > 0 && (
+                <span className="text-ink-faint">
+                  {" "}— 今日は {bnActions.map(kindLabel).join("か")} を一つ
+                </span>
+              )}
+            </p>
           )}
         </Panel>
       )}
