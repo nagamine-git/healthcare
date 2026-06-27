@@ -99,7 +99,7 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
             {/* テーマ:勝ちタスク を1行に統合(例: 起業家: ユーザー候補5人に連絡をとる)*/}
             <div className="flex items-start gap-2">
               <span className="flex-1 text-ink">
-                ・<span className="font-semibold text-prog-300">{winTheme}</span>:{" "}
+                <span className="font-semibold text-prog-300">{winTheme}</span>:{" "}
                 {winning ? (
                   <span className="text-act-300">{winning}</span>
                 ) : (
