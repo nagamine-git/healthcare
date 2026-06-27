@@ -1592,6 +1592,23 @@ export const api = {
     request<{ events: { hour: number; minute: number; summary: string; busy: boolean }[] }>(
       "/api/journal/calendar",
     ),
+  journalTranscribe: (image_base64: string, media_type: string) =>
+    request<{ text: string }>("/api/journal/transcribe", {
+      method: "POST",
+      body: JSON.stringify({ image_base64, media_type }),
+    }),
+  journalEntries: () =>
+    request<{ entries: { date: string; text: string; source: string }[] }>("/api/journal/entries"),
+  journalEntryPut: (body: { date?: string; text: string; source?: string }) =>
+    request<{ entries: { date: string; text: string; source: string }[] }>("/api/journal/entry", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  journalEntryDelete: (entryDate: string) =>
+    request<{ entries: { date: string; text: string; source: string }[] }>(
+      `/api/journal/entry/${entryDate}`,
+      { method: "DELETE" },
+    ),
   checkup: () => request<CheckupResponse>("/api/checkup"),
   checkupUpload: (body: { text?: string; image_base64?: string; media_type?: string; date?: string }) =>
     request<CheckupResponse>("/api/checkup", { method: "POST", body: JSON.stringify(body) }),

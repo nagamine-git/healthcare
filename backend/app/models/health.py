@@ -633,6 +633,17 @@ class GardenConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class JournalEntry(Base):
+    """手書きジャーナルのデジタル控え(写真→文字起こし or 手入力)。日付ごとに1件 upsert。"""
+
+    __tablename__ = "journal_entry"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    text: Mapped[str] = mapped_column(String(8000), default="")
+    source: Mapped[str] = mapped_column(String(16), default="text")  # image|text
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class HealthCheckup(Base):
     """健康診断結果(テキスト/画像から抽出)。values は [{key,value,unit,flag}]。"""
 
