@@ -621,7 +621,8 @@ def _build_caffeine(
             absorption_half_life_h=settings.caffeine_absorption_half_life_h,
         )
         decay_curve_basis = "recommended"
-    elif existing_residual > 0:
+    else:
+        # 残量があればその減衰、無ければ 0 のベースライン(グラフを毎日必ず描く)
         decay_curve = predict_residual_decay_curve(
             residual_mg=existing_residual,
             start_time=now_jst,

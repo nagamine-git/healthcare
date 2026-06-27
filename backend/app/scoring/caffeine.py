@@ -378,8 +378,11 @@ def predict_residual_decay_curve(
     吸収相は無し (既に吸収済み前提) で 1 次消失のみ。新規摂取が非推奨でも
     「今の体内残量がどう抜けていくか」をグラフに出すために使う。
     """
-    if residual_mg <= 0 or bedtime <= start_time:
+    # residual=0 でも now→bedtime の(クリーンな)ベースラインを描く。
+    # 「明日以降も必ずグラフを描く」ため空配列にはしない。
+    if bedtime <= start_time:
         return []
+    residual_mg = max(0.0, residual_mg)
     vd = vd_l_per_kg * body_weight_kg
     points: list[dict[str, float | str]] = []
     cur = start_time

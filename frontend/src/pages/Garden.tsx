@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type GardenGridCell } from "../lib/api";
 import { gardenCellStyle } from "../lib/gardenColor";
 import { kindLabel } from "../lib/labels";
+import { TopBookHint } from "../components/TopBookHint";
 
 function syncErrorMessage(reason?: string): string {
   switch (reason) {
@@ -171,6 +172,8 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
               <span className="text-ink-dim"> が濃く出ます</span>
             </div>
           )}
+
+          <TopBookHint />
 
           <div className="rounded-lg bg-hull p-4">
             <p className="mb-2 text-sm text-ink-dim">

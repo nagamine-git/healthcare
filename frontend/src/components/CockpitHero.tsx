@@ -3,6 +3,7 @@ import { api, type SubScores } from "../lib/api";
 import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
 import { kindLabel } from "../lib/labels";
 import { BarGauge, Button, Panel, Pill, RingGauge, Stat } from "./ui/cockpit";
+import { TopBookHint } from "./TopBookHint";
 
 function go(hash: string) {
   window.location.hash = hash;
@@ -28,13 +29,14 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
   const hasFocus = effSet.size > 0;
   const effectiveKinds = hasFocus ? manualKinds.filter((c) => effSet.has(c.kind)) : manualKinds;
   const otherKinds = hasFocus ? manualKinds.filter((c) => !effSet.has(c.kind)) : [];
+  const readingEffective = !hasFocus || effSet.has("reading");
   const loop = becoming.data?.loop_week;
   const traj = becoming.data?.trajectory;
   const diag = loop ? DIAGNOSIS[loop.diagnosis] : null;
 
   return (
     <div className="space-y-3">
-      {/* 今日の一手(=結局これをやる。最上部・最も目立たせる) */}
+      {/* 今日やること = 具体の一手(動的)+ 効く行動の記録。1パネルに統合。 */}
       <Panel
         title="今日やること"
         glow="act"
@@ -44,6 +46,7 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
           </Button>
         }
       >
+        {/* 1) 今日いちばんの具体タスク */}
         {moveMut.data ? (
           <div className="space-y-1">
             <p className="text-lg font-semibold leading-snug text-ink">
@@ -55,66 +58,62 @@ export function CockpitHero({ score, headline }: { score: SubScores | null; head
           </div>
         ) : (
           <p className="text-sm text-ink-dim">
-            「決める」を押すと、盲点に効く今日いちばんの一手が出ます。
+            「決める」で、いまの伸びしろ
+            {weakest?.name && <span className="text-prog-300">「{weakest.name}」</span>}
+            に効く今日いちばんの一手が出ます。
           </p>
         )}
-      </Panel>
 
-      {/* 今日効く行動: 伸びしろに効くものは緑で目立たせ、その他は白で区別。タップで記録。 */}
-      {manualKinds.length > 0 && (
-        <Panel title="今日効く行動" glow="prog">
-          {weakest?.name && (
-            <p className="mb-2 text-xs text-ink-dim">
-              いまの伸びしろ
-              <span className="font-semibold text-prog-300">「{weakest.name}」</span>
-              に効く。タップで記録。
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {effectiveKinds.map((c) => {
-              const done = loggedToday.has(c.kind);
-              return (
-                <button
-                  key={c.kind}
-                  disabled={logMut.isPending}
-                  onClick={() => logMut.mutate(c.kind)}
-                  className={`rounded-full px-3 py-1 text-sm font-medium shadow-glow-prog transition-colors disabled:opacity-50 ${
-                    done ? "bg-prog-500 text-void" : "bg-prog-700 text-ink hover:bg-prog-500"
-                  }`}
-                >
-                  {done ? "✓ " : "+ "}
-                  {kindLabel(c.kind)}
-                </button>
-              );
-            })}
+        {/* 読書が効く日は具体的な1冊も提案 */}
+        {readingEffective && (
+          <div className="mt-2">
+            <TopBookHint />
           </div>
-          {otherKinds.length > 0 && (
-            <>
-              <p className="mt-3 telemetry-label">その他(今日は重点でない)</p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {otherKinds.map((c) => {
-                  const done = loggedToday.has(c.kind);
-                  return (
-                    <button
-                      key={c.kind}
-                      disabled={logMut.isPending}
-                      onClick={() => logMut.mutate(c.kind)}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
-                        done
-                          ? "border-prog-700 text-prog-300"
-                          : "border-hairline text-ink-faint hover:border-ink-faint hover:text-ink-dim"
-                      }`}
-                    >
-                      {done ? "✓ " : "+ "}
-                      {kindLabel(c.kind)}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </Panel>
-      )}
+        )}
+
+        {/* 2) 効く行動を記録(緑=今日効く / 白=その他) */}
+        {manualKinds.length > 0 && (
+          <div className="mt-3 border-t border-hairline pt-2">
+            <p className="telemetry-label">やったら記録(緑=今日効く)</p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {effectiveKinds.map((c) => {
+                const done = loggedToday.has(c.kind);
+                return (
+                  <button
+                    key={c.kind}
+                    disabled={logMut.isPending}
+                    onClick={() => logMut.mutate(c.kind)}
+                    className={`rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      done ? "bg-prog-500 text-void" : "bg-prog-700 text-ink hover:bg-prog-500"
+                    }`}
+                  >
+                    {done ? "✓ " : "+ "}
+                    {kindLabel(c.kind)}
+                  </button>
+                );
+              })}
+              {otherKinds.map((c) => {
+                const done = loggedToday.has(c.kind);
+                return (
+                  <button
+                    key={c.kind}
+                    disabled={logMut.isPending}
+                    onClick={() => logMut.mutate(c.kind)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50 ${
+                      done
+                        ? "border-prog-700 text-prog-300"
+                        : "border-hairline text-ink-faint hover:border-ink-faint hover:text-ink-dim"
+                    }`}
+                  >
+                    {done ? "✓ " : "+ "}
+                    {kindLabel(c.kind)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Panel>
 
       {/* プライマリ・ディスプレイ(コンディション) */}
       <Panel onClick={() => go("#today")}>

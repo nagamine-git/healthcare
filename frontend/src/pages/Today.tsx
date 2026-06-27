@@ -36,6 +36,7 @@ import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { CockpitHero } from "../components/CockpitHero";
+import { Skeleton } from "../components/ui/cockpit";
 import { LifeTreePanel } from "../components/LifeTreePanel";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
@@ -131,9 +132,18 @@ export function TodayPage({ onOpenDebug }: Props) {
 
   if (today.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
-        読み込み中...
-      </div>
+      <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-3">
+        <div aria-hidden className="status-bar-scrim" />
+        <header className="safe-area-top flex items-center justify-between pb-1">
+          <span className="text-sm font-semibold tracking-wider text-ink">Ascend</span>
+          <span className="telemetry-label">読み込み中…</span>
+        </header>
+        <Skeleton className="h-9" />
+        <Skeleton className="h-36" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-24" />
+      </main>
     );
   }
   if (today.isError || !today.data) {
@@ -276,6 +286,13 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 総合 (サマリー) ============ */}
       {tab === "summary" && (
       <div className="space-y-3">
+      {/* アラート一覧(攻めどき等の計器ランプ)を最上部に */}
+      <StatusLamps
+        alerts={data.alerts}
+        pressure={data.pressure}
+        igniteSignal={data.last_data_update_at ?? data.date}
+      />
+
       {/* 朝のリチュアル: 今日の紙 */}
       <button
         type="button"
@@ -285,14 +302,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         📝 今日の紙(手書き用テンプレ)を開く → <span className="text-ink-faint">テーマ・勝ちタスク候補つき</span>
       </button>
 
-      {/* ファーストビュー: 今日やること + 今日効く + コンディション + 歩み */}
+      {/* ファーストビュー: 今日やること + コンディション + 歩み */}
       <CockpitHero score={score} headline={data.advice?.payload?.headline} />
-
-      <StatusLamps
-        alerts={data.alerts}
-        pressure={data.pressure}
-        igniteSignal={data.last_data_update_at ?? data.date}
-      />
 
       <LifeTreePanel />
 
