@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC
 
-from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -182,6 +181,3 @@ def _bump_source_sync(session: Session, source: str) -> None:
     else:
         session.add(SourceSync(source=source, last_synced_at=now))
 
-
-def count_samples(session: Session) -> int:
-    return len(list(session.execute(select(MetricSample.id)).all()))

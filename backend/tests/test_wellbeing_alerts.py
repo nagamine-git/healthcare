@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -137,7 +137,7 @@ def test_moh_high_when_12_or_more_painkillers(session):
     from app.models import CaffeineIntake
 
     today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=3)  # target基準(JST正午)
     for i in range(13):
         session.add(
             CaffeineIntake(
@@ -160,7 +160,7 @@ def test_moh_counts_distinct_days_not_doses(session):
     from app.models import CaffeineIntake
 
     today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=3)  # target基準(JST正午)
     # 4 日間、各日 5 錠ずつ = 20 レコードだが 4 日 → どの MOH 域にも入らない
     for day in range(4):
         for dose in range(5):
@@ -185,7 +185,7 @@ def test_moh_mid_when_8_to_11(session):
     from app.models import CaffeineIntake
 
     today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=3)  # target基準(JST正午)
     for i in range(9):
         session.add(
             CaffeineIntake(
@@ -208,7 +208,7 @@ def test_moh_high_at_ichd3_threshold_10_days(session):
     from app.models import CaffeineIntake
 
     today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=3)  # target基準(JST正午)
     for i in range(10):
         session.add(CaffeineIntake(
             ts=now - timedelta(days=i), source="ibuquick", amount=2.0, unit="錠", mg=80.0))
@@ -222,7 +222,7 @@ def test_caffeine_dependency_cycle(session):
     from app.models import CaffeineIntake, SleepSession
 
     today = date(2026, 5, 23)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.combine(today, datetime.min.time()) + timedelta(hours=3)  # target基準(JST正午)
     # 直近 7 日 sleep 5h 平均
     for i in range(7):
         session.add(

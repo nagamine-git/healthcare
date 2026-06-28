@@ -256,9 +256,6 @@ def _chapter_quiz_map() -> dict[int, tuple[int, bool]]:
         return {r.chapter: ((r.quiz_points or 0), r.free_word_passed_at is not None) for r in rows}
 
 
-def _section_complete(checks: dict[str, datetime | None] | None) -> bool:
-    return bool(checks and all(checks.get(f) for f in SECTION_FIELDS))
-
 
 def set_section_check(
     section_id: str, field: str, done: bool, *, done_at_iso: str | None = None
