@@ -58,6 +58,21 @@ def test_entry_save_marks_journaling_in_garden_and_delete_removes_it(app_client)
         assert "journaling" not in (row.contributions or {})
 
 
+def test_entry_date_taken_from_content_header(app_client):
+    # 翌朝に前日(26.06.28)の紙を撮って取り込んでも、書かれた日付で保存される。
+    text = "26.06.28(日) 10:47\n感謝・話した事\n- かずくん: ありがとう\n**勝ち**\n- × Elon Musk 5分"
+    r = app_client.put("/api/journal/entry", json={"text": text, "source": "image"})
+    assert r.status_code == 200
+    dates = [e["date"] for e in r.json()["entries"]]
+    assert "2026-06-28" in dates  # 撮影日(今日)ではなく本文の日付
+
+
+def test_entry_date_explicit_overrides_content(app_client):
+    text = "26.06.28(日)\n本文"
+    r = app_client.put("/api/journal/entry", json={"text": text, "date": "2026-06-30"})
+    assert r.json()["entries"][0]["date"] == "2026-06-30"
+
+
 def test_extract_proposes_and_marks_already_logged(app_client, monkeypatch):
     import app.api.journal as japi
 

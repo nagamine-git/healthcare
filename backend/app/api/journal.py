@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from typing import Any
@@ -114,6 +115,25 @@ class EntryIn(BaseModel):
     source: str = "text"
 
 
+# 控え本文の日付ヘッダ。テンプレは "26.06.28(日) 10:47" 形式("YY.MM.DD" / "YYYY-MM-DD")。
+_DATE_4Y = re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})")
+_DATE_2Y = re.compile(r"\b(\d{2})\.(\d{1,2})\.(\d{1,2})\b")
+
+
+def _date_from_text(text: str) -> date_type | None:
+    """控え本文の先頭付近の日付ヘッダから記録日を推定。撮影日ではなく『書かれた日』に帰属。"""
+    head = text[:120]
+    for m, base in ((_DATE_4Y.search(head), 0), (_DATE_2Y.search(head), 2000)):
+        if not m:
+            continue
+        try:
+            y = int(m.group(1)) + base
+            return date_type(y, int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+    return None
+
+
 def _logged_kinds_on(session, d: date_type) -> set[str]:
     """その日(JST)に既に記録済みの行動 kind 集合(手動チップ・自動取込含む)。
 
@@ -158,8 +178,15 @@ async def get_entries() -> dict[str, Any]:
 
 @router.put("/api/journal/entry")
 async def put_entry(body: EntryIn) -> dict[str, Any]:
-    """日付ごとに1件 upsert(確認・修正後のテキストを保存)。"""
-    d = date_type.fromisoformat(body.date) if body.date else app_today()
+    """日付ごとに1件 upsert(確認・修正後のテキストを保存)。
+
+    日付は明示指定 > 本文の日付ヘッダ(書かれた日)> 今日。翌朝に前日の紙を撮って
+    取り込んでも、撮影日ではなく紙に書かれた日の記録として保存される。
+    """
+    if body.date:
+        d = date_type.fromisoformat(body.date)
+    else:
+        d = _date_from_text(body.text) or app_today()
     with session_scope() as session:
         row = session.get(JournalEntry, d)
         if row is None:
