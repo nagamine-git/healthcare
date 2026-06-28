@@ -90,6 +90,21 @@ def test_import_and_taste(db_engine):
         assert store.book_taste(session)["total"] == 3
 
 
+def test_books_import_endpoint_returns_taste_and_finish_dates(app_client_books):
+    csv = "\n".join([
+        HEADER,
+        _row("Zero to One", isbn13="9780753555200", year="2014", rating="5",
+             status="finished", end="2026-05-10", authors="Peter Thiel", categories="Business"),
+        _row("積読本", status="toRead", authors="Someone"),
+    ])
+    r = app_client_books.post("/api/identity/books/import", json={"csv": csv})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["items"] == 2 and body["seen"] == 1
+    assert body["finish_dates"] == ["2026-05-10"]  # 文字列→date 変換が壊れていない
+    assert body["book_taste"]["total"] == 2
+
+
 def test_books_backfill_reading_idempotent(app_client_books):
     r1 = app_client_books.post(
         "/api/identity/books/backfill-reading", json={"dates": ["2026-05-10", "2026-05-11"]}

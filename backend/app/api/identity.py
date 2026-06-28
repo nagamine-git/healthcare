@@ -234,8 +234,12 @@ async def books_import(body: BooksImportIn) -> dict[str, Any]:
     with session_scope() as session:
         counts = import_books(session, rows)
         taste = store.book_taste(session)
-        # 既に読書ログがある日は提案から除く。
-        finish = [d for d in counts["finish_dates"] if not _reading_logged_on(session, d)]
+        # 既に読書ログがある日は提案から除く(finish_dates は ISO 文字列)。
+        finish = [
+            d
+            for d in counts["finish_dates"]
+            if not _reading_logged_on(session, date_type.fromisoformat(d))
+        ]
     return {"status": "ok", **counts, "finish_dates": finish, "book_taste": taste}
 
 
