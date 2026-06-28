@@ -114,33 +114,19 @@ class EntryIn(BaseModel):
     source: str = "text"
 
 
-def _ensure_journaling_log(session, d: date_type) -> bool:
-    """控えの保存を「その日にジャーナリングを実行した」とみなし、庭(良い行動)へ記録。
-
-    dedup_key で日次冪等(再保存・編集では二重記録しない)。新規記録時のみ True。
-    """
-    dedup = f"journal-entry:{d.isoformat()}"
-    exists = session.query(GoodActionLog).filter_by(dedup_key=dedup).first()
-    if exists is not None:
-        return False
-    start_utc, _ = jst_day_bounds(d)
-    ts = start_utc + timedelta(hours=12)  # JST 正午相当(その日に確実に入る)
-    session.add(
-        GoodActionLog(
-            ts=ts, kind="journaling", source="manual", value=1.0, dedup_key=dedup,
-            note="今日の控え保存",
-        )
-    )
-    return True
-
-
 def _logged_kinds_on(session, d: date_type) -> set[str]:
-    """その日(JST)に既に記録済みの行動 kind 集合(手動チップ・自動取込含む)。"""
+    """その日(JST)に既に記録済みの行動 kind 集合(手動チップ・自動取込含む)。
+
+    journaling は控え(JournalEntry)の存在で判定する(GoodActionLog は作らない)。
+    """
     start, end = jst_day_bounds(d)
-    return {
+    kinds = {
         k for (k,) in session.query(GoodActionLog.kind)
         .filter(GoodActionLog.ts >= start, GoodActionLog.ts < end).all()
     }
+    if session.get(JournalEntry, d) is not None:
+        kinds.add("journaling")
+    return kinds
 
 
 def _log_extracted_action(session, d: date_type, kind: str) -> bool:
@@ -179,23 +165,26 @@ async def put_entry(body: EntryIn) -> dict[str, Any]:
         if row is None:
             row = JournalEntry(date=d)
             session.add(row)
+        created = row.text is None
         row.text = body.text[:8000]
         row.source = body.source
         row.updated_at = datetime.utcnow()
-        # 控え保存 = ジャーナリング実行とみなし庭に記録(冪等)。新規記録時は庭を再計算。
-        journaling_logged = _ensure_journaling_log(session, d)
         session.flush()
-        if journaling_logged:
-            recompute_garden_for_date(session, d)
-        return {"entries": _entries(session), "journaling_logged": journaling_logged}
+        # 控えの存在 = その日のジャーナリング実施(JournalEntry が source of truth)。
+        # 庭を再計算して journaling を反映(控えを消せば次の再計算で外れる)。
+        recompute_garden_for_date(session, d)
+        return {"entries": _entries(session), "journaling_logged": created}
 
 
 @router.delete("/api/journal/entry/{entry_date}")
 async def delete_entry(entry_date: str) -> dict[str, Any]:
     with session_scope() as session:
-        row = session.get(JournalEntry, date_type.fromisoformat(entry_date))
+        d = date_type.fromisoformat(entry_date)
+        row = session.get(JournalEntry, d)
         if row is None:
             raise HTTPException(status_code=404, detail="not found")
         session.delete(row)
         session.flush()
+        # 控えが消えたら journaling も外れる(庭を再計算して反映)。
+        recompute_garden_for_date(session, d)
         return {"entries": _entries(session)}

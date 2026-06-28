@@ -57,6 +57,11 @@ async def get_garden() -> dict:
     today = app_today()
     start = today - timedelta(days=_GRID_DAYS)
     with session_scope() as session:
+        # 今日は常に最新化(控え=ジャーナリング 等の signal を即反映させる)。
+        report = build_gap_report(session)
+        gaps = gaps_from_report(report)
+        recompute_garden_for_date(session, today, gaps)
+
         rows = (
             session.query(GardenDaily)
             .filter(GardenDaily.date >= start)
@@ -73,8 +78,6 @@ async def get_garden() -> dict:
         today_row = session.get(GardenDaily, today)
         streak = today_row.streak_len if today_row else 0
 
-        report = build_gap_report(session)
-        gaps = gaps_from_report(report)
         weakest_hint = None
         present = {k: v for k, v in gaps.items() if v is not None}
         if present:

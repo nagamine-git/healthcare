@@ -14,6 +14,7 @@ from app.models.health import (
     GardenDaily,
     GithubContributionDaily,
     GoodActionLog,
+    JournalEntry,
     LearningSectionProgress,
     SleepSession,
     Workout,
@@ -91,6 +92,11 @@ def active_kinds_for_date(session: Session, target: date, catalog: list[dict]) -
     for kind, src in sources.items():
         if detected.get(src):
             active.add(kind)
+
+    # ジャーナリング: その日の控え(JournalEntry)があれば実施とみなす。
+    # 控えが source of truth なので、控えを消せば journaling も自動的に外れる。
+    if session.get(JournalEntry, target) is not None:
+        active.add("journaling")
 
     return {k for k in active if k in sources}
 

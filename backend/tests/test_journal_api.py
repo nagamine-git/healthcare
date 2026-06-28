@@ -32,22 +32,30 @@ def test_entry_upsert_and_list_and_delete(app_client):
     assert d.json()["entries"] == []
 
 
-def test_entry_save_records_journaling_action_idempotently(app_client):
-    # 控え保存で当日のジャーナリングが「やったこと」として庭に記録される
-    r1 = app_client.put("/api/journal/entry", json={"date": "2026-06-27", "text": "今日の控え"})
-    assert r1.json()["journaling_logged"] is True
-    # 再保存(編集)では二重記録しない
-    r2 = app_client.put("/api/journal/entry", json={"date": "2026-06-27", "text": "編集後"})
-    assert r2.json()["journaling_logged"] is False
+def test_entry_save_marks_journaling_in_garden_and_delete_removes_it(app_client):
+    # 控え(JournalEntry)= その日のジャーナリング実施。庭の contributions に反映される。
+    from datetime import date
 
-    # GoodActionLog に journaling が1件だけ入っている
     from app.db import session_scope
-    from app.models.health import GoodActionLog
+    from app.models.health import GardenDaily
+    from app.scoring.garden.recompute import recompute_garden_for_date
+
+    d = "2026-06-27"
+    r1 = app_client.put("/api/journal/entry", json={"date": d, "text": "今日の控え"})
+    assert r1.json()["journaling_logged"] is True  # 新規作成
+    r2 = app_client.put("/api/journal/entry", json={"date": d, "text": "編集後"})
+    assert r2.json()["journaling_logged"] is False  # 既存編集
 
     with session_scope() as session:
-        logs = session.query(GoodActionLog).filter_by(kind="journaling").all()
-        assert len(logs) == 1
-        assert logs[0].dedup_key == "journal-entry:2026-06-27"
+        row = session.get(GardenDaily, date.fromisoformat(d))
+        assert row is not None and "journaling" in (row.contributions or {})
+
+    # 控えを消すと journaling も外れる(控えが source of truth)。
+    app_client.delete(f"/api/journal/entry/{d}")
+    with session_scope() as session:
+        recompute_garden_for_date(session, date.fromisoformat(d))
+        row = session.get(GardenDaily, date.fromisoformat(d))
+        assert "journaling" not in (row.contributions or {})
 
 
 def test_extract_proposes_and_marks_already_logged(app_client, monkeypatch):
