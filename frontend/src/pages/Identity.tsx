@@ -18,6 +18,7 @@ import {
   type IdentityResponse,
   type SjtAssessed,
 } from "../lib/api";
+import { mediaLink } from "../lib/links";
 
 type Props = { onBack: () => void };
 
@@ -481,18 +482,27 @@ function RecommendationsPanel({
                     style={{ width: `${Math.round((r.score / maxScore) * 100)}%` }}
                   />
                 </div>
-                {r.imdb_url && (
-                  <a
-                    href={r.imdb_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-act-300 hover:text-act-300"
-                    title="IMDbで評価して「観た記録」にする"
-                  >
-                    <span className="rounded bg-act/20 px-1 font-bold tracking-tight">IMDb</span>
-                    で評価↗
-                  </a>
-                )}
+                {(() => {
+                  const link = mediaLink(r);
+                  return (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-act-300 hover:text-act-300"
+                      title={link.isImdb ? "IMDbで評価して「観た記録」にする" : "Google で調べる"}
+                    >
+                      {link.isImdb ? (
+                        <>
+                          <span className="rounded bg-act/20 px-1 font-bold tracking-tight">IMDb</span>
+                          で評価↗
+                        </>
+                      ) : (
+                        <>🔍 {link.label} で調べる↗</>
+                      )}
+                    </a>
+                  );
+                })()}
               </div>
               <button
                 onClick={() => onReflect(r)}
