@@ -127,7 +127,12 @@ async def get_identity() -> dict[str, Any]:
                 select(MediaLog).where(MediaLog.status == "seen")
             ).scalars()
         )
-        untagged = sum(1 for m in total_media if not (m.dimension_tags or {}))
+        # book_tracker(蔵書)はタグ付け対象外なので未タグに数えない。
+        untagged = sum(
+            1
+            for m in total_media
+            if m.source != "book_tracker" and not (m.dimension_tags or {})
+        )
 
         return {
             "date": app_today().isoformat(),
@@ -243,6 +248,43 @@ async def books_import(body: BooksImportIn) -> dict[str, Any]:
     return {"status": "ok", **counts, "finish_dates": finish, "book_taste": taste}
 
 
+@router.post("/api/identity/books/reconcile")
+async def books_reconcile() -> dict[str, Any]:
+    """既読の蔵書(言語横断)と一致するおすすめ本を「読了」化し、新規発見から外す。
+
+    取り込んだ和書と、英語タイトルの seed おすすめを LLM で突き合わせる。
+    """
+    with session_scope() as session:
+        logs = {r.media_item_id: r for r in session.execute(select(MediaLog)).scalars()}
+        read_books: list[str] = []
+        candidates: list[dict[str, Any]] = []
+        for m in session.execute(select(MediaItem)).scalars():
+            log = logs.get(m.id)
+            is_seen = bool(log and log.status == "seen")
+            if m.source == "book_tracker":
+                if is_seen:
+                    authors = (m.metadata_json or {}).get("authors", "")
+                    read_books.append(f"{m.title}{' — ' + authors if authors else ''}")
+            elif m.kind == "book" and not is_seen:
+                candidates.append({"id": m.id, "title": m.title, "year": m.year})
+
+    if not candidates or not read_books:
+        return {"matched": 0}
+
+    matched = await llm_identity.match_read_titles(candidates, read_books)
+    with session_scope() as session:
+        for mid in matched:
+            log = session.get(MediaLog, mid)
+            if log is None:
+                session.add(
+                    MediaLog(media_item_id=mid, status="seen", seen_at=datetime.utcnow())
+                )
+            elif log.status != "seen":
+                log.status = "seen"
+                log.seen_at = log.seen_at or datetime.utcnow()
+    return {"matched": len(matched)}
+
+
 class BooksBackfillIn(BaseModel):
     dates: list[str]
 
@@ -299,8 +341,11 @@ async def add_manual_media(body: ManualMediaIn) -> dict[str, Any]:
 
 
 def _count_untagged(session) -> int:
+    # book_tracker(蔵書)はタグ付け対象外 = レコメンド枠に出さない設計。
     return sum(
-        1 for m in session.execute(select(MediaItem)).scalars() if not (m.dimension_tags or {})
+        1
+        for m in session.execute(select(MediaItem)).scalars()
+        if m.source != "book_tracker" and not (m.dimension_tags or {})
     )
 
 
@@ -321,7 +366,7 @@ async def tag_untagged(limit: int = Body(default=5, embed=True)) -> dict[str, An
                 "overview": (m.metadata_json or {}).get("overview"),
             }
             for m in session.execute(select(MediaItem)).scalars()
-            if not (m.dimension_tags or {})
+            if m.source != "book_tracker" and not (m.dimension_tags or {})
         ][:limit]
 
     tagged = 0

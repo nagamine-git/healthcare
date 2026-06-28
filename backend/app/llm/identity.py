@@ -514,6 +514,69 @@ async def reflect_to_intention(
     }
 
 
+_MATCH_SYSTEM = """\
+あなたは書誌の同定の専門家です。利用者の「おすすめ候補(主に英語タイトル)」のうち、
+利用者が**既に読んだ蔵書**(和訳・別エディションを含む)と**同一の作品**であるものを特定します。
+
+# 指示
+- 言語・翻訳・版の違いを越えて「同じ作品」を一致とみなす(例: "The Lean Startup" =「リーン・スタートアップ」)。
+- **確信できる同一作品だけ**を返す(著者やテーマが似ているだけ、シリーズ違いは一致させない)。
+- 一致した候補の id を返す。無ければ空。
+必ず submit_matches ツールで返すこと。
+"""
+
+_MATCH_TOOL: dict[str, Any] = {
+    "name": "submit_matches",
+    "description": "既読の蔵書と同一だと確信できるおすすめ候補の id を返す。",
+    "input_schema": {
+        "type": "object",
+        "required": ["matched_ids"],
+        "properties": {
+            "matched_ids": {"type": "array", "items": {"type": "integer"}},
+        },
+    },
+}
+
+
+async def match_read_titles(candidates: list[dict[str, Any]], read_books: list[str]) -> list[int]:
+    """おすすめ候補のうち、既読の蔵書(言語横断)と同一の作品の id を返す。
+
+    candidates: [{id, title, year}] のおすすめ本。read_books: ["Title — Author", ...] の既読本。
+    api_key 未設定/失敗時は []。
+    """
+    settings = get_settings()
+    api_key = settings.anthropic_api_key
+    if not api_key or not candidates or not read_books:
+        return []
+    cand_str = "\n".join(
+        f"- id={c['id']}: {c['title']}" + (f" ({c['year']})" if c.get("year") else "")
+        for c in candidates
+    )
+    read_str = "\n".join(f"- {t}" for t in read_books[:200])
+    user = f"# おすすめ候補\n{cand_str}\n\n# 既に読んだ蔵書\n{read_str}"
+    try:
+        from anthropic import AsyncAnthropic
+
+        client = AsyncAnthropic(api_key=api_key)
+        resp = await client.messages.create(
+            model=settings.llm_model,
+            max_tokens=500,
+            system=_MATCH_SYSTEM,
+            messages=[{"role": "user", "content": user}],
+            tools=[_MATCH_TOOL],
+            tool_choice={"type": "tool", "name": "submit_matches"},
+        )
+    except Exception:
+        return []
+    valid = {c["id"] for c in candidates}
+    for block in resp.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_matches":
+            inp = block.input
+            if isinstance(inp, dict):
+                return [int(i) for i in inp.get("matched_ids", []) if int(i) in valid]
+    return []
+
+
 async def suggest_new_media(
     *,
     weak_dims: list[tuple[str, str]],

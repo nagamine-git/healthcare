@@ -1698,6 +1698,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ dates }),
     }),
+  booksReconcile: () =>
+    request<{ matched: number }>("/api/identity/books/reconcile", { method: "POST" }),
   identityAddMedia: (body: {
     title: string;
     kind: "film" | "tv" | "manga" | "book";

@@ -125,6 +125,48 @@ def test_books_import_endpoint_returns_taste_and_finish_dates(app_client_books):
     assert body["book_taste"]["total"] == 2
 
 
+def test_reconcile_marks_crosslanguage_read_recs_seen(app_client_books, monkeypatch):
+    import app.api.identity as iapi
+    from app.db import session_scope
+    from app.models.health import MediaItem, MediaLog
+
+    # 既読の和書(蔵書)
+    csv = "\n".join([
+        HEADER,
+        _row("リーン・スタートアップ", isbn13="9784822248970", status="finished",
+             end="2026-05-10", authors="エリック・リース"),
+    ])
+    app_client_books.post("/api/identity/books/import", json={"csv": csv})
+
+    # 英語タイトルの seed おすすめ(別 source・未 seen)
+    with session_scope() as session:
+        seed = MediaItem(source="manual", kind="book", title="The Lean Startup", year=2011,
+                         dimension_tags={"growth_mindset": 1.0})
+        session.add(seed)
+        session.flush()
+        session.add(MediaLog(media_item_id=seed.id, status="watchlist"))
+        seed_id = seed.id
+
+    async def fake_match(candidates, read_books):
+        # 言語横断で The Lean Startup を既読と判定
+        return [c["id"] for c in candidates if "Lean Startup" in c["title"]]
+
+    monkeypatch.setattr(iapi.llm_identity, "match_read_titles", fake_match)
+
+    r = app_client_books.post("/api/identity/books/reconcile")
+    assert r.json()["matched"] == 1
+    with session_scope() as session:
+        assert session.get(MediaLog, seed_id).status == "seen"
+
+
+def test_tag_untagged_count_excludes_book_tracker(app_client_books):
+    csv = "\n".join([HEADER, _row("和書A", isbn13="9784000000001", status="finished", end="2026-05-10")])
+    app_client_books.post("/api/identity/books/import", json={"csv": csv})
+    # GET /api/identity の library.untagged は book_tracker を数えない
+    lib = app_client_books.get("/api/identity").json()["library"]
+    assert lib["untagged"] == 0
+
+
 def test_books_backfill_reading_idempotent(app_client_books):
     r1 = app_client_books.post(
         "/api/identity/books/backfill-reading", json={"dates": ["2026-05-10", "2026-05-11"]}

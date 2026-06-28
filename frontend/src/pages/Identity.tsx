@@ -790,6 +790,17 @@ function BookLibraryPanel({ taste }: { taste: BookTaste }) {
   const [msg, setMsg] = useState("");
   const [pendingDates, setPendingDates] = useState<string[]>([]);
 
+  const reconcile = useMutation({
+    mutationFn: () => api.booksReconcile(),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["identity"] });
+      if (r.matched > 0) {
+        setMsg((m) => (m ? `${m} ・ ` : "") + `既読と重なる推薦 ${r.matched} 件を整理`);
+      } else {
+        setMsg((m) => (m.includes("取込") ? m : "既読と重なる推薦は見つかりませんでした"));
+      }
+    },
+  });
   const imp = useMutation({
     mutationFn: async (file: File) => {
       const text = await readFileText(file);
@@ -801,6 +812,8 @@ function BookLibraryPanel({ taste }: { taste: BookTaste }) {
       );
       setPendingDates(r.finish_dates);
       qc.invalidateQueries({ queryKey: ["identity"] });
+      // 既読の和書と英語タイトルの推薦を突き合わせ、重複を自動で「読了」化。
+      reconcile.mutate();
     },
     onError: () => setMsg("取込に失敗しました(CSV を確認してください)"),
   });
@@ -843,6 +856,15 @@ function BookLibraryPanel({ taste }: { taste: BookTaste }) {
             }}
           />
         </label>
+        {taste.total > 0 && (
+          <button
+            onClick={() => reconcile.mutate()}
+            disabled={reconcile.isPending}
+            className="ml-2 inline-block rounded-lg border border-hairline px-3 py-1.5 text-xs disabled:opacity-50"
+          >
+            {reconcile.isPending ? "整理中…" : "既読と重なる推薦を整理"}
+          </button>
+        )}
         {msg && <p className="text-[11px] text-prog-300/80">{msg}</p>}
 
         {pendingDates.length > 0 && (
