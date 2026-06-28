@@ -32,6 +32,24 @@ def test_entry_upsert_and_list_and_delete(app_client):
     assert d.json()["entries"] == []
 
 
+def test_entry_save_records_journaling_action_idempotently(app_client):
+    # 控え保存で当日のジャーナリングが「やったこと」として庭に記録される
+    r1 = app_client.put("/api/journal/entry", json={"date": "2026-06-27", "text": "今日の控え"})
+    assert r1.json()["journaling_logged"] is True
+    # 再保存(編集)では二重記録しない
+    r2 = app_client.put("/api/journal/entry", json={"date": "2026-06-27", "text": "編集後"})
+    assert r2.json()["journaling_logged"] is False
+
+    # GoodActionLog に journaling が1件だけ入っている
+    from app.db import session_scope
+    from app.models.health import GoodActionLog
+
+    with session_scope() as session:
+        logs = session.query(GoodActionLog).filter_by(kind="journaling").all()
+        assert len(logs) == 1
+        assert logs[0].dedup_key == "journal-entry:2026-06-27"
+
+
 def test_transcribe_uses_llm(app_client, monkeypatch):
     import app.api.journal as japi
 

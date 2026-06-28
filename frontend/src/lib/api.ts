@@ -1615,7 +1615,10 @@ export const api = {
   journalEntries: () =>
     request<{ entries: { date: string; text: string; source: string }[] }>("/api/journal/entries"),
   journalEntryPut: (body: { date?: string; text: string; source?: string }) =>
-    request<{ entries: { date: string; text: string; source: string }[] }>("/api/journal/entry", {
+    request<{
+      entries: { date: string; text: string; source: string }[];
+      journaling_logged: boolean;
+    }>("/api/journal/entry", {
       method: "PUT",
       body: JSON.stringify(body),
     }),

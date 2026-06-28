@@ -96,22 +96,28 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
           <div className="mt-1 space-y-0.5 text-ink-faint">
             <div>感謝する人: <span className="text-ink-faint/40">________</span></div>
             <div>話した人: <span className="text-ink-faint/40">________</span></div>
-            {/* テーマ:勝ちタスク を1行に統合(例: 起業家: ユーザー候補5人に連絡をとる)*/}
+            {/* テーマ(伸びしろ)と 勝ちタスク を別行に。勝ちタスク = 今日これだけは、の一手。*/}
             <div className="flex items-start gap-2">
-              <span className="flex-1 text-ink">
-                <span className="font-semibold text-prog-300">{winTheme}</span>:{" "}
-                {winning ? (
-                  <span className="text-act-300">{winning}</span>
-                ) : (
-                  <span className="text-ink-faint/60">(候補を出す →)</span>
-                )}
-              </span>
+              <div className="flex-1 space-y-0.5 text-ink">
+                <div>
+                  <span className="text-ink-faint">テーマ: </span>
+                  <span className="font-semibold text-prog-300">{winTheme}</span>
+                </div>
+                <div>
+                  <span className="text-ink-faint">勝ちタスク: </span>
+                  {winning ? (
+                    <span className="text-act-300">☐ {winning}</span>
+                  ) : (
+                    <span className="text-ink-faint/60">☐ (候補を出す →)</span>
+                  )}
+                </div>
+              </div>
               <Button variant="subtle" disabled={move.isPending} onClick={() => move.mutate()}>
                 {move.isPending ? "生成中…" : winning ? "別案" : "出す"}
               </Button>
             </div>
             <div className="text-[10px] text-ink-faint/60">
-              早く片付くほど“今日は勝ち”。テーマは紙で自分の言葉に書き換えてOK。
+              勝ちタスクを早く片付けるほど“今日は勝ち”。テーマ・タスクは紙で自分の言葉に書き換えてOK。
             </div>
           </div>
 
@@ -206,6 +212,7 @@ function JournalArchive() {
   const entries = useQuery({ queryKey: ["journal-entries"], queryFn: api.journalEntries });
   const [draft, setDraft] = useState("");
   const [source, setSource] = useState<"text" | "image">("text");
+  const [logged, setLogged] = useState(false);
 
   const transcribe = useMutation({
     mutationFn: async (file: File) => {
@@ -219,10 +226,15 @@ function JournalArchive() {
   });
   const save = useMutation({
     mutationFn: () => api.journalEntryPut({ text: draft, source }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       setDraft("");
       setSource("text");
+      setLogged(r.journaling_logged);
       qc.invalidateQueries({ queryKey: ["journal-entries"] });
+      // 控え保存でジャーナリングが「やったこと」になる → 庭/今日/人生木を更新。
+      qc.invalidateQueries({ queryKey: ["garden"] });
+      qc.invalidateQueries({ queryKey: ["today"] });
+      qc.invalidateQueries({ queryKey: ["life-tree"] });
     },
   });
   const del = useMutation({
@@ -255,10 +267,15 @@ function JournalArchive() {
       <p className="mt-1 text-[10px] text-ink-faint">
         ⚠ 自動文字起こしは精度が低い前提。`[?]` は読めなかった箇所。必ず確認・修正を。
       </p>
-      <div className="mt-2">
+      <div className="mt-2 flex items-center gap-2">
         <Button variant="primary" disabled={save.isPending || !draft.trim()} onClick={() => save.mutate()}>
           {save.isPending ? "保存中…" : "今日の控えとして保存"}
         </Button>
+        {save.isSuccess && (
+          <span className="text-xs text-prog-300">
+            ✓ 保存{logged ? " ・ ジャーナリングを記録" : "(ジャーナリングは記録済み)"}
+          </span>
+        )}
       </div>
 
       {(entries.data?.entries.length ?? 0) > 0 && (

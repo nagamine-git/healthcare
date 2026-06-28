@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -11,8 +11,9 @@ from pydantic import BaseModel
 
 from app.db import session_scope
 from app.llm.journal_ocr import transcribe_journal
-from app.models.health import JournalEntry
-from app.scoring.timewindow import app_today
+from app.models.health import GoodActionLog, JournalEntry
+from app.scoring.garden.recompute import recompute_garden_for_date
+from app.scoring.timewindow import app_today, jst_day_bounds
 
 router = APIRouter()
 
@@ -60,6 +61,26 @@ class EntryIn(BaseModel):
     source: str = "text"
 
 
+def _ensure_journaling_log(session, d: date_type) -> bool:
+    """控えの保存を「その日にジャーナリングを実行した」とみなし、庭(良い行動)へ記録。
+
+    dedup_key で日次冪等(再保存・編集では二重記録しない)。新規記録時のみ True。
+    """
+    dedup = f"journal-entry:{d.isoformat()}"
+    exists = session.query(GoodActionLog).filter_by(dedup_key=dedup).first()
+    if exists is not None:
+        return False
+    start_utc, _ = jst_day_bounds(d)
+    ts = start_utc + timedelta(hours=12)  # JST 正午相当(その日に確実に入る)
+    session.add(
+        GoodActionLog(
+            ts=ts, kind="journaling", source="manual", value=1.0, dedup_key=dedup,
+            note="今日の控え保存",
+        )
+    )
+    return True
+
+
 def _entries(session) -> list[dict[str, Any]]:
     return [
         {"date": r.date.isoformat(), "text": r.text, "source": r.source}
@@ -85,8 +106,12 @@ async def put_entry(body: EntryIn) -> dict[str, Any]:
         row.text = body.text[:8000]
         row.source = body.source
         row.updated_at = datetime.utcnow()
+        # 控え保存 = ジャーナリング実行とみなし庭に記録(冪等)。新規記録時は庭を再計算。
+        journaling_logged = _ensure_journaling_log(session, d)
         session.flush()
-        return {"entries": _entries(session)}
+        if journaling_logged:
+            recompute_garden_for_date(session, d)
+        return {"entries": _entries(session), "journaling_logged": journaling_logged}
 
 
 @router.delete("/api/journal/entry/{entry_date}")
