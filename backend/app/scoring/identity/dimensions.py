@@ -166,6 +166,3 @@ ALL_IDS: tuple[str, ...] = tuple(d.id for d in DIMENSIONS)
 def get_dimension(dim_id: str) -> Dimension | None:
     return BY_ID.get(dim_id)
 
-
-def dimensions_for_layer(layer: Layer) -> tuple[Dimension, ...]:
-    return tuple(d for d in DIMENSIONS if d.layer == layer)

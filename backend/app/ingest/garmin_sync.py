@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from datetime import date as date_type
 from typing import Any
 
@@ -474,6 +474,3 @@ def _record_sync(session: Session, source: str, error: str | None) -> None:
     else:
         session.add(SourceSync(source=source, last_synced_at=now, last_error=error))
 
-
-def _yesterday() -> date_type:
-    return app_today() - timedelta(days=1)

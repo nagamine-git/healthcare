@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     hae_ingest_token: str | None = None
 
     baseline_window_days: int = 28
-    morning_bb_hour_local: int = 6
 
     score_weight_sleep: float = 3.0
     score_weight_hrv: float = 2.0

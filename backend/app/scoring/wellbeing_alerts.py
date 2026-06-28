@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -39,7 +39,7 @@ from app.models import (
     WeightSample,
 )
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
-from app.scoring.timewindow import jst_window_start
+from app.scoring.timewindow import jst_day_bounds, jst_window_start
 
 
 @dataclass(frozen=True)
@@ -184,7 +184,7 @@ def _check_hrv_decline(session: Session, target: date) -> WellbeingAlert | None:
         return WellbeingAlert(
             code="hrv_chronic_decline",
             severity="warning",
-            title=f"HRV が 7 日 baseline 比 {drop_pct:+.0f}%",
+            title=f"HRV が 28 日 baseline 比 {drop_pct:+.0f}%",
             detail=(
                 f"直近 7 日平均 {recent:.0f}ms / 28 日 baseline {baseline:.0f}ms。"
                 "自律神経の回復不全、burnout 前兆の可能性"
@@ -272,12 +272,15 @@ def _check_moh_risk(session: Session, target: date) -> WellbeingAlert | None:
     (単純鎮痛薬の 15 日ではない)。ここでは単月の服用日数だけを見るので「診断」ではなく
     「乱用域到達/接近」のリスク提示。1 日に複数回飲んでも 1 日。
     """
-    thirty_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    # 窓は target 日基準 (過去日の recompute でも整合。実時刻 now ではない)
+    lo = jst_window_start(30, target)
+    _, hi = jst_day_bounds(target)
     # JST 日付ごとに distinct 集計 (同日複数回は 1 日)
     day_expr = func.date(CaffeineIntake.ts, "+9 hours")
     days = session.execute(
         select(func.count(func.distinct(day_expr))).where(
-            CaffeineIntake.ts >= thirty_days_ago,
+            CaffeineIntake.ts >= lo,
+            CaffeineIntake.ts < hi,
             CaffeineIntake.source.in_(tuple(MEDICATION_CAFFEINE_SOURCES)),
         )
     ).scalar()
@@ -327,10 +330,15 @@ def _check_caffeine_dependency_cycle(
     if avg_sleep >= 360:
         return None
 
-    # 直近 7 日の caffeine
-    seven_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=7)
+    # 直近 7 日の caffeine (target 基準 / 食事性のみ。頭痛薬カフェインは別管理=交絡対策)
+    lo = jst_window_start(7, target)
+    _, hi = jst_day_bounds(target)
     cf_rows = session.execute(
-        select(CaffeineIntake.mg).where(CaffeineIntake.ts >= seven_days_ago)
+        select(CaffeineIntake.mg).where(
+            CaffeineIntake.ts >= lo,
+            CaffeineIntake.ts < hi,
+            CaffeineIntake.source.not_in(tuple(MEDICATION_CAFFEINE_SOURCES)),
+        )
     ).all()
     total_mg = sum(float(r[0]) for r in cf_rows if r[0] is not None)
     daily_mg = total_mg / 7
