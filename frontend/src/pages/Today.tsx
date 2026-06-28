@@ -25,6 +25,7 @@ import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
 import { PhysiqueGapPlan } from "../components/PhysiqueGapPlan";
+import { BodyCompositionPanel } from "../components/BodyCompositionPanel";
 import { FitnessTestPanel, FitnessDueBanner } from "../components/FitnessTestPanel";
 import { DistributionPanel } from "../components/DistributionPanel";
 import { ActivitySignalCard } from "../components/ActivitySignalCard";
@@ -444,6 +445,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div id="physique-gap-section" className="space-y-3">
         <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
         <PhysiqueGapPlan />
+        <BodyCompositionPanel />
         <DistributionPanel />
         <BodyLoadCard />
         <FitnessTestPanel />

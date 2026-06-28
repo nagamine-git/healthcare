@@ -1225,6 +1225,15 @@ export type IdentityIntention = {
   rating: number;
   seen_at: string | null;
 };
+export type BodyCompDraft = {
+  skeletal_muscle_kg: number | null;
+  skeletal_muscle_pct: number | null;
+  visceral_fat_level: number | null;
+  bmr_kcal: number | null;
+  date?: string | null;
+};
+export type BodyCompSample = BodyCompDraft & { id: number; date: string };
+export type BodyCompResponse = { latest: BodyCompSample | null; history: BodyCompSample[] };
 export type BookTaste = {
   total: number;
   seen?: number;
@@ -1635,6 +1644,19 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  bodyComposition: () => request<BodyCompResponse>("/api/body-composition"),
+  bodyCompExtract: (image_base64: string, media_type: string) =>
+    request<{ draft: BodyCompDraft }>("/api/body-composition/extract", {
+      method: "POST",
+      body: JSON.stringify({ image_base64, media_type }),
+    }),
+  bodyCompPut: (body: BodyCompDraft) =>
+    request<BodyCompResponse>("/api/body-composition", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  bodyCompDelete: (id: number) =>
+    request<BodyCompResponse>(`/api/body-composition/${id}`, { method: "DELETE" }),
   journalExtract: (text: string, date?: string) =>
     request<{
       proposals: {

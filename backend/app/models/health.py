@@ -657,6 +657,26 @@ class HealthCheckup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class BodyCompositionSample(Base):
+    """体組成計(BIA)スクショから取り込む、HealthKit 標準に無い指標。
+
+    体重/体脂肪率は Apple Health 経由で別途取得済み。ここは標準で取れない
+    骨格筋量・内臓脂肪レベル・基礎代謝(BMR)のみを手動スクショ OCR で保持する。
+    日付ごとに 1 件 upsert(再アップロードで重複させない)。
+    """
+
+    __tablename__ = "body_composition_sample"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    skeletal_muscle_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    skeletal_muscle_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    visceral_fat_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bmr_kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="image")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Goal(Base):
     """中期目標(Layer 1)。capital_weights でドメインの重点ウェイトを駆動する。"""
 
