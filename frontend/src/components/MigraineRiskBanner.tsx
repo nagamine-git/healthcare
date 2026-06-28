@@ -21,9 +21,9 @@ export function MigraineRiskBanner() {
   const isHigh =
     m.level === "high" || active.some((t) => t.level === "high") || m.peak?.risk === "high";
   const border = isHigh
-    ? "border-rose-500/30 bg-rose-500/[0.07]"
-    : "border-amber-500/30 bg-amber-500/[0.07]";
-  const accent = isHigh ? "text-rose-200" : "text-amber-200";
+    ? "border-risk/30 bg-risk/[0.07]"
+    : "border-act/30 bg-act/[0.07]";
+  const accent = isHigh ? "text-risk" : "text-act-300";
 
   // 主因: 気圧 + 今まさに誘発域にある個人トリガー
   const causes: string[] = [];
@@ -66,16 +66,16 @@ export function MigraineRiskBanner() {
   return (
     <div className={`flex flex-col gap-0.5 rounded-xl border px-3 py-2 ${border}`}>
       <div className="flex items-center gap-2">
-        <CloudRain size={14} className="shrink-0 text-rose-300" />
-        <span className="min-w-0 flex-1 text-[12px] text-slate-200">
+        <CloudRain size={14} className="shrink-0 text-risk" />
+        <span className="min-w-0 flex-1 text-[12px] text-ink">
           片頭痛リスク{isHigh ? "高" : "やや高"}:{" "}
           <span className={`font-semibold ${accent}`}>{causes.join("・")}</span>
         </span>
-        {badge && <span className="shrink-0 text-[9px] text-slate-500">{badge}</span>}
+        {badge && <span className="shrink-0 text-[9px] text-ink-faint">{badge}</span>}
       </div>
-      {whenLine && <div className="pl-6 text-[10px] text-rose-200/80">⏰ {whenLine}</div>}
+      {whenLine && <div className="pl-6 text-[10px] text-risk/80">⏰ {whenLine}</div>}
       {m.actions && m.actions.length > 0 && (
-        <div className="pl-6 text-[10px] text-slate-300/90">💊 {m.actions.join("・")}</div>
+        <div className="pl-6 text-[10px] text-ink-dim/90">💊 {m.actions.join("・")}</div>
       )}
     </div>
   );

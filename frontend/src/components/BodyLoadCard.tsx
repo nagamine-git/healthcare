@@ -67,21 +67,21 @@ function buildFills(
 function MuscleRow({ m }: { m: BodyMapMuscle }) {
   const ready = m.recovery_pct >= 100;
   return (
-    <div className={`rounded-md px-2 py-1.5 ${m.confidence === "none" ? "opacity-70" : ""} ${m.suggested ? "bg-amber-500/5" : ""}`}>
+    <div className={`rounded-md px-2 py-1.5 ${m.confidence === "none" ? "opacity-70" : ""} ${m.suggested ? "bg-act/5" : ""}`}>
       <div className="flex items-baseline gap-2 text-[11px]">
-        <span className="min-w-0 flex-1 truncate text-slate-200">
+        <span className="min-w-0 flex-1 truncate text-ink">
           {m.label}
-          {m.suggested && <span className="ml-1 text-[9px] text-amber-300">★今日</span>}
+          {m.suggested && <span className="ml-1 text-[9px] text-act-300">★今日</span>}
         </span>
-        <span className="shrink-0 tabular-nums text-slate-500">
+        <span className="shrink-0 tabular-nums text-ink-faint">
           {m.confidence === "none" ? "刺激なし" : ready ? "回復済" : `回復${m.recovery_pct}%`}
         </span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-panel">
         <div className="h-full rounded-full transition-all"
           style={{ width: `${Math.max(m.recovery_pct, 3)}%`, background: recoveryColor(m.recovery_pct, m.confidence) }} />
       </div>
-      <div className="mt-0.5 truncate text-[9px] text-slate-500">{m.confidence === "none" ? `伸びしろ · ${m.home}` : m.home}</div>
+      <div className="mt-0.5 truncate text-[9px] text-ink-faint">{m.confidence === "none" ? `伸びしろ · ${m.home}` : m.home}</div>
     </div>
   );
 }
@@ -90,17 +90,17 @@ function HpRow({ g }: { g: BodyHpGauge }) {
   return (
     <div className="rounded-md px-2 py-1.5">
       <div className="flex items-baseline gap-2 text-[11px]">
-        <span className="shrink-0 text-slate-200">{g.label}</span>
-        <span className="min-w-0 flex-1 truncate text-[10px] text-slate-500">{g.metric}</span>
+        <span className="shrink-0 text-ink">{g.label}</span>
+        <span className="min-w-0 flex-1 truncate text-[10px] text-ink-faint">{g.metric}</span>
         <span className="shrink-0 tabular-nums" style={{ color: hpColor(g.value) }}>
           {g.value == null ? "—" : g.value}
         </span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-panel">
         <div className="h-full rounded-full transition-all"
           style={{ width: `${Math.max(g.value ?? 0, 3)}%`, background: hpColor(g.value) }} />
       </div>
-      <div className="mt-0.5 truncate text-[9px] text-slate-500">{g.detail}</div>
+      <div className="mt-0.5 truncate text-[9px] text-ink-faint">{g.detail}</div>
     </div>
   );
 }
@@ -111,8 +111,8 @@ export function BodyLoadCard() {
 
   if (q.isLoading || !q.data) {
     return (
-      <section className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
-        <span className="text-xs text-slate-500">部位別の負荷を計算中…</span>
+      <section className="space-y-2 rounded-2xl bg-hull/40 p-4">
+        <span className="text-xs text-ink-faint">部位別の負荷を計算中…</span>
       </section>
     );
   }
@@ -134,18 +134,18 @@ export function BodyLoadCard() {
   const orderedMuscle = [...s.muscle].sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.recovery_pct - b.recovery_pct);
 
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-3 rounded-2xl bg-hull/40 p-4">
       <div className="flex items-center gap-1.5">
-        <Dumbbell size={14} className="text-amber-300" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">部位別ステータス</span>
+        <Dumbbell size={14} className="text-act-300" />
+        <span className="text-xs uppercase tracking-wider text-ink-dim">部位別ステータス</span>
         {/* タブ */}
-        <span className="ml-auto flex gap-1 rounded-lg bg-slate-800/80 p-0.5 text-[10px]">
+        <span className="ml-auto flex gap-1 rounded-lg bg-panel/80 p-0.5 text-[10px]">
           <button type="button" onClick={() => setTab("muscle")}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "muscle" ? "bg-slate-700 text-amber-200" : "text-slate-400"}`}>
+            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "muscle" ? "bg-panel text-act-300" : "text-ink-dim"}`}>
             <Dumbbell size={11} /> 筋負荷
           </button>
           <button type="button" onClick={() => setTab("hp")}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "hp" ? "bg-slate-700 text-emerald-200" : "text-slate-400"}`}>
+            className={`flex items-center gap-1 rounded-md px-2 py-1 ${tab === "hp" ? "bg-panel text-prog-300" : "text-ink-dim"}`}>
             <HeartPulse size={11} /> 統合
           </button>
         </span>
@@ -153,48 +153,48 @@ export function BodyLoadCard() {
 
       {tab === "muscle" ? (
         <>
-          <div className="flex items-start justify-center gap-6 rounded-xl bg-slate-900/60 py-2">
+          <div className="flex items-start justify-center gap-6 rounded-xl bg-hull/60 py-2">
             <div className="flex flex-col items-center">
               <BodyFigure fills={front.fills} suggested={front.suggested} />
-              <span className="mt-0.5 text-[9px] text-slate-500">前面</span>
+              <span className="mt-0.5 text-[9px] text-ink-faint">前面</span>
             </div>
             <div className="flex flex-col items-center">
               <BodyFigure fills={back.fills} suggested={back.suggested} />
-              <span className="mt-0.5 text-[9px] text-slate-500">背面</span>
+              <span className="mt-0.5 text-[9px] text-ink-faint">背面</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-slate-500">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-ink-faint">
             <span><span style={{ color: "#34d399" }}>■</span> 回復済(やれる)</span>
             <span><span style={{ color: "#fbbf24" }}>■</span> 回復途中</span>
             <span><span style={{ color: "#f87171" }}>■</span> 直近に負荷</span>
-            <span><span className="text-amber-300">▢</span> 今日のおすすめ</span>
+            <span><span className="text-act-300">▢</span> 今日のおすすめ</span>
           </div>
           {s.suggestion.length > 0 && (
-            <p className="text-center text-[11px] text-slate-300">
-              今日やるべき部位: <span className="font-semibold text-amber-300">{s.suggestion.map((x) => x.label).join(" / ")}</span>
+            <p className="text-center text-[11px] text-ink-dim">
+              今日やるべき部位: <span className="font-semibold text-act-300">{s.suggestion.map((x) => x.label).join(" / ")}</span>
             </p>
           )}
           <div className="grid gap-0.5">
             {orderedMuscle.map((m) => <MuscleRow key={m.key} m={m} />)}
           </div>
-          <p className="text-[9px] text-slate-500">
+          <p className="text-[9px] text-ink-faint">
             Garmin の活動から自動算出。背中(引く)は自重だと検出されにくく「伸びしろ」に出やすい。
             {s.muscle_confidence === "high" ? " 種目記録あり=精度高。" : " 活動種別から推定。"}
           </p>
         </>
       ) : (
         <>
-          <div className="flex items-center justify-center gap-4 rounded-xl bg-slate-900/60 py-2">
+          <div className="flex items-center justify-center gap-4 rounded-xl bg-hull/60 py-2">
             <BodyFigure fills={hpFig.fills} size={104} />
             <div className="text-center">
-              <div className="text-[10px] text-slate-500">総合コンディション</div>
+              <div className="text-[10px] text-ink-faint">総合コンディション</div>
               <div className="text-2xl font-bold tabular-nums" style={{ color: hpColor(s.hp_total) }}>
                 {s.hp_total ?? "—"}
               </div>
-              <div className="text-[9px] text-slate-600">/ 100</div>
+              <div className="text-[9px] text-ink-faint">/ 100</div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-slate-500">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-ink-faint">
             <span><span style={{ color: "#34d399" }}>■</span> 良好</span>
             <span><span style={{ color: "#fbbf24" }}>■</span> 注意</span>
             <span><span style={{ color: "#f87171" }}>■</span> 要対処</span>
@@ -202,7 +202,7 @@ export function BodyLoadCard() {
           <div className="grid gap-0.5">
             {s.hp.map((g) => <HpRow key={g.region} g={g} />)}
           </div>
-          <p className="text-[9px] text-slate-500">
+          <p className="text-[9px] text-ink-faint">
             各ゲージは実指標の裏付け: 頭=偏頭痛 / 胸=Body Battery / 腹=水分 / 腕・脚=筋の回復。"HP" は状態把握のためのメタファ。
           </p>
         </>

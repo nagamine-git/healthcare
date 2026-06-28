@@ -95,7 +95,7 @@ export function PhysiqueTargetSection({
   const selFfmi = sel ? impliedFfmi(heightCm, sel.bf, sel.weight) : 20;
 
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-3 rounded-xl bg-hull/40 p-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -103,32 +103,32 @@ export function PhysiqueTargetSection({
         className="flex w-full items-center gap-1.5 text-left"
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <Target size={14} className="text-emerald-300" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">目標体型</span>
-        <span className="ml-auto text-[11px] tabular-nums text-slate-400">
+        <Target size={14} className="text-prog-300" />
+        <span className="text-xs uppercase tracking-wider text-ink-dim">目標体型</span>
+        <span className="ml-auto text-[11px] tabular-nums text-ink-dim">
           {profile.data ? `${profile.data.target_weight_kg}kg / ${profile.data.target_body_fat_pct}%` : ""}
         </span>
       </button>
 
       {open && (
         <>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-ink-dim">
             <label className="flex items-center gap-1.5">
               身長
               <input
                 type="number"
                 value={heightCm}
                 onChange={(e) => setHeightCm(parseFloat(e.target.value) || 0)}
-                className="w-16 rounded bg-slate-800 px-2 py-1 tabular-nums"
+                className="w-16 rounded bg-panel px-2 py-1 tabular-nums"
               />
               cm
             </label>
-            <div className="flex rounded-lg bg-slate-800/70 p-0.5">
+            <div className="flex rounded-lg bg-panel/70 p-0.5">
               {(["male", "female"] as const).map((sx) => (
                 <button
                   key={sx}
                   onClick={() => setSex(sx)}
-                  className={`rounded-md px-3 py-1 ${sex === sx ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}
+                  className={`rounded-md px-3 py-1 ${sex === sx ? "bg-ink-faint text-ink" : "text-ink-dim"}`}
                 >
                   {sx === "male" ? "男性" : "女性"}
                 </button>
@@ -141,18 +141,18 @@ export function PhysiqueTargetSection({
             <div
               className={`flex items-center gap-3 rounded-lg p-3 ${
                 n.level === "blocked"
-                  ? "bg-rose-500/10 ring-1 ring-rose-500/40"
+                  ? "bg-risk/10 ring-1 ring-risk/40"
                   : n.level === "warn"
-                  ? "bg-amber-500/10 ring-1 ring-amber-500/40"
-                  : "bg-emerald-500/10 ring-1 ring-emerald-500/30"
+                  ? "bg-act/10 ring-1 ring-act/40"
+                  : "bg-prog-500/10 ring-1 ring-prog/30"
               }`}
             >
               <Silhouette bodyFat={sel.bf} ffmi={selFfmi} sex={sex} size={48} active />
               <div className="flex-1">
-                <div className="text-sm text-slate-100">
+                <div className="text-sm text-ink">
                   目標 <b className="tabular-nums">{sel.weight}kg</b> ・ 体脂肪 {sel.bf}%
                 </div>
-                <div className="text-[11px] text-slate-300">{n.text}</div>
+                <div className="text-[11px] text-ink-dim">{n.text}</div>
                 <button
                   disabled={n.level === "blocked" || save.isPending}
                   onClick={() =>
@@ -164,7 +164,7 @@ export function PhysiqueTargetSection({
                       ffmi_normalized: Math.round(selFfmi * 10) / 10,
                     })
                   }
-                  className="mt-1.5 rounded-full bg-emerald-600/80 px-3 py-1 text-xs text-white hover:bg-emerald-600 disabled:opacity-40"
+                  className="mt-1.5 rounded-full bg-prog-500/80 px-3 py-1 text-xs text-white hover:bg-prog-500 disabled:opacity-40"
                 >
                   {save.isSuccess ? "保存しました ✓" : "この体型を目標にする"}
                 </button>
@@ -180,23 +180,23 @@ export function PhysiqueTargetSection({
             target={sel ? { weight: sel.weight, bf: sel.bf } : null}
           />
 
-          <div className="text-[10px] text-slate-500">下: 縦=体脂肪率 / 横=体重。薄い色ほど非現実的な組合せ (緑=現実的)</div>
+          <div className="text-[10px] text-ink-faint">下: 縦=体脂肪率 / 横=体重。薄い色ほど非現実的な組合せ (緑=現実的)</div>
 
           {/* 体脂肪率 × 体重 のコンパクトグリッド (横スクロール) */}
           <div className="overflow-x-auto">
             <table className="border-separate" style={{ borderSpacing: "2px" }}>
               <thead>
                 <tr>
-                  <th className="sticky left-0 bg-slate-900/40" />
+                  <th className="sticky left-0 bg-hull/40" />
                   {columns.map((w) => (
-                    <th key={w} className="text-[9px] font-normal tabular-nums text-slate-500">{w}</th>
+                    <th key={w} className="text-[9px] font-normal tabular-nums text-ink-faint">{w}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {BODY_FATS.map((bf) => (
                   <tr key={bf}>
-                    <td className="sticky left-0 bg-slate-900/40 pr-1 text-right text-[9px] tabular-nums text-slate-400">
+                    <td className="sticky left-0 bg-hull/40 pr-1 text-right text-[9px] tabular-nums text-ink-dim">
                       {bf}%
                     </td>
                     {columns.map((w) => {
@@ -204,16 +204,16 @@ export function PhysiqueTargetSection({
                       const isSel = sel?.bf === bf && sel?.weight === w;
                       const base =
                         f === "unreal"
-                          ? "bg-slate-800/30 text-slate-600"
+                          ? "bg-panel/30 text-ink-faint"
                           : f === "stretch"
-                          ? "bg-slate-700/40 text-slate-400"
-                          : "bg-emerald-500/15 text-emerald-200";
+                          ? "bg-hairline/40 text-ink-dim"
+                          : "bg-prog-500/15 text-prog-300";
                       return (
                         <td key={w}>
                           <button
                             onClick={() => setSel({ bf, weight: w })}
                             className={`h-6 w-7 rounded text-[8px] tabular-nums ${base} ${
-                              isSel ? "ring-2 ring-emerald-400" : "hover:brightness-150"
+                              isSel ? "ring-2 ring-prog" : "hover:brightness-150"
                             }`}
                             aria-label={`体脂肪${bf}% 体重${w}kg`}
                           >

@@ -78,22 +78,22 @@ export function NotificationSettings() {
   const needsInstall = iOS && !isStandalone();
 
   return (
-    <div className="rounded-2xl bg-slate-900/40 p-4">
+    <div className="rounded-xl bg-hull/40 p-4">
       <div className="mb-2 flex items-center gap-2">
-        <Bell size={15} className="text-amber-300" />
-        <h3 className="text-sm font-semibold text-slate-200">通知</h3>
+        <Bell size={15} className="text-act-300" />
+        <h3 className="text-sm font-semibold text-ink">通知</h3>
       </div>
-      <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+      <p className="mb-3 text-[11px] leading-relaxed text-ink-faint">
         危険アラートと、時間が決まっている重要アクション (カフェイン遮断・ナップ・就寝準備など) だけを
         その時刻に通知します。それ以外は通知しません。
       </p>
 
       {!supported && (
-        <p className="text-xs text-rose-300">このブラウザは Web Push に未対応です。</p>
+        <p className="text-xs text-risk">このブラウザは Web Push に未対応です。</p>
       )}
 
       {supported && needsInstall && (
-        <div className="mb-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-[11px] text-amber-200">
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-act/10 p-3 text-[11px] text-act-300">
           <Smartphone size={14} className="mt-0.5 shrink-0" />
           <span>
             iPhone では通知を使うのに PWA インストールが必要です。共有メニュー →「ホーム画面に追加」で
@@ -108,7 +108,7 @@ export function NotificationSettings() {
             <button
               onClick={onDisable}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700/60 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-hairline/60 px-3 py-1.5 text-xs text-ink hover:bg-hairline disabled:opacity-50"
             >
               <BellOff size={13} /> 通知をオフ
             </button>
@@ -116,7 +116,7 @@ export function NotificationSettings() {
             <button
               onClick={onEnable}
               disabled={busy || needsInstall}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/80 px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-amber-400 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-act/80 px-3 py-1.5 text-xs font-medium text-hull hover:bg-act disabled:opacity-50"
             >
               <Bell size={13} /> 通知をオン
             </button>
@@ -124,18 +124,18 @@ export function NotificationSettings() {
           <button
             onClick={onTest}
             disabled={busy || !state?.subscribed}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800/60 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-panel/60 px-3 py-1.5 text-xs text-ink-dim hover:bg-panel disabled:opacity-40"
           >
             テスト送信
           </button>
-          <span className="text-[11px] text-slate-500">
+          <span className="text-[11px] text-ink-faint">
             {state?.subscribed ? "オン" : "オフ"}
             {state && !state.serverEnabled ? " / サーバ未設定" : ""}
           </span>
         </div>
       )}
 
-      {msg && <p className="mt-2 text-[11px] text-slate-400">{msg}</p>}
+      {msg && <p className="mt-2 text-[11px] text-ink-dim">{msg}</p>}
     </div>
   );
 }

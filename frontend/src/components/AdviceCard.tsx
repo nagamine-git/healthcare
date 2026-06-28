@@ -24,7 +24,7 @@ const CATEGORY_LABEL: Record<AdviceAction["category"], string> = {
 };
 
 // カテゴリは slate 単色で統一 (情報過多を避ける)
-const CATEGORY_BADGE = "border border-slate-700 bg-slate-800/40 text-slate-300";
+const CATEGORY_BADGE = "border border-hairline bg-panel/40 text-ink-dim";
 
 const PRIORITY_LABEL: Record<AdvicePriority, string> = {
   critical: "今すぐ",
@@ -35,10 +35,10 @@ const PRIORITY_LABEL: Record<AdvicePriority, string> = {
 
 // 優先度は意味があるので 4 段階維持、しかし強度はおさえる
 const PRIORITY_COLOR: Record<AdvicePriority, string> = {
-  critical: "border border-rose-500/70 bg-rose-500/10 text-rose-300",
-  high: "border border-amber-500/60 bg-amber-500/10 text-amber-300",
-  mid: "border border-slate-600 bg-transparent text-slate-400",
-  low: "border border-slate-700 bg-transparent text-slate-500",
+  critical: "border border-risk/70 bg-risk/10 text-risk",
+  high: "border border-act/60 bg-act/10 text-act-300",
+  mid: "border border-ink-faint bg-transparent text-ink-dim",
+  low: "border border-hairline bg-transparent text-ink-faint",
 };
 
 const PRIORITY_RANK: Record<AdvicePriority, number> = {
@@ -72,14 +72,14 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
   const payload = advice?.payload ?? null;
 
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-slate-900/80 to-slate-800/60 p-5 sm:p-6">
+    <div className="rounded-xl bg-gradient-to-br from-hull/80 to-panel/60 p-5 sm:p-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm tracking-wider text-slate-300">今日のフォーカス</h3>
+        <h3 className="text-sm tracking-wider text-ink-dim">今日のフォーカス</h3>
         <div className="flex gap-2">
           <button
             onClick={onRegenerate}
             disabled={pending}
-            className="rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-full border border-ink-faint px-3 py-1 text-xs text-ink-dim hover:bg-panel disabled:opacity-50"
           >
             {pending ? "生成中..." : "再生成"}
           </button>
@@ -87,7 +87,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
             <button
               onClick={handleSchedule}
               disabled={scheduling}
-              className="rounded-full border border-emerald-700 bg-emerald-900/30 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-900/60 disabled:opacity-50"
+              className="rounded-full border border-prog-700 bg-prog-900/30 px-3 py-1 text-xs text-prog-300 hover:bg-prog-900/60 disabled:opacity-50"
             >
               {scheduling ? "登録中..." : "Calendar に追加"}
             </button>
@@ -96,21 +96,21 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
       </div>
 
       {!advice ? (
-        <p className="text-slate-500">
+        <p className="text-ink-faint">
           まだアドバイスは生成されていません。「再生成」を押すか、朝のジョブを待ってください。
         </p>
       ) : (
         <>
           {/* Headline (1行パンチライン、大きく) */}
           {payload?.headline && (
-            <p className="mb-2 text-xl font-semibold leading-snug text-slate-50 sm:text-2xl">
+            <p className="mb-2 text-xl font-semibold leading-snug text-ink sm:text-2xl">
               {payload.headline}
             </p>
           )}
 
           {/* Actions list — priority 順、最初 1 件は常に展開、残りは折りたたみ */}
           {payload && payload.actions.length === 0 && (
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-ink-dim">
               本日推奨アクションなし。コンディション維持で OK。
             </p>
           )}
@@ -152,7 +152,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
               })().map(({ a, past, open, late }, i) => (
                   <li
                     key={`${a.time_jst}-${i}`}
-                    className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 ${
+                    className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-panel bg-hull/60 px-3 py-2 ${
                       past ? "opacity-45" : ""
                     }`}
                   >
@@ -164,24 +164,24 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                       {PRIORITY_LABEL[a.priority] ?? a.priority}
                     </span>
                     <span
-                      className={`font-mono text-base tabular-nums ${
-                        past ? "text-slate-500 line-through" : "text-slate-200"
+                      className={`telemetry-num text-base tabular-nums ${
+                        past ? "text-ink-faint line-through" : "text-ink"
                       }`}
                     >
                       {a.time_jst}
                     </span>
                     {past && (
-                      <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+                      <span className="rounded-full bg-panel px-1.5 py-0.5 text-[10px] text-ink-dim">
                         過ぎた
                       </span>
                     )}
                     {open && (
-                      <span className="rounded-full border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                      <span className="rounded-full border border-prog-700/60 bg-prog-900/30 px-1.5 py-0.5 text-[10px] text-prog-300">
                         いまからOK{a.until_jst ? ` 〜${a.until_jst}` : ""}
                       </span>
                     )}
                     {late && (
-                      <span className="rounded-full border border-amber-600/60 bg-amber-900/30 px-1.5 py-0.5 text-[10px] text-amber-300">
+                      <span className="rounded-full border border-act/60 bg-act-700/30 px-1.5 py-0.5 text-[10px] text-act-300">
                         遅れても推奨・いまから
                       </span>
                     )}
@@ -190,13 +190,13 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     >
                       {CATEGORY_LABEL[a.category] ?? a.category}
                     </span>
-                    <span className="text-slate-100">{a.title}</span>
-                    <span className="text-xs text-slate-500">{a.duration_min} 分</span>
+                    <span className="text-ink">{a.title}</span>
+                    <span className="text-xs text-ink-faint">{a.duration_min} 分</span>
                     {a.intensity && (
-                      <span className="text-xs text-slate-400">· {a.intensity}</span>
+                      <span className="text-xs text-ink-dim">· {a.intensity}</span>
                     )}
                     {a.why && (
-                      <span className="basis-full text-xs text-slate-500">{a.why}</span>
+                      <span className="basis-full text-xs text-ink-faint">{a.why}</span>
                     )}
                     {a.exercises && a.exercises.length > 0 && (
                       <ExerciseList exercises={a.exercises} />
@@ -221,7 +221,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
           {payload && (payload.actions.length > 1 || payload.focus || payload.rationale) && (
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="mt-3 text-xs text-slate-500 hover:text-slate-300"
+              className="mt-3 text-xs text-ink-faint hover:text-ink-dim"
             >
               {expanded
                 ? "▴ 折りたたむ"
@@ -231,24 +231,24 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
 
           {/* Focus と Rationale は展開時のみ */}
           {expanded && payload?.focus && (
-            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+            <p className="mt-3 text-sm leading-relaxed text-ink-dim">
               {payload.focus}
             </p>
           )}
           {expanded && payload?.rationale && (
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">
-              <span className="text-slate-400">根拠</span>: {payload.rationale}
+            <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+              <span className="text-ink-dim">根拠</span>: {payload.rationale}
             </p>
           )}
 
           {expanded && (
-            <p className="mt-3 text-[10px] text-slate-500">
+            <p className="mt-3 text-[10px] text-ink-faint">
               {advice.model} · {formatTs(advice.generated_at)}
             </p>
           )}
 
           {scheduleResult && (
-            <div className="mt-3 rounded-lg bg-emerald-900/20 p-3 text-xs text-emerald-200">
+            <div className="mt-3 rounded-lg bg-prog-900/20 p-3 text-xs text-prog-300">
               {scheduleResult.created.length === 0
                 ? "登録対象のアクションは未来時刻にありませんでした"
                 : `${scheduleResult.created.length} 件のイベントをカレンダーに登録しました`}
@@ -258,7 +258,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     href={ev.htmlLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline hover:text-emerald-100"
+                    className="underline hover:text-prog-300"
                   >
                     {ev.summary}
                   </a>{" "}
@@ -272,7 +272,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
             </div>
           )}
           {scheduleError && (
-            <div className="mt-3 rounded-lg bg-rose-900/30 p-2 text-xs text-rose-200">
+            <div className="mt-3 rounded-lg bg-risk/30 p-2 text-xs text-risk">
               Calendar 登録失敗: {scheduleError}
             </div>
           )}
@@ -300,8 +300,8 @@ function ActionFeedback({
         aria-label="完了"
         className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${
           done
-            ? "border-emerald-600 bg-emerald-600/20 text-emerald-300"
-            : "border-slate-700 text-slate-400 hover:bg-slate-800"
+            ? "border-prog bg-prog-500/20 text-prog-300"
+            : "border-hairline text-ink-dim hover:bg-panel"
         }`}
       >
         <Check size={12} /> {done ? "完了" : "やった"}
@@ -311,7 +311,7 @@ function ActionFeedback({
           onClick={() => onRate(rating === 1 ? 0 : 1)}
           aria-label="役に立った"
           className={`grid h-9 w-9 place-items-center rounded-full transition active:scale-90 ${
-            rating === 1 ? "bg-emerald-600/30 text-emerald-300" : "text-slate-500 hover:text-slate-300"
+            rating === 1 ? "bg-prog-500/30 text-prog-300" : "text-ink-faint hover:text-ink-dim"
           }`}
         >
           <ThumbsUp size={13} />
@@ -320,7 +320,7 @@ function ActionFeedback({
           onClick={() => onRate(rating === -1 ? 0 : -1)}
           aria-label="役に立たなかった"
           className={`grid h-9 w-9 place-items-center rounded-full transition active:scale-90 ${
-            rating === -1 ? "bg-rose-600/30 text-rose-300" : "text-slate-500 hover:text-slate-300"
+            rating === -1 ? "bg-risk/30 text-risk" : "text-ink-faint hover:text-ink-dim"
           }`}
         >
           <ThumbsDown size={13} />
@@ -337,57 +337,57 @@ function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exer
         {exercises.map((e, i) => (
           <li
             key={i}
-            className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2"
+            className="rounded-lg border border-panel bg-hull/50 px-3 py-2"
           >
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-              <span className="text-sm text-slate-100">{e.name}</span>
+              <span className="text-sm text-ink">{e.name}</span>
               {e.weight && (
-                <span className="font-mono text-sm tabular-nums text-emerald-300">
+                <span className="telemetry-num text-sm tabular-nums text-prog-300">
                   {e.weight}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-slate-400">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-ink-dim">
               <span>
-                <span className="text-slate-500">セット </span>
+                <span className="text-ink-faint">セット </span>
                 {e.sets}
               </span>
               <span>
-                <span className="text-slate-500">回数 </span>
+                <span className="text-ink-faint">回数 </span>
                 {e.reps}
               </span>
               {e.rest_sec != null && (
                 <span>
-                  <span className="text-slate-500">休憩 </span>
+                  <span className="text-ink-faint">休憩 </span>
                   {e.rest_sec}秒
                 </span>
               )}
               {e.rir != null && (
                 <span>
-                  <span className="text-slate-500">RIR </span>
+                  <span className="text-ink-faint">RIR </span>
                   {e.rir}
                 </span>
               )}
               {e.tempo && (
                 <span>
-                  <span className="text-slate-500">テンポ </span>
+                  <span className="text-ink-faint">テンポ </span>
                   {e.tempo}
                 </span>
               )}
             </div>
             {e.notes && (
-              <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              <div className="mt-1 text-[11px] leading-relaxed text-ink-faint">
                 {e.notes}
               </div>
             )}
           </li>
         ))}
       </ul>
-      <p className="text-[10px] leading-relaxed text-slate-500">
-        <span className="text-slate-400">RIR</span> = 限界まで何回余力を残すか (低いほど追い込む)。
+      <p className="text-[10px] leading-relaxed text-ink-faint">
+        <span className="text-ink-dim">RIR</span> = 限界まで何回余力を残すか (低いほど追い込む)。
         筋肥大は 1-3、筋力は 1-2、技術習得は 3-5 が目安。
         <br />
-        <span className="text-slate-400">RPE</span> = 10 段階の主観強度 (Rate of Perceived Exertion)。
+        <span className="text-ink-dim">RPE</span> = 10 段階の主観強度 (Rate of Perceived Exertion)。
         6-7 = ややきつい、8-9 = かなりきつい、10 = 限界。
       </p>
     </div>

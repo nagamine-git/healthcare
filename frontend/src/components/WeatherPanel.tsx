@@ -30,25 +30,25 @@ const ICONS: Record<WeatherIcon, LucideIcon> = {
 const ICON_COLOR: Record<WeatherIcon, string> = {
   sun: "text-amber-300",
   "cloud-sun": "text-amber-200",
-  cloud: "text-slate-300",
-  fog: "text-slate-400",
+  cloud: "text-ink-dim",
+  fog: "text-ink-dim",
   drizzle: "text-sky-300",
   rain: "text-sky-400",
   snow: "text-cyan-200",
   storm: "text-violet-300",
-  unknown: "text-slate-400",
+  unknown: "text-ink-dim",
 };
 
 function WIcon({ icon, size = 20 }: { icon: WeatherIcon; size?: number }) {
   const C = ICONS[icon] ?? HelpCircle;
-  return <C size={size} className={ICON_COLOR[icon] ?? "text-slate-300"} />;
+  return <C size={size} className={ICON_COLOR[icon] ?? "text-ink-dim"} />;
 }
 
 const LAUNDRY_STYLE: Record<string, { cls: string; icon: LucideIcon }> = {
-  ok: { cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30", icon: Shirt },
-  caution: { cls: "bg-amber-500/15 text-amber-300 border-amber-500/30", icon: Umbrella },
-  no: { cls: "bg-rose-500/15 text-rose-300 border-rose-500/30", icon: Umbrella },
-  unknown: { cls: "bg-slate-700/40 text-slate-400 border-slate-600/40", icon: HelpCircle },
+  ok: { cls: "bg-prog-500/15 text-prog-300 border-prog/30", icon: Shirt },
+  caution: { cls: "bg-act/15 text-act-300 border-act/30", icon: Umbrella },
+  no: { cls: "bg-risk/15 text-risk border-risk/30", icon: Umbrella },
+  unknown: { cls: "bg-hairline/40 text-ink-dim border-ink-faint/40", icon: HelpCircle },
 };
 
 function hhmm(iso: string): string {
@@ -66,10 +66,10 @@ export function WeatherPanel() {
     staleTime: 30 * 60 * 1000, // 30分(バックエンドは1hキャッシュ)
   });
 
-  const box = "rounded-xl border border-slate-700/50 bg-slate-800/40 p-4";
-  if (isLoading) return <div className={`${box} text-sm text-slate-400`}>天気を読み込み中…</div>;
+  const box = "rounded-xl border border-hairline/50 bg-panel/40 p-4";
+  if (isLoading) return <div className={`${box} text-sm text-ink-dim`}>天気を読み込み中…</div>;
   if (isError || !data || !data.available) {
-    return <div className={`${box} text-sm text-slate-400`}>天気を取得できませんでした</div>;
+    return <div className={`${box} text-sm text-ink-dim`}>天気を取得できませんでした</div>;
   }
 
   const s = data.summary;
@@ -81,8 +81,8 @@ export function WeatherPanel() {
         <div className="flex items-start gap-3">
           <WIcon icon={s.icon} size={40} />
           <div className="flex-1">
-            <div className="text-base font-medium text-slate-100">{s.label}</div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm tabular-nums text-slate-300">
+            <div className="text-base font-medium text-ink">{s.label}</div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm tabular-nums text-ink-dim">
               <span className="whitespace-nowrap">
                 <span className="text-rose-300">{s.t_max != null ? `${Math.round(s.t_max)}°` : "--"}</span>
                 {" / "}
@@ -107,7 +107,7 @@ export function WeatherPanel() {
                       ? "text-rose-400"
                       : s.wind.level === "caution"
                         ? "text-amber-300"
-                        : "text-slate-400"
+                        : "text-ink-dim"
                   }`}
                   title="風向・風速(突風)。方角は乾燥効率には影響しません"
                 >
@@ -125,7 +125,7 @@ export function WeatherPanel() {
 
       {data.hourly.length > 0 && (
         <div>
-          <div className="mb-1 text-[10px] text-slate-500">
+          <div className="mb-1 text-[10px] text-ink-faint">
             時間別: 棒の高さ=降水確率 / 色=降水量(濃いほど強い) / 数値は mm
           </div>
           <div className="-mx-1 overflow-x-auto px-1">
@@ -139,7 +139,7 @@ export function WeatherPanel() {
       )}
 
       {data.daily.length > 0 && (
-        <div className="space-y-1 border-t border-slate-700/40 pt-3">
+        <div className="space-y-1 border-t border-hairline/40 pt-3">
           {data.daily.map((d, i) => (
             <DayRow key={d.date} d={d} today={i === 0} />
           ))}
@@ -176,7 +176,7 @@ function LaundryBadge({ laundry }: { laundry: LaundryAdvice }) {
         <Icon size={13} />
         <span>{laundry.now_text}</span>
       </div>
-      <div className="mt-1 text-[11px] tabular-nums text-slate-400">{laundry.window_text}</div>
+      <div className="mt-1 text-[11px] tabular-nums text-ink-dim">{laundry.window_text}</div>
     </div>
   );
 }
@@ -187,7 +187,7 @@ function LaundryNextLine({ laundry }: { laundry: LaundryAdvice }) {
   if (n === undefined) return null; // 旧データ(next 無し)
   if (!n) {
     return (
-      <div className="rounded-lg bg-slate-800/40 px-3 py-2 text-[11px] text-slate-400">
+      <div className="rounded-lg bg-panel/40 px-3 py-2 text-[11px] text-ink-dim">
         次に干せる好機: 当面なし(雨/日射不足が続く)。室内干し + 除湿/送風を推奨。
       </div>
     );
@@ -196,18 +196,18 @@ function LaundryNextLine({ laundry }: { laundry: LaundryAdvice }) {
   return (
     <div
       className={`rounded-lg px-3 py-2 text-[11px] leading-relaxed ${
-        n.within_5h ? "bg-emerald-900/20 text-emerald-200" : "bg-amber-900/20 text-amber-200"
+        n.within_5h ? "bg-prog-900/20 text-prog-300" : "bg-act-700/20 text-act-300"
       }`}
     >
       <span className="font-medium">次の狙い目 {n.start_label}</span>
-      <span className="text-slate-400"> に干すと </span>
+      <span className="text-ink-dim"> に干すと </span>
       <span className="font-medium">{n.dry_by_label} 頃に乾く</span>
-      <span className="text-slate-400"> (約{hours}h)</span>
+      <span className="text-ink-dim"> (約{hours}h)</span>
       {!n.within_5h && (
         <span className="ml-1 font-medium">⚠ 5h超=生乾き臭/カビ注意</span>
       )}
       {n.wind_caution && (
-        <span className="ml-1 font-medium text-amber-300">・強風注意(しっかり留める)</span>
+        <span className="ml-1 font-medium text-act-300">・強風注意(しっかり留める)</span>
       )}
     </div>
   );
@@ -226,13 +226,13 @@ function HourCell({ h }: { h: WeatherHourly }) {
   const prob = h.precip_prob ?? 0;
   return (
     <div className="flex w-10 shrink-0 flex-col items-center gap-1 text-center">
-      <span className="text-[10px] tabular-nums text-slate-400">{hhmm(h.time)}</span>
+      <span className="text-[10px] tabular-nums text-ink-dim">{hhmm(h.time)}</span>
       <WIcon icon={h.icon} size={16} />
-      <span className="text-[11px] tabular-nums text-slate-200">
+      <span className="text-[11px] tabular-nums text-ink">
         {h.temp != null ? `${Math.round(h.temp)}°` : "--"}
       </span>
       <div
-        className="relative h-12 w-3 overflow-hidden rounded bg-slate-700/40"
+        className="relative h-12 w-3 overflow-hidden rounded bg-hairline/40"
         title={
           `降水確率 ${h.precip_prob ?? "?"}% / 降水量 ${h.precip != null ? `${h.precip.toFixed(1)}mm` : "?"}`
         }
@@ -256,17 +256,17 @@ function HourCell({ h }: { h: WeatherHourly }) {
 function DayRow({ d, today }: { d: WeatherDaily; today: boolean }) {
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className={`w-8 ${today ? "font-medium text-slate-100" : "text-slate-400"}`}>
+      <span className={`w-8 ${today ? "font-medium text-ink" : "text-ink-dim"}`}>
         {today ? "今日" : weekday(d.date)}
       </span>
       <WIcon icon={d.icon} size={16} />
-      <span className="flex-1 text-xs text-slate-300">{d.label}</span>
+      <span className="flex-1 text-xs text-ink-dim">{d.label}</span>
       <span className="w-12 text-right text-xs tabular-nums text-sky-400">
         {d.precip_prob_max != null ? `${d.precip_prob_max}%` : "--"}
       </span>
       <span className="w-16 text-right tabular-nums">
         <span className="text-rose-300">{d.t_max != null ? `${Math.round(d.t_max)}°` : "--"}</span>
-        <span className="text-slate-500">/</span>
+        <span className="text-ink-faint">/</span>
         <span className="text-sky-300">{d.t_min != null ? `${Math.round(d.t_min)}°` : "--"}</span>
       </span>
     </div>

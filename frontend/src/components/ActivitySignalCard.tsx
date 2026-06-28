@@ -13,14 +13,14 @@ export function ActivitySignalCard() {
   if (!data) return null;
 
   return (
-    <section className="space-y-3 rounded-2xl bg-gradient-to-b from-slate-900/80 to-slate-900/40 p-4 sm:p-5 ring-1 ring-slate-800">
+    <section className="space-y-3 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       <div className="flex items-center gap-2">
         <Activity size={16} className="text-sky-300" />
-        <h3 className="text-sm tracking-wide text-slate-100">活動・外出 (推測)</h3>
+        <h3 className="text-sm tracking-wide text-ink">活動・外出 (推測)</h3>
       </div>
-      <p className="text-[11px] leading-relaxed text-slate-500">
+      <p className="text-[11px] leading-relaxed text-ink-faint">
         Garmin と iPhone を相互補完して「動いたか・外に出たか」を推測。どちらのデータも無い日は
-        <span className="text-slate-400"> 不明</span> (活動ゼロとは区別)。
+        <span className="text-ink-dim"> 不明</span> (活動ゼロとは区別)。
       </p>
       <ul className="space-y-1">
         {data.days.map((d) => (
@@ -32,10 +32,10 @@ export function ActivitySignalCard() {
 }
 
 const CONF_LABEL: Record<string, { text: string; cls: string }> = {
-  high: { text: "高", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-600/30" },
+  high: { text: "高", cls: "bg-prog-500/15 text-prog-300 ring-prog/30" },
   medium: { text: "中", cls: "bg-sky-500/15 text-sky-300 ring-sky-600/30" },
-  low: { text: "低", cls: "bg-slate-500/15 text-slate-400 ring-slate-600/30" },
-  none: { text: "不明", cls: "bg-slate-700/30 text-slate-500 ring-slate-700/40" },
+  low: { text: "低", cls: "bg-ink-faint/15 text-ink-dim ring-ink-faint/30" },
+  none: { text: "不明", cls: "bg-hairline/30 text-ink-faint ring-hairline/40" },
 };
 
 function DayRow({ d }: { d: ActivityDay }) {
@@ -44,16 +44,16 @@ function DayRow({ d }: { d: ActivityDay }) {
   const md = d.date.slice(5); // MM-DD
 
   return (
-    <li className="flex items-center gap-2 rounded-lg bg-slate-950/40 px-3 py-1.5 text-[12px] ring-1 ring-slate-800/50">
-      <span className="w-12 shrink-0 tabular-nums text-slate-500">{md}</span>
+    <li className="flex items-center gap-2 rounded-lg bg-void/40 px-3 py-1.5 text-[12px] ring-1 ring-panel/50">
+      <span className="w-12 shrink-0 tabular-nums text-ink-faint">{md}</span>
       {unknown ? (
-        <span className="flex flex-1 items-center gap-1.5 text-slate-500">
+        <span className="flex flex-1 items-center gap-1.5 text-ink-faint">
           <HelpCircle size={14} /> 不明 (記録なし)
         </span>
       ) : (
         <>
           <span
-            className={`flex items-center gap-1 ${d.moved ? "text-emerald-300" : "text-slate-600"}`}
+            className={`flex items-center gap-1 ${d.moved ? "text-prog-300" : "text-ink-faint"}`}
             title="動いたか"
           >
             <Footprints size={14} />
@@ -61,7 +61,7 @@ function DayRow({ d }: { d: ActivityDay }) {
           </span>
           <span
             className={`ml-1 flex items-center gap-1 ${
-              d.went_outside ? "text-amber-300" : "text-slate-600"
+              d.went_outside ? "text-act-300" : "text-ink-faint"
             }`}
             title="外に出たか"
           >
@@ -69,7 +69,7 @@ function DayRow({ d }: { d: ActivityDay }) {
             {d.went_outside ? "外出" : "屋内?"}
           </span>
           {d.distance_m != null && d.distance_m > 0 && (
-            <span className="text-[10px] tabular-nums text-slate-500">
+            <span className="text-[10px] tabular-nums text-ink-faint">
               {(d.distance_m / 1000).toFixed(1)}km
             </span>
           )}

@@ -41,7 +41,7 @@ export function SettingsTab({
   });
 
   if (!s.data) {
-    return <div className="rounded-2xl bg-slate-900/40 p-4 text-xs text-slate-500">読込中…</div>;
+    return <div className="rounded-xl bg-hull/40 p-4 text-xs text-ink-faint">読込中…</div>;
   }
   const d = s.data;
   const ov = d.overrides;
@@ -50,28 +50,28 @@ export function SettingsTab({
 
   return (
     <div className="space-y-3">
-      <p className="px-1 text-[11px] leading-relaxed text-slate-500">
-        計算に効く体質・生活パラメータ。<span className="text-slate-400">グレーの値は自動</span>
+      <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
+        計算に効く体質・生活パラメータ。<span className="text-ink-dim">グレーの値は自動</span>
         （派生・デフォルト）で、迷ったらそのままでOK。値を入れると個人設定になり、× で自動に戻せます。
       </p>
 
       <NotificationSettings />
 
       {/* 身体・基礎 */}
-      <Group icon={<User size={14} className="text-emerald-300" />} title="身体・基礎"
+      <Group icon={<User size={14} className="text-prog-300" />} title="身体・基礎"
         summary={`${d.age}歳 / ${d.height_cm}cm`}>
         <DateField label="生年月日" value={d.birth_date} auto={isAuto("birth_date")}
           hint="入れておくと年齢を都度自動計算 (BMR・最大心拍に反映)"
           onSave={(v) => set({ birth_date: v })} onClear={() => set({ birth_date: null })} />
         <Derived label="年齢 (自動算出)" value={`${d.age} 歳`} />
-        <div className="pt-1 text-[11px] text-slate-500">
+        <div className="pt-1 text-[11px] text-ink-faint">
           身長・性別・目標体型は下のセクションで設定します。
         </div>
         <PhysiqueTargetSection current={current} />
       </Group>
 
       {/* 心拍ゾーン */}
-      <Group icon={<HeartPulse size={14} className="text-rose-300" />} title="心拍ゾーン"
+      <Group icon={<HeartPulse size={14} className="text-risk" />} title="心拍ゾーン"
         summary={`安静${d.resting_hr} / 最大${d.max_hr}`}>
         <NumberField label="安静時心拍" value={d.resting_hr} auto={isAuto("resting_hr")} unit="bpm"
           min={30} max={120} hint="Karvonen 心拍ゾーンの下限"
@@ -83,7 +83,7 @@ export function SettingsTab({
       </Group>
 
       {/* カフェイン PK */}
-      <Group icon={<Coffee size={14} className="text-amber-300" />} title="カフェイン体質"
+      <Group icon={<Coffee size={14} className="text-act-300" />} title="カフェイン体質"
         summary={`半減期 ${d.caffeine_half_life_h.toFixed(1)}h`}>
         <Toggle label="喫煙している" checked={d.caffeine_smoker} auto={isAuto("caffeine_smoker")}
           hint="CYP1A2 誘導で半減期が短くなる (×0.6)"
@@ -143,7 +143,7 @@ export function SettingsTab({
       </Group>
 
       {/* 栄養 */}
-      <Group icon={<Utensils size={14} className="text-lime-300" />} title="栄養目標"
+      <Group icon={<Utensils size={14} className="text-prog-300" />} title="栄養目標"
         summary={`P ${d.protein_g_per_kg}g/kg · 水 ${d.water_ml_per_kg}mL/kg`}>
         <NumberField label="タンパク質" value={d.protein_g_per_kg} auto={isAuto("protein_g_per_kg")}
           unit="g/kg" min={0.5} max={3} step={0.1} hint="体重あたりのタンパク質目標"
@@ -154,7 +154,7 @@ export function SettingsTab({
       </Group>
 
       {save.isError && (
-        <p className="px-1 text-[11px] text-rose-400">保存に失敗しました。値の範囲を確認してください。</p>
+        <p className="px-1 text-[11px] text-risk">保存に失敗しました。値の範囲を確認してください。</p>
       )}
     </div>
   );
@@ -172,13 +172,13 @@ function Group({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-3 rounded-xl bg-hull/40 p-4">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
         className="flex w-full items-center gap-1.5 text-left">
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         {icon}
-        <span className="text-xs uppercase tracking-wider text-slate-300">{title}</span>
-        {summary && <span className="ml-auto text-[11px] tabular-nums text-slate-500">{summary}</span>}
+        <span className="text-xs uppercase tracking-wider text-ink-dim">{title}</span>
+        {summary && <span className="ml-auto text-[11px] tabular-nums text-ink-faint">{summary}</span>}
       </button>
       {open && <div className="space-y-3">{children}</div>}
     </section>
@@ -189,8 +189,8 @@ function FieldShell({ label, hint, children }: { label: string; hint?: string; c
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <div className="text-xs text-slate-200">{label}</div>
-        {hint && <div className="text-[10px] leading-tight text-slate-500">{hint}</div>}
+        <div className="text-xs text-ink">{label}</div>
+        {hint && <div className="text-[10px] leading-tight text-ink-faint">{hint}</div>}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">{children}</div>
     </div>
@@ -201,14 +201,14 @@ function FieldShell({ label, hint, children }: { label: string; hint?: string; c
 function AutoTrailing({ auto, onClear }: { auto: boolean; onClear: () => void }) {
   if (auto) {
     return (
-      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-slate-500">
+      <span className="rounded bg-panel px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-ink-faint">
         自動
       </span>
     );
   }
   return (
     <button type="button" onClick={onClear} title="自動に戻す"
-      className="rounded px-1 text-xs text-slate-500 hover:text-rose-400">
+      className="rounded px-1 text-xs text-ink-faint hover:text-risk">
       ×
     </button>
   );
@@ -243,11 +243,11 @@ function NumberField({
         onChange={(e) => setStr(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        className={`w-20 rounded border bg-slate-900 px-2 py-1 text-right text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
-          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        className={`w-20 rounded border bg-hull px-2 py-1 text-right text-xs tabular-nums focus:border-act focus:outline-none ${
+          auto ? "border-panel italic text-ink-faint" : "border-hairline text-ink"
         }`}
       />
-      {unit && <span className="w-12 text-[10px] text-slate-500">{unit}</span>}
+      {unit && <span className="w-12 text-[10px] text-ink-faint">{unit}</span>}
       <AutoTrailing auto={auto} onClear={onClear} />
     </FieldShell>
   );
@@ -261,8 +261,8 @@ function DateField({ label, value, auto, hint, onSave, onClear }: {
     <FieldShell label={label} hint={hint}>
       <input type="date" value={value ?? ""} max={new Date().toISOString().slice(0, 10)}
         onChange={(e) => { if (e.target.value) onSave(e.target.value); }}
-        className={`rounded border bg-slate-900 px-2 py-1 text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
-          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        className={`rounded border bg-hull px-2 py-1 text-xs tabular-nums focus:border-act focus:outline-none ${
+          auto ? "border-panel italic text-ink-faint" : "border-hairline text-ink"
         }`}
       />
       <AutoTrailing auto={auto} onClear={onClear} />
@@ -278,8 +278,8 @@ function TimeField({ label, value, auto, hint, onSave, onClear }: {
     <FieldShell label={label} hint={hint}>
       <input type="time" value={value}
         onChange={(e) => { if (e.target.value) onSave(e.target.value); }}
-        className={`rounded border bg-slate-900 px-2 py-1 text-xs tabular-nums focus:border-amber-500 focus:outline-none ${
-          auto ? "border-slate-800 italic text-slate-500" : "border-slate-700 text-slate-200"
+        className={`rounded border bg-hull px-2 py-1 text-xs tabular-nums focus:border-act focus:outline-none ${
+          auto ? "border-panel italic text-ink-faint" : "border-hairline text-ink"
         }`}
       />
       <AutoTrailing auto={auto} onClear={onClear} />
@@ -297,10 +297,10 @@ function Toggle({ label, checked, auto, hint, onChange, onClear }: {
     <FieldShell label={label} hint={hint}>
       <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
         className={`relative h-5 w-9 rounded-full transition-colors ${
-          auto ? "bg-slate-800 ring-1 ring-slate-700" : on ? "bg-emerald-500/80" : "bg-slate-700"
+          auto ? "bg-panel ring-1 ring-hairline" : on ? "bg-prog-500/80" : "bg-hairline"
         }`}>
         <span className={`absolute top-0.5 h-4 w-4 rounded-full transition-transform ${
-          auto ? "translate-x-0.5 bg-slate-600" : on ? "translate-x-4 bg-white" : "translate-x-0.5 bg-white"
+          auto ? "translate-x-0.5 bg-ink-faint" : on ? "translate-x-4 bg-white" : "translate-x-0.5 bg-white"
         }`} />
       </button>
       <AutoTrailing auto={auto} onClear={onClear} />
@@ -319,7 +319,7 @@ function Segmented({ label, value, auto, options, hint, onChange, onClear }: {
 }) {
   return (
     <FieldShell label={label} hint={hint}>
-      <div className="flex rounded-lg bg-slate-800/70 p-0.5">
+      <div className="flex rounded-lg bg-panel/70 p-0.5">
         {options.map((o) => {
           const active = value === o.value;
           return (
@@ -327,9 +327,9 @@ function Segmented({ label, value, auto, options, hint, onChange, onClear }: {
               className={`rounded-md px-2.5 py-1 text-xs ${
                 active
                   ? auto
-                    ? "bg-slate-700/60 italic text-slate-400"
-                    : "bg-slate-600 text-slate-100"
-                  : "text-slate-400"
+                    ? "bg-hairline/60 italic text-ink-dim"
+                    : "bg-ink-faint text-ink"
+                  : "text-ink-dim"
               }`}>
               {o.label}
             </button>
@@ -343,9 +343,9 @@ function Segmented({ label, value, auto, options, hint, onChange, onClear }: {
 
 function Derived({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="font-mono text-sm tabular-nums text-emerald-200">{value}</div>
+    <div className="rounded-xl border border-panel bg-hull/40 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-ink-faint">{label}</div>
+      <div className="telemetry-num text-sm tabular-nums text-prog-300">{value}</div>
     </div>
   );
 }

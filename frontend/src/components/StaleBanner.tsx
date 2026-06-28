@@ -78,10 +78,10 @@ function Banner({
 }) {
   const style =
     tone === "rose"
-      ? "border-rose-700/70 bg-rose-900/30 text-rose-100"
+      ? "border-risk/70 bg-risk/30 text-risk"
       : tone === "orange"
-      ? "border-orange-700/60 bg-orange-900/25 text-orange-200"
-      : "border-amber-700/50 bg-amber-900/20 text-amber-200";
+      ? "border-act-700/60 bg-act-700/25 text-act-300"
+      : "border-act-700/50 bg-act-700/20 text-act-300";
   return (
     <div
       className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-2 ${style}`}

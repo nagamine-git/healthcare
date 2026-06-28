@@ -22,9 +22,9 @@ const CHECKS: { key: LearningCheckField; label: string; hint: string }[] = [
 ];
 
 const PACE_LABEL: Record<string, { text: string; cls: string }> = {
-  not_started: { text: "未開始", cls: "text-slate-500" },
-  behind: { text: "遅れ気味 — でも続いてる", cls: "text-amber-400" },
-  on_track: { text: "順調", cls: "text-emerald-400" },
+  not_started: { text: "未開始", cls: "text-ink-faint" },
+  behind: { text: "遅れ気味 — でも続いてる", cls: "text-act-300" },
+  on_track: { text: "順調", cls: "text-prog-300" },
   ahead: { text: "前倒し", cls: "text-sky-400" },
 };
 
@@ -40,8 +40,8 @@ function SectionRow({
   return (
     <div className={`rounded-md px-1.5 py-1.5 ${s.done ? "opacity-60" : ""}`}>
       <div className="flex items-baseline gap-2 text-[11px]">
-        <span className="w-8 shrink-0 tabular-nums text-slate-500">{s.id}</span>
-        <span className={`min-w-0 flex-1 ${s.done ? "text-slate-400 line-through" : "text-slate-300"}`}>{s.title}</span>
+        <span className="w-8 shrink-0 tabular-nums text-ink-faint">{s.id}</span>
+        <span className={`min-w-0 flex-1 ${s.done ? "text-ink-dim line-through" : "text-ink-dim"}`}>{s.title}</span>
       </div>
       {/* 最下層の 2 点チェック (読了 / 説明できた)。モバイルでも折り返す */}
       <div className="mt-1 flex flex-wrap gap-1 pl-10">
@@ -51,8 +51,8 @@ function SectionRow({
             <button key={c.key} type="button" disabled={pending} title={c.hint}
               onClick={() => onCheck(s.id, c.key, !done)}
               className={`flex h-6 items-center gap-0.5 rounded-md border px-1.5 text-[10px] transition-colors ${
-                done ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
-                     : "border-slate-700 bg-slate-900/60 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>
+                done ? "border-prog-500/60 bg-prog-500/20 text-prog-300"
+                     : "border-hairline bg-hull/60 text-ink-faint hover:border-panel hover:text-ink-dim"}`}>
               {done && <Check size={10} className="shrink-0" />}
               {c.label}
             </button>
@@ -82,23 +82,23 @@ function ChapterRow({
   // 今日のノルマ帯で左ボーダーを色分け: 楽観(最低)=sky / 悲観(安全)=amber / その先=灰
   const BAND_BORDER: Record<string, string> = {
     min: "border-l-2 border-sky-400/70",
-    safe: "border-l-2 border-amber-400/70",
-    later: "border-l-2 border-slate-700/60",
-    done: "border-l-2 border-emerald-500/50",
+    safe: "border-l-2 border-act-700/70",
+    later: "border-l-2 border-hairline/60",
+    done: "border-l-2 border-prog-500/50",
   };
   const bandCls = ch.band ? BAND_BORDER[ch.band] ?? "" : "";
   return (
-    <div className={`rounded-lg ${bandCls} ${isCurrent ? "bg-slate-800/80 ring-1 ring-emerald-500/40" : ""} ${ch.complete ? "opacity-60" : ""}`}>
+    <div className={`rounded-lg ${bandCls} ${isCurrent ? "bg-panel/80 ring-1 ring-prog-500/40" : ""} ${ch.complete ? "opacity-60" : ""}`}>
       <button type="button" onClick={() => setOpen((v) => !v)}
         className="flex w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left">
-        {open ? <ChevronUp size={12} className="shrink-0 text-slate-500" /> : <ChevronDown size={12} className="shrink-0 text-slate-500" />}
-        <span className={`w-9 shrink-0 text-[11px] tabular-nums ${ch.milestone ? "font-semibold text-amber-300" : "text-slate-400"}`}>ch{ch.chapter}</span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">
+        {open ? <ChevronUp size={12} className="shrink-0 text-ink-faint" /> : <ChevronDown size={12} className="shrink-0 text-ink-faint" />}
+        <span className={`w-9 shrink-0 text-[11px] tabular-nums ${ch.milestone ? "font-semibold text-act-300" : "text-ink-dim"}`}>ch{ch.chapter}</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
           {ch.title}
-          {ch.milestone && <span className="ml-1 text-[10px] text-amber-400/80">⛰ 山場</span>}
+          {ch.milestone && <span className="ml-1 text-[10px] text-act-300/80">⛰ 山場</span>}
         </span>
-        {ch.complete && <Check size={12} className="shrink-0 text-emerald-400" />}
-        <span className={`shrink-0 text-[10px] tabular-nums ${ch.section_done === ch.section_total ? "text-emerald-400" : "text-slate-500"}`}>
+        {ch.complete && <Check size={12} className="shrink-0 text-prog-300" />}
+        <span className={`shrink-0 text-[10px] tabular-nums ${ch.section_done === ch.section_total ? "text-prog-300" : "text-ink-faint"}`}>
           {ch.section_done}/{ch.section_total}節
         </span>
       </button>
@@ -117,20 +117,20 @@ function ChapterRow({
                 title={`rustlings ${ch.rustlings_topic ?? ""} を解いた`}
                 onClick={() => onRustlings(ch.chapter, !ch.rustlings)}
                 className={`flex h-6 items-center gap-0.5 rounded-md border px-1.5 text-[10px] transition-colors ${
-                  ch.rustlings ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
-                               : "border-slate-700 bg-slate-900/60 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>
+                  ch.rustlings ? "border-prog-500/60 bg-prog-500/20 text-prog-300"
+                               : "border-hairline bg-hull/60 text-ink-faint hover:border-panel hover:text-ink-dim"}`}>
                 {ch.rustlings && <Check size={10} className="shrink-0" />}
                 Rustlings
               </button>
-              <span className="min-w-0 flex-1 truncate text-[9px] text-slate-500">{ch.rustlings_topic}</span>
+              <span className="min-w-0 flex-1 truncate text-[9px] text-ink-faint">{ch.rustlings_topic}</span>
             </div>
           )}
           {/* 口頭試問 — 「説明できた」をClaudeが判定して付与 */}
           <button type="button" onClick={() => onQuiz(ch)}
             className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border py-2 text-[11px] transition-colors ${
               ch.explained
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"}`}>
+                ? "border-prog-500/40 bg-prog-500/10 text-prog-300"
+                : "border-act-700/40 bg-act/10 text-act-300 hover:bg-act/20"}`}>
             <GraduationCap size={13} />
             {ch.explained ? "理解度クリア済み — もう一度挑戦" : "理解度テストで「説明できた」を判定"}
           </button>
@@ -151,27 +151,27 @@ function PlanEditor({ s }: { s: import("../lib/api").LearningState }) {
   const targetVal = s.projection?.target_date ?? "";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
-      <label className="flex items-center gap-1 text-slate-400">
+      <label className="flex items-center gap-1 text-ink-dim">
         開始日
         <input type="date" value={startVal}
           onChange={(e) => save.mutate(e.target.value ? { started_on: e.target.value } : { clear_started: true })}
-          className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-slate-200" />
+          className="rounded border border-hairline bg-panel px-1.5 py-0.5 text-ink" />
       </label>
-      <label className="flex items-center gap-1 text-slate-400">
+      <label className="flex items-center gap-1 text-ink-dim">
         目標完了日
         <input type="date" value={targetVal}
           onChange={(e) => save.mutate(e.target.value ? { target_date: e.target.value } : { clear_target: true })}
-          className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-slate-200" />
+          className="rounded border border-hairline bg-panel px-1.5 py-0.5 text-ink" />
       </label>
     </div>
   );
 }
 
 const GOAL_LABEL: Record<string, { text: string; cls: string }> = {
-  safe: { text: "✓ 達成ほぼ確実", cls: "text-emerald-300" },
+  safe: { text: "✓ 達成ほぼ確実", cls: "text-prog-300" },
   likely: { text: "達成見込み", cls: "text-sky-300" },
-  at_risk: { text: "⚠ ギリギリ", cls: "text-amber-300" },
-  unlikely: { text: "⚠ 目標に届かない見込み", cls: "text-rose-300" },
+  at_risk: { text: "⚠ ギリギリ", cls: "text-act-300" },
+  unlikely: { text: "⚠ 目標に届かない見込み", cls: "text-risk" },
 };
 
 function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) {
@@ -188,7 +188,7 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
   const x = (t: number) => padL + ((t - tMin) / (tMax - tMin)) * (W - padL - padR);
   const y = (pct: number) => padT + (1 - pct / 100) * (H - padT - padB);
   const confLabel = { none: "予測待ち", low: "精度 低", medium: "精度 中", high: "精度 高" }[p.confidence];
-  const confColor = { none: "text-slate-600", low: "text-slate-500", medium: "text-sky-300", high: "text-emerald-300" }[p.confidence];
+  const confColor = { none: "text-ink-faint", low: "text-ink-faint", medium: "text-sky-300", high: "text-prog-300" }[p.confidence];
   const fmt = (iso: string | null) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : "--");
   const showProj = p.pct < 100 && p.done_units > 0;
   const goal = p.goal_status ? GOAL_LABEL[p.goal_status] : null;
@@ -197,9 +197,9 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
     ? `${x(today)},${y(p.pct)} ${x(etaBest)},${y(100)} ${x(etaWorst)},${y(100)}`
     : "";
   return (
-    <div className="rounded-xl bg-slate-900/60 p-2.5">
+    <div className="rounded-xl bg-hull/60 p-2.5">
       <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
-        <span className="text-slate-300">完走予測</span>
+        <span className="text-ink-dim">完走予測</span>
         <span className="ml-auto flex items-baseline gap-2">
           {goal && <span className={`text-[10px] ${goal.cls}`}>{goal.text}</span>}
           <span className={`text-[10px] ${confColor}`}>{confLabel}{p.done_units > 0 ? ` (n=${p.done_units})` : ""}</span>
@@ -232,29 +232,29 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
         {showProj && <text x={W - padR} y={H - 4} fontSize={9} fill="#fbbf24" textAnchor="end">完走 {fmt(p.eta_best)}〜{fmt(p.eta_worst)}</text>}
       </svg>
       {/* 凡例 */}
-      <div className="mt-0.5 flex flex-wrap gap-x-3 text-[9px] text-slate-500">
-        <span><span className="text-amber-500">━</span> 実測</span>
-        <span><span className="text-amber-400">╌</span> 標準ペース</span>
-        <span><span className="text-amber-400/70">┈</span> 好調〜不調(±0.7×)</span>
-        {targetTs && <span><span className="text-slate-400">━</span> 目標</span>}
+      <div className="mt-0.5 flex flex-wrap gap-x-3 text-[9px] text-ink-faint">
+        <span><span className="text-act-300">━</span> 実測</span>
+        <span><span className="text-act-300">╌</span> 標準ペース</span>
+        <span><span className="text-act-300/70">┈</span> 好調〜不調(±0.7×)</span>
+        {targetTs && <span><span className="text-ink-dim">━</span> 目標</span>}
       </div>
-      <p className="mt-0.5 text-[10px] text-slate-400">
+      <p className="mt-0.5 text-[10px] text-ink-dim">
         {fmt(p.started_on)}開始 · {p.pct}%完了 ({p.done_units}/{p.total_units}チェック){p.done_units > 0 ? ` · 平均週${p.pace_per_week}チェック` : ""}
         {showProj ? ` → 標準${fmt(p.eta_normal)}頃 (好調${fmt(p.eta_best)}〜不調${fmt(p.eta_worst)})` : p.pct >= 100 ? " → 完走!" : p.done_units === 0 ? " → チェックすると予測開始" : ""}
       </p>
       {/* 今日のノルマ 2 段階: 楽観ライン(最低) と 悲観ライン(安全)。両方オンスケ */}
       {p.target_date && p.target_today_min && p.target_today_safe && (
-        <div className="mt-1.5 space-y-1 rounded-lg bg-slate-900/60 px-2.5 py-1.5">
-          <div className="text-[10px] text-slate-400">今日のノルマ (目標{fmt(p.target_date)}まで{p.days_left}日)</div>
+        <div className="mt-1.5 space-y-1 rounded-lg bg-hull/60 px-2.5 py-1.5">
+          <div className="text-[10px] text-ink-dim">今日のノルマ (目標{fmt(p.target_date)}まで{p.days_left}日)</div>
           <div className="flex items-baseline gap-1.5 text-[11px]">
             <span className="shrink-0 rounded bg-sky-500/20 px-1 text-[9px] text-sky-300">楽観 最低</span>
             <span className="min-w-0 flex-1 truncate text-sky-100">{p.target_today_min.label}</span>
           </div>
           <div className="flex items-baseline gap-1.5 text-[11px]">
-            <span className="shrink-0 rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">悲観 安全</span>
-            <span className="min-w-0 flex-1 truncate text-amber-100">{p.target_today_safe.label}</span>
+            <span className="shrink-0 rounded bg-act/20 px-1 text-[9px] text-act-300">悲観 安全</span>
+            <span className="min-w-0 flex-1 truncate text-act-300">{p.target_today_safe.label}</span>
           </div>
-          <div className="text-[9px] text-slate-500">
+          <div className="text-[9px] text-ink-faint">
             楽観なら好調維持で間に合う最低ライン / 悲観なら不調でも間に合う安全ライン
           </div>
         </div>
@@ -287,8 +287,8 @@ export function LearningCard() {
 
   if (q.isLoading || !q.data) {
     return (
-      <section className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
-        <span className="text-xs text-slate-500">学習プランを読み込み中…</span>
+      <section className="space-y-2 rounded-2xl bg-hull/40 p-4">
+        <span className="text-xs text-ink-faint">学習プランを読み込み中…</span>
       </section>
     );
   }
@@ -309,10 +309,10 @@ export function LearningCard() {
   const onRustlings = (chapter: number, done: boolean) => rustlings.mutate({ chapter, done });
 
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-3 rounded-2xl bg-hull/40 p-4">
       <div className="flex items-center gap-1.5">
-        <BookOpen size={14} className="text-amber-300" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">
+        <BookOpen size={14} className="text-act-300" />
+        <span className="text-xs uppercase tracking-wider text-ink-dim">
           The Book 完走プラン
         </span>
         <span className={`text-[10px] ${pace.cls}`}>{pace.text}</span>
@@ -323,16 +323,16 @@ export function LearningCard() {
               {s.streak_sessions}回継続
             </span>
           )}
-          <span className="text-[11px] tabular-nums text-slate-400">
+          <span className="text-[11px] tabular-nums text-ink-dim">
             {s.done_count}/{s.total} 章
           </span>
         </span>
       </div>
 
       {/* 進捗バー */}
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+      <div className="h-1.5 overflow-hidden rounded-full bg-panel">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all"
+          className="h-full rounded-full bg-gradient-to-r from-act to-prog-500 transition-all"
           style={{ width: `${Math.max(pct, 2)}%` }}
         />
       </div>
@@ -342,23 +342,23 @@ export function LearningCard() {
       {s.projection && <ProjectionGraph p={s.projection} />}
 
       {s.completed ? (
-        <p className="text-sm font-semibold text-emerald-300">
+        <p className="text-sm font-semibold text-prog-300">
           🎉 完走！The Rust Book 全 {s.total} 章クリア。次は卒業制作へ。
         </p>
       ) : current ? (
         <>
-          <div className="text-[12px] text-slate-300">
-            今週の章: <span className="font-semibold text-slate-100">ch{current.chapter} {current.title}</span>
+          <div className="text-[12px] text-ink-dim">
+            今週の章: <span className="font-semibold text-ink">ch{current.chapter} {current.title}</span>
             {current.note && (
-              <p className="mt-0.5 text-[11px] text-amber-400/90">{current.note}</p>
+              <p className="mt-0.5 text-[11px] text-act-300/90">{current.note}</p>
             )}
           </div>
           {/* 章一覧の左ボーダー色 = 今日のノルマ帯 */}
           {s.projection?.target_today_safe && (
-            <div className="flex flex-wrap gap-x-3 text-[9px] text-slate-500">
+            <div className="flex flex-wrap gap-x-3 text-[9px] text-ink-faint">
               <span><span className="text-sky-400">▌</span>楽観ノルマ(最低)</span>
-              <span><span className="text-amber-400">▌</span>悲観ノルマ(安全)</span>
-              <span><span className="text-slate-600">▌</span>その先</span>
+              <span><span className="text-act-300">▌</span>悲観ノルマ(安全)</span>
+              <span><span className="text-ink-faint">▌</span>その先</span>
             </div>
           )}
           <div className="grid gap-1">
@@ -378,13 +378,13 @@ export function LearningCard() {
       ) : null}
 
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[10px] text-ink-faint">
           「説明できた」は Claude の口頭試問に合格してから
         </span>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-slate-300"
+          className="flex items-center gap-0.5 text-[10px] text-ink-faint hover:text-ink-dim"
         >
           {expanded ? (
             <>

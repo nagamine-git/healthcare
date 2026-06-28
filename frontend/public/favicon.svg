@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <rect width="512" height="512" rx="112" fill="#0a0e14"/>
   <g transform="translate(256 256)">
-    <circle r="180" fill="none" stroke="#1e293b" stroke-width="24"/>
-    <circle r="180" fill="none" stroke="#34d399" stroke-width="24"
-            stroke-dasharray="850 1131" stroke-linecap="round"
+    <circle r="184" fill="none" stroke="#243044" stroke-width="22"/>
+    <circle r="184" fill="none" stroke="#10b981" stroke-width="22"
+            stroke-dasharray="867 1156" stroke-linecap="round"
             transform="rotate(-90)"/>
-    <text text-anchor="middle" dominant-baseline="central"
-          font-family="ui-sans-serif,-apple-system,sans-serif"
-          font-size="180" font-weight="200" fill="#f1f5f9">H</text>
+    <!-- Ascend: 上昇する山形(A)。cockpit の prog グリーンで頂点を強調 -->
+    <path d="M -86 96 L 0 -104 L 86 96" fill="none" stroke="#e6edf3"
+          stroke-width="34" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M -44 12 L 44 12" fill="none" stroke="#10b981"
+          stroke-width="30" stroke-linecap="round"/>
   </g>
 </svg>

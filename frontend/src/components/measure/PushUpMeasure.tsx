@@ -59,9 +59,9 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
   if (lead > 0) {
     return (
       <div className="text-center">
-        <div className="text-sm text-slate-400">まもなく開始</div>
+        <div className="text-sm text-ink-dim">まもなく開始</div>
         <div className="mt-2 text-7xl font-bold tabular-nums text-sky-300">{lead}</div>
-        <div className="mt-4 text-xs text-slate-500">80bpm・下げ1拍/上げ1拍。胸が床から握りこぶし1個分まで。</div>
+        <div className="mt-4 text-xs text-ink-faint">80bpm・下げ1拍/上げ1拍。胸が床から握りこぶし1個分まで。</div>
       </div>
     );
   }
@@ -69,9 +69,9 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
   return (
     <div className="flex w-full max-w-sm flex-1 flex-col items-center justify-between py-4">
       <div className="text-center">
-        <div className="text-xs text-slate-400">回数</div>
-        <div className="text-8xl font-bold tabular-nums text-slate-100">{count}</div>
-        <div className="mt-1 text-[11px] text-amber-300/70">押し上げで息を吐く (息こらえ回避)</div>
+        <div className="text-xs text-ink-dim">回数</div>
+        <div className="text-8xl font-bold tabular-nums text-ink">{count}</div>
+        <div className="mt-1 text-[11px] text-act-300/70">押し上げで息を吐く (息こらえ回避)</div>
       </div>
       <button
         type="button"
@@ -83,7 +83,7 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
       <button
         type="button"
         onClick={finish}
-        className="w-full rounded-xl bg-slate-800 py-3 text-sm font-medium text-slate-200 hover:bg-slate-700"
+        className="w-full rounded-xl bg-panel py-3 text-sm font-medium text-ink hover:bg-panel"
       >
         終了して記録へ
       </button>

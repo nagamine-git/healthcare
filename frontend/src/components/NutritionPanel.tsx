@@ -47,11 +47,11 @@ export function NutritionPanel({ nutrition: n }: Props) {
   ];
 
   return (
-    <div className="rounded-2xl bg-slate-900/70 p-4 sm:p-6">
+    <div className="rounded-xl bg-hull/70 p-4 sm:p-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm tracking-wider text-slate-300">栄養</h3>
+        <h3 className="text-sm tracking-wider text-ink-dim">栄養</h3>
         {!n.logged_today && (
-          <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-[10px] text-slate-400">
+          <span className="rounded-full border border-hairline bg-panel/40 px-2 py-0.5 text-[10px] text-ink-dim">
             食事ログ未記録 (推定値)
           </span>
         )}
@@ -87,19 +87,19 @@ function NutritionRow({
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="min-w-0 truncate text-slate-300">
+        <span className="min-w-0 truncate text-ink-dim">
           {label}
-          {field.estimated && <span className="ml-1 text-slate-500">(推定)</span>}
+          {field.estimated && <span className="ml-1 text-ink-faint">(推定)</span>}
         </span>
-        <span className="whitespace-nowrap tabular-nums text-slate-300">
+        <span className="whitespace-nowrap tabular-nums text-ink-dim">
           {target ? formatRange(cur, target) : `${cur ?? "—"}`}
         </span>
       </div>
-      {sub && <div className="truncate text-[10px] text-slate-500">{sub}</div>}
+      {sub && <div className="truncate text-[10px] text-ink-faint">{sub}</div>}
       {target ? (
         <RangeBar current={cur} target={target} />
       ) : (
-        <div className="h-2 rounded-full bg-slate-800" />
+        <div className="h-2 rounded-full bg-panel" />
       )}
     </div>
   );
@@ -119,18 +119,18 @@ function MinorRow({
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex items-baseline justify-between gap-2 text-[11px]">
-        <span className="min-w-0 truncate text-slate-400">
+        <span className="min-w-0 truncate text-ink-dim">
           {label}
-          {field.estimated && <span className="ml-1 text-slate-600">(推)</span>}
+          {field.estimated && <span className="ml-1 text-ink-faint">(推)</span>}
         </span>
-        <span className="whitespace-nowrap tabular-nums text-slate-400">
+        <span className="whitespace-nowrap tabular-nums text-ink-dim">
           {target ? formatRange(cur, target) : cur != null ? Math.round(cur) : "—"}
         </span>
       </div>
       {target ? (
         <RangeBar current={cur} target={target} />
       ) : (
-        <div className="h-1 rounded-full bg-slate-800" />
+        <div className="h-1 rounded-full bg-panel" />
       )}
     </div>
   );
