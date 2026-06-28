@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Button, Panel } from "../components/ui/cockpit";
 import { CheckinCard } from "../components/CheckinCard";
+import { IgnitionTimer } from "../components/IgnitionTimer";
 import { kindLabel } from "../lib/labels";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -116,8 +117,16 @@ export function JournalPage({ onBack }: { onBack: () => void }) {
                 {move.isPending ? "生成中…" : winning ? "別案" : "出す"}
               </Button>
             </div>
+            {winning && (
+              <div className="pt-1">
+                <IgnitionTimer
+                  minutes={move.data?.ignite_minutes}
+                  kind={move.data?.ignite_kind}
+                />
+              </div>
+            )}
             <div className="text-[10px] text-ink-faint/60">
-              勝ちタスクを早く片付けるほど“今日は勝ち”。テーマ・タスクは紙で自分の言葉に書き換えてOK。
+              勝ちタスクを早く片付けるほど“今日は勝ち”。まず数分の着火でOK、テーマ・タスクは紙で書き換えてOK。
             </div>
           </div>
 

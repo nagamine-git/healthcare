@@ -58,10 +58,13 @@ async def post_one_move() -> dict:
     if move is None:
         # LLM 未設定/失敗時の構造化フォールバック
         name = dim.name_ja if dim else "理想"
+        kinds = state["kinds"]
         move = {
             "theme": name,
-            "move": f"{name}を前進させる行動を、今日ひとつ実行する。",
-            "if_then": "退勤したら、まず10分その行動に着手する。",
+            "move": f"まず5分、{name}を前進させる行動に着手する。",
+            "if_then": "退勤したら、まず5分その行動に着手する。",
+            "ignite_minutes": 5,
+            "ignite_kind": kinds[0] if kinds else "",
             "dimension_id": bottleneck_id or "",
             "rationale": "盲点に効く行動の着手だけでも前進になる。",
             "fallback": True,

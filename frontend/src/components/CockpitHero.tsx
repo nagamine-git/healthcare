@@ -4,6 +4,7 @@ import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
 import { kindLabel } from "../lib/labels";
 import { Button, Panel, Pill, Stat } from "./ui/cockpit";
 import { TopBookHint } from "./TopBookHint";
+import { IgnitionTimer } from "./IgnitionTimer";
 
 function go(hash: string) {
   window.location.hash = hash;
@@ -56,6 +57,12 @@ export function CockpitHero() {
             </p>
             <p className="text-sm text-act-300">if-then: {moveMut.data.if_then}</p>
             <p className="text-xs text-ink-faint">{moveMut.data.rationale}</p>
+            <div className="pt-1">
+              <IgnitionTimer
+                minutes={moveMut.data.ignite_minutes}
+                kind={moveMut.data.ignite_kind}
+              />
+            </div>
           </div>
         ) : (
           <p className="text-sm text-ink-dim">

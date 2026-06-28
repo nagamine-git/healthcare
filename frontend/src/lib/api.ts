@@ -1322,6 +1322,8 @@ export type BecomingOneMove = {
   theme?: string;
   move: string;
   if_then: string;
+  ignite_minutes?: number;
+  ignite_kind?: string;
   dimension_id: string;
   rationale: string;
   fallback?: boolean;
