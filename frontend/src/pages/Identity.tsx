@@ -353,7 +353,7 @@ const CATEGORY_LABEL: Record<IdentityRecommendation["category"], string> = {
 };
 const CATEGORY_BADGE: Record<IdentityRecommendation["category"], string> = {
   rewatch: "bg-act/20 text-act-300",
-  watchlist: "bg-sky-600/30 text-sky-200",
+  watchlist: "bg-info-700/30 text-info-300",
   new: "bg-prog-700/40 text-prog-300",
 };
 const KIND_LABEL: Record<string, string> = {
@@ -769,7 +769,7 @@ function LibraryPanel({
           </button>
         </div>
         {msg && <p className="text-[11px] text-prog-300/80">{msg}</p>}
-        {tagMsg && <p className="text-[11px] text-sky-300/80">{tagMsg}</p>}
+        {tagMsg && <p className="text-[11px] text-info-300/80">{tagMsg}</p>}
         <p className="text-[10px] leading-relaxed text-ink-faint">
           IMDb の Your Ratings / Watchlist ページで「Export」してダウンロードした
           <code className="mx-1 rounded bg-panel px-1">ratings.csv</code>/

@@ -15,7 +15,7 @@ export function ActivitySignalCard() {
   return (
     <section className="space-y-3 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       <div className="flex items-center gap-2">
-        <Activity size={16} className="text-sky-300" />
+        <Activity size={16} className="text-info-300" />
         <h3 className="text-sm tracking-wide text-ink">活動・外出 (推測)</h3>
       </div>
       <p className="text-[11px] leading-relaxed text-ink-faint">
@@ -33,7 +33,7 @@ export function ActivitySignalCard() {
 
 const CONF_LABEL: Record<string, { text: string; cls: string }> = {
   high: { text: "高", cls: "bg-prog-500/15 text-prog-300 ring-prog/30" },
-  medium: { text: "中", cls: "bg-sky-500/15 text-sky-300 ring-sky-600/30" },
+  medium: { text: "中", cls: "bg-info-500/15 text-info-300 ring-info-700/30" },
   low: { text: "低", cls: "bg-ink-faint/15 text-ink-dim ring-ink-faint/30" },
   none: { text: "不明", cls: "bg-hairline/30 text-ink-faint ring-hairline/40" },
 };

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
-from app.scoring.baselines import Baseline
+from app.scoring.baselines import Baseline, hrv_log_z
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -55,10 +55,9 @@ def circadian_factor(now: time, *, wake: time = time(6, 30)) -> float:
 
 
 def _hrv_component(value: float | None, baseline: Baseline | None) -> float | None:
-    if value is None or baseline is None:
+    z = hrv_log_z(value, baseline)
+    if z is None:
         return None
-    z = (float(value) - baseline.mean) / baseline.std
-    z = max(-2.0, min(2.0, z))
     return _clamp(50.0 + 25.0 * z)
 
 

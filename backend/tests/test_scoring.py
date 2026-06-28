@@ -4,7 +4,13 @@ import math
 
 import pytest
 
-from app.scoring.baselines import Baseline, build_baseline, ewma
+from app.scoring.baselines import (
+    HRV_MIN_BASELINE_N,
+    Baseline,
+    build_baseline,
+    ewma,
+    hrv_log_z,
+)
 from app.scoring.composite import composite_score
 from app.scoring.subscores import (
     body_battery_subscore,
@@ -115,6 +121,59 @@ def test_hrv_subscore_returns_none_when_baseline_missing():
 def test_hrv_subscore_returns_none_when_value_missing():
     bl = Baseline(mean=60.0, std=5.0, n=28)
     assert hrv_subscore(None, bl) is None
+
+
+# ----- HRV log-space z (対数正規対応) -----
+
+
+def test_build_baseline_populates_log_stats_for_positive_values():
+    bl = build_baseline([40.0, 50.0, 60.0, 70.0, 80.0])
+    assert bl is not None
+    assert bl.log_mean is not None and bl.log_std is not None
+    # log 統計は ln 値の平均/標準偏差
+    logs = [math.log(v) for v in (40.0, 50.0, 60.0, 70.0, 80.0)]
+    assert bl.log_mean == pytest.approx(sum(logs) / len(logs))
+
+
+def test_hrv_log_z_uses_log_space_when_available():
+    # 対数正規な分布: 低値側に裾。log-z は線形 z と一致しない。
+    bl = build_baseline([45, 50, 55, 60, 65, 70, 75])
+    z_log = hrv_log_z(60.0, bl)
+    assert z_log is not None
+    # 同じ mean/std を線形 Baseline で評価した z とは異なる(= log 変換が効いている)
+    linear = Baseline(mean=bl.mean, std=bl.std, n=bl.n)
+    z_linear = hrv_log_z(60.0, linear)  # log 統計なし → 線形フォールバック
+    assert z_log != pytest.approx(z_linear)
+
+
+def test_hrv_log_z_more_sensitive_to_low_hrv_on_right_skewed_baseline():
+    # rMSSD baseline は右に歪む(高値の裾)。線形 std は裾に膨らまされ低値の z が
+    # 過小評価される。log 空間では裾が圧縮され、同じ低値がより強い負の z になる。
+    bl = build_baseline([40, 42, 44, 46, 48, 50, 52, 90])  # 90 が右の裾
+    low = 40.0
+    z_log = hrv_log_z(low, bl)
+    z_linear = hrv_log_z(low, Baseline(mean=bl.mean, std=bl.std, n=bl.n))
+    assert z_log is not None and z_linear is not None
+    assert -2.0 < z_log < z_linear  # クランプせず、log の方が低い(疲労を強く拾う)
+
+
+def test_hrv_log_z_falls_back_to_linear_without_log_stats():
+    bl = Baseline(mean=60.0, std=5.0, n=28)  # log 統計なし
+    assert hrv_log_z(60.0, bl) == pytest.approx(0.0)
+    assert hrv_log_z(70.0, bl) == pytest.approx(2.0)  # +2σ, clamp
+
+
+def test_hrv_log_z_small_sample_guard_returns_none():
+    bl = build_baseline([60.0] * (HRV_MIN_BASELINE_N - 1))
+    assert bl is not None and bl.n < HRV_MIN_BASELINE_N
+    assert hrv_log_z(60.0, bl) is None
+    assert hrv_subscore(60.0, bl) is None
+
+
+def test_hrv_log_z_clamps_to_two_sigma():
+    bl = build_baseline([45, 50, 55, 60, 65, 70, 75])
+    assert hrv_log_z(10.0, bl) == pytest.approx(-2.0)
+    assert hrv_log_z(500.0, bl) == pytest.approx(2.0)
 
 
 # ----- body battery -----

@@ -60,7 +60,7 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
     return (
       <div className="text-center">
         <div className="text-sm text-ink-dim">まもなく開始</div>
-        <div className="mt-2 text-7xl font-bold tabular-nums text-sky-300">{lead}</div>
+        <div className="mt-2 text-7xl font-bold tabular-nums text-info-300">{lead}</div>
         <div className="mt-4 text-xs text-ink-faint">80bpm・下げ1拍/上げ1拍。胸が床から握りこぶし1個分まで。</div>
       </div>
     );
@@ -76,7 +76,7 @@ export function PushUpMeasure({ onFinish }: { onFinish: (count: number) => void 
       <button
         type="button"
         onPointerDown={tap}
-        className="my-6 flex aspect-square w-full select-none items-center justify-center rounded-3xl bg-sky-600/90 text-2xl font-bold text-white ring-4 ring-sky-400/30 active:bg-sky-500"
+        className="my-6 flex aspect-square w-full select-none items-center justify-center rounded-3xl bg-info-500/90 text-2xl font-bold text-void ring-4 ring-info-300/30 active:bg-info-500"
       >
         顎でタッチ
       </button>

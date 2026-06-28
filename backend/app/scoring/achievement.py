@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from app.scoring.baselines import Baseline
+from app.scoring.baselines import Baseline, hrv_log_z
 
 # 睡眠の合成重み (質側に重み)。後で調整可能。
 SLEEP_TIME_WEIGHT = 0.4
@@ -107,10 +107,9 @@ def sleep_achievement(
 
 
 def hrv_achievement(value: float | None, baseline: Baseline | None) -> float | None:
-    if value is None or baseline is None:
+    z = hrv_log_z(value, baseline)
+    if z is None:
         return None
-    z = (float(value) - baseline.mean) / baseline.std
-    z = max(-2.0, min(2.0, z))
     return _clamp(50.0 + 25.0 * z)
 
 

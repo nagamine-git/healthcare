@@ -154,7 +154,7 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-void/80 backdrop-blur-sm sm:items-center" onClick={onClose}>
       <div
         className="flex h-[85vh] w-full max-w-lg flex-col rounded-t-2xl bg-hull sm:h-[80vh] sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}

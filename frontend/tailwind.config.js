@@ -34,6 +34,8 @@ export default {
         },
         act: { DEFAULT: "#f59e0b", 300: "#fcd34d", 700: "#b45309" },
         risk: "#f43f5e",
+        // info: 計測・副次アクション・データ系の中立アクセント(良/悪/行動のどれでもない)
+        info: { DEFAULT: "#38bdf8", 300: "#7dd3fc", 500: "#0ea5e9", 700: "#0369a1" },
       },
       boxShadow: {
         // 計器の微発光

@@ -1,17 +1,19 @@
 import type { ReactNode } from "react";
 
-type Tone = "prog" | "act" | "risk" | "neutral";
+type Tone = "prog" | "act" | "risk" | "info" | "neutral";
 
 const TONE_TEXT: Record<Tone, string> = {
   prog: "text-prog-300",
   act: "text-act-300",
   risk: "text-risk",
+  info: "text-info-300",
   neutral: "text-ink",
 };
 const TONE_STROKE: Record<Tone, string> = {
   prog: "#10b981",
   act: "#f59e0b",
   risk: "#f43f5e",
+  info: "#38bdf8",
   neutral: "#9aa7b8",
 };
 
@@ -119,6 +121,7 @@ export function Pill({ tone = "neutral", children }: { tone?: Tone; children: Re
     prog: "border-prog-700 text-prog-300",
     act: "border-act-700 text-act-300",
     risk: "border-risk/60 text-risk",
+    info: "border-info-700 text-info-300",
     neutral: "border-hairline text-ink-dim",
   };
   return (

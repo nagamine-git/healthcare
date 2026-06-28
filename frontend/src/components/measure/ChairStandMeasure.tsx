@@ -53,7 +53,7 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
     return (
       <div className="text-center">
         <div className="text-sm text-ink-dim">まもなく開始</div>
-        <div className="mt-2 text-7xl font-bold tabular-nums text-sky-300">{lead}</div>
+        <div className="mt-2 text-7xl font-bold tabular-nums text-info-300">{lead}</div>
         <div className="mt-4 text-xs text-ink-faint">腕を胸の前で組み、30秒で完全な立ち座りを繰り返す。</div>
       </div>
     );
@@ -63,7 +63,7 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
     <div className="flex w-full max-w-sm flex-col items-center gap-6">
       <div className="text-center">
         <div className="text-xs text-ink-dim">残り</div>
-        <div className="text-6xl font-bold tabular-nums text-sky-300">{remaining}s</div>
+        <div className="text-6xl font-bold tabular-nums text-info-300">{remaining}s</div>
       </div>
       <div className="text-center">
         <div className="text-xs text-ink-dim">回数</div>
@@ -86,7 +86,7 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
         <button
           type="button"
           onClick={() => onset.adjust(1)}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-600/90 text-white ring-4 ring-sky-400/30 active:bg-sky-500"
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-info-500/90 text-void ring-4 ring-info-300/30 active:bg-info-500"
         >
           <Plus size={26} />
         </button>

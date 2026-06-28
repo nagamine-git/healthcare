@@ -22,7 +22,7 @@ export function BottomNav({ current }: { current: string }) {
               onClick={() => {
                 window.location.hash = it.hash;
               }}
-              className={`flex-1 py-2.5 text-[11px] transition-colors ${
+              className={`flex-1 py-3 text-[11px] transition-colors ${
                 active ? "text-prog-300" : "text-ink-faint hover:text-ink-dim"
               }`}
             >

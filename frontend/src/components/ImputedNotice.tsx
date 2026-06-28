@@ -17,7 +17,7 @@ const LABEL: Record<string, string> = {
 
 const CONF: Record<string, { text: string; cls: string }> = {
   high: { text: "信頼度 高", cls: "text-prog-300" },
-  medium: { text: "信頼度 中", cls: "text-sky-300" },
+  medium: { text: "信頼度 中", cls: "text-info-300" },
   low: { text: "信頼度 低", cls: "text-ink-dim" },
 };
 

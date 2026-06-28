@@ -18,7 +18,7 @@ function CompositeScoreBanner({ composite }: { composite: FitnessComposite }) {
     <div className="rounded-xl bg-void/40 p-3 ring-1 ring-panel/60">
       <div className="flex items-baseline justify-between">
         <span className="text-sm font-medium text-ink">総合体力スコア</span>
-        <span className="text-2xl font-bold tabular-nums text-sky-300">
+        <span className="text-2xl font-bold tabular-nums text-info-300">
           {Math.round(composite.score)}
           <span className="ml-0.5 text-xs font-normal text-ink-dim">/100</span>
         </span>
@@ -32,7 +32,7 @@ function CompositeScoreBanner({ composite }: { composite: FitnessComposite }) {
             <span className="w-14 shrink-0 text-[10px] text-ink-dim">{TEST_LABEL[c.key] ?? c.key}</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel">
               <div
-                className="h-full rounded-full bg-sky-500/70"
+                className="h-full rounded-full bg-info-500/70"
                 style={{ width: `${Math.max(2, Math.min(100, c.percentile))}%` }}
               />
             </div>
@@ -69,7 +69,7 @@ export function FitnessTestPanel() {
   return (
     <section className="space-y-3 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       <div className="flex items-center gap-2">
-        <Activity size={16} className="text-sky-300" />
+        <Activity size={16} className="text-info-300" />
         <h3 className="text-sm tracking-wide text-ink">自宅フィットネスチェック</h3>
       </div>
       <p className="text-[11px] leading-relaxed text-ink-faint">
@@ -124,7 +124,7 @@ export function FitnessDueBanner({ onOpen }: { onOpen?: () => void }) {
 
 const BAND_COLOR: Record<string, string> = {
   excellent: "bg-prog-500/15 text-prog-300 ring-prog/30",
-  good: "bg-sky-500/15 text-sky-300 ring-sky-600/30",
+  good: "bg-info-500/15 text-info-300 ring-info-700/30",
   average: "bg-ink-faint/15 text-ink-dim ring-ink-faint/30",
   needs_work: "bg-act/15 text-act-300 ring-act/30",
   alert: "bg-risk/15 text-risk ring-risk/30",
@@ -247,7 +247,7 @@ function TestCard({
           />
           <div className="mt-0.5 text-[11px] text-ink-dim">
             同年代・同性で{" "}
-            <span className="font-semibold tabular-nums text-sky-300">
+            <span className="font-semibold tabular-nums text-info-300">
               {Math.round(entry.distribution.percentile)}
             </span>
             <span className="text-ink-faint"> パーセンタイル</span>
@@ -291,7 +291,7 @@ function TestCard({
           <button
             type="button"
             onClick={() => setMeasuring(true)}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-panel px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-hairline"
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-panel px-3 py-1.5 text-xs font-medium text-info-300 hover:bg-hairline"
           >
             <Timer size={13} /> 測定
           </button>
@@ -300,7 +300,7 @@ function TestCard({
           type="button"
           disabled={saving}
           onClick={submit}
-          className="ml-auto shrink-0 rounded-lg bg-sky-600/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50"
+          className="ml-auto shrink-0 rounded-lg bg-info-500/80 px-3 py-1.5 text-xs font-medium text-void hover:bg-info-500 disabled:opacity-50"
         >
           記録
         </button>
@@ -394,7 +394,7 @@ function HistorySection({
                     edit.mutate({ test_key: testKey, value: v, performed_on: it.performed_on });
                     setEditId(null);
                   }}
-                  className="rounded bg-sky-600/80 px-2 py-1 text-[11px] text-white hover:bg-sky-600 disabled:opacity-50"
+                  className="rounded bg-info-500/80 px-2 py-1 text-[11px] text-void hover:bg-info-500 disabled:opacity-50"
                 >
                   保存
                 </button>
@@ -424,7 +424,7 @@ function HistorySection({
                       setEditId(it.id);
                       setEditVal(String(it.value));
                     }}
-                    className="rounded p-1 text-ink-faint hover:text-sky-300"
+                    className="rounded p-1 text-ink-faint hover:text-info-300"
                     aria-label="編集"
                   >
                     <Pencil size={13} />

@@ -18,7 +18,7 @@ export function DistributionPanel() {
   return (
     <section className="space-y-3 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       <div className="flex items-center gap-2">
-        <Users size={16} className="text-sky-300" />
+        <Users size={16} className="text-info-300" />
         <h3 className="text-sm tracking-wide text-ink">母集団での現在地</h3>
       </div>
       <p className="text-[11px] leading-relaxed text-ink-faint">
@@ -72,7 +72,7 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
             {m.percentile != null ? (
               <span className="text-[11px] text-ink-dim">
                 同年代・同性で{" "}
-                <span className="font-semibold tabular-nums text-sky-300">
+                <span className="font-semibold tabular-nums text-info-300">
                   {Math.round(m.percentile)}
                 </span>
                 <span className="text-ink-faint"> パーセンタイル (下位からの位置)</span>
@@ -109,7 +109,7 @@ function Vo2MaxHelp() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-[11px] text-sky-300/80 hover:text-sky-300"
+        className="flex items-center gap-1.5 text-[11px] text-info-300/80 hover:text-info-300"
       >
         VO2maxの取得方法
         <ChevronDown size={13} className={open ? "rotate-180 transition" : "transition"} />

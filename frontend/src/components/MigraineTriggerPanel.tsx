@@ -65,9 +65,9 @@ export function MigraineTriggerPanel() {
 
       {data.status === "accumulating" && (
         <div className="flex items-start gap-1.5 rounded-lg bg-hull/70 p-2.5 text-[11px] text-ink-dim">
-          <Info size={13} className="mt-0.5 shrink-0 text-sky-400" />
+          <Info size={13} className="mt-0.5 shrink-0 text-info" />
           <span>
-            <span className="text-ink-dim">あと <b className="text-sky-300">{data.remaining}</b> 件で要因分析を開始</span>
+            <span className="text-ink-dim">あと <b className="text-info-300">{data.remaining}</b> 件で要因分析を開始</span>
             します (最低4件)。気圧・カフェイン離脱・睡眠不足・HRV低下・飲酒を追跡中。
           </span>
         </div>
@@ -130,7 +130,7 @@ function ReliabilityBadge({ r, n }: { r?: string; n: number }) {
   const map: Record<string, { t: string; c: string }> = {
     very_low: { t: "精度 とても低い", c: "text-ink-faint" },
     low: { t: "精度 低い", c: "text-act-300/80" },
-    medium: { t: "精度 中", c: "text-sky-300" },
+    medium: { t: "精度 中", c: "text-info-300" },
     high: { t: "精度 高い", c: "text-prog-300" },
   };
   const m = map[r ?? "very_low"] ?? map.very_low;
