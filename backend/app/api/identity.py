@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Body
@@ -18,16 +18,47 @@ from sqlalchemy import select
 from app.db import session_scope
 from app.llm import identity as llm_identity
 from app.models.health import (
+    GoodActionLog,
     IdentityAssessment,
     IdentityDecisionLog,
     MediaItem,
     MediaLog,
 )
+from app.scoring.garden.recompute import recompute_garden_for_date
 from app.scoring.identity import store
 from app.scoring.identity.dimensions import DIMENSIONS
-from app.scoring.timewindow import app_today
+from app.scoring.timewindow import app_today, jst_day_bounds
 
 router = APIRouter()
+
+
+def _reading_logged_on(session, d: date_type) -> bool:
+    """その日(JST)に reading 行動が既に記録されているか。"""
+    start, end = jst_day_bounds(d)
+    return (
+        session.query(GoodActionLog)
+        .filter(
+            GoodActionLog.kind == "reading",
+            GoodActionLog.ts >= start,
+            GoodActionLog.ts < end,
+        )
+        .first()
+        is not None
+    )
+
+
+def _log_reading_on(session, d: date_type) -> bool:
+    """読了日を reading 行動として記録(同日に既にあればスキップ)。"""
+    if _reading_logged_on(session, d):
+        return False
+    start, _ = jst_day_bounds(d)
+    session.add(
+        GoodActionLog(
+            ts=start + timedelta(hours=12), kind="reading", source="book_tracker", value=1.0,
+            dedup_key=f"book-reading:{d.isoformat()}", note="蔵書の読了日から",
+        )
+    )
+    return True
 
 
 def _catalog() -> list[dict[str, Any]]:
@@ -51,6 +82,7 @@ async def get_identity() -> dict[str, Any]:
     with session_scope() as session:
         report = store.build_gap_report(session)
         recommendations = store.recommend_media(session)
+        taste = store.book_taste(session)
 
         # 直近の意思決定ログ。
         recent_logs = [
@@ -102,6 +134,7 @@ async def get_identity() -> dict[str, Any]:
             "catalog": _catalog(),
             "report": report,
             "recommendations": recommendations,
+            "book_taste": taste,
             "recent_logs": recent_logs,
             "intentions": intentions,
             "library": {
@@ -183,6 +216,49 @@ async def imdb_import(body: ImdbImportIn) -> dict[str, Any]:
     with session_scope() as session:
         counts = import_media(session, items)
     return {"status": "ok", **counts}
+
+
+class BooksImportIn(BaseModel):
+    csv: str
+
+
+@router.post("/api/identity/books/import")
+async def books_import(body: BooksImportIn) -> dict[str, Any]:
+    """Book Tracker の CSV を蔵書として取り込む(読書傾向・レコメンド改善に使う)。
+
+    読了日(finish_dates)は読書アクションのバックフィル候補として返す(記録は確認後)。
+    """
+    from app.ingest.book_tracker_import import import_books, parse_book_tracker_csv
+
+    rows = parse_book_tracker_csv(body.csv)
+    with session_scope() as session:
+        counts = import_books(session, rows)
+        taste = store.book_taste(session)
+        # 既に読書ログがある日は提案から除く。
+        finish = [d for d in counts["finish_dates"] if not _reading_logged_on(session, d)]
+    return {"status": "ok", **counts, "finish_dates": finish, "book_taste": taste}
+
+
+class BooksBackfillIn(BaseModel):
+    dates: list[str]
+
+
+@router.post("/api/identity/books/backfill-reading")
+async def books_backfill_reading(body: BooksBackfillIn) -> dict[str, Any]:
+    """読了日を「その日に読書した」として庭に記録(冪等、確認後に呼ぶ)。"""
+    logged: list[str] = []
+    with session_scope() as session:
+        for ds in body.dates:
+            try:
+                d = date_type.fromisoformat(ds)
+            except ValueError:
+                continue
+            if _log_reading_on(session, d):
+                logged.append(ds)
+        session.flush()
+        for ds in logged:
+            recompute_garden_for_date(session, date_type.fromisoformat(ds))
+    return {"logged": logged}
 
 
 # ---------------------------------------------------------------------------
@@ -281,11 +357,14 @@ async def suggest_new(n: int = Body(default=8, embed=True)) -> dict[str, Any]:
         weak_ids = report["weakest"][:5]
         weak = [(d, BY_ID[d].name_ja) for d in weak_ids if d in BY_ID]
         avoid = [m.title for m in session.execute(select(MediaItem)).scalars()]
+        taste = store.book_taste_hint(session)  # 蔵書 CSV 由来の好みに寄せる
 
     if not weak:
         return {"status": "no_gap", "created": 0, "suggestions": []}
 
-    suggestions = await llm_identity.suggest_new_media(weak_dims=weak, avoid_titles=avoid, n=n)
+    suggestions = await llm_identity.suggest_new_media(
+        weak_dims=weak, avoid_titles=avoid, n=n, taste=taste
+    )
 
     created = 0
     avoid_lower = {t.strip().lower() for t in avoid}

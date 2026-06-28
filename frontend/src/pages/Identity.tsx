@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import {
   api,
+  type BookTaste,
   type ChatMsg,
   type IdentityGapDimension,
   type IdentityRecommendation,
@@ -68,6 +69,7 @@ export function IdentityPage({ onBack }: Props) {
           )}
           <IntentionsPanel intentions={q.data.intentions} />
           <LibraryPanel library={q.data.library} />
+          <BookLibraryPanel taste={q.data.book_taste} />
         </>
       )}
     </div>
@@ -776,6 +778,125 @@ function LibraryPanel({
           <code className="mx-1 rounded bg-panel px-1">WATCHLIST.csv</code>
           をそのまま選ぶだけ(複数同時可・ファイル名で自動判別)。
           マンガ・本は手動登録(API 経由)で追加できます。
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+/** 蔵書(Book Tracker CSV)取り込み + 読書傾向 + 読了→読書アクションのバックフィル。 */
+function BookLibraryPanel({ taste }: { taste: BookTaste }) {
+  const qc = useQueryClient();
+  const [msg, setMsg] = useState("");
+  const [pendingDates, setPendingDates] = useState<string[]>([]);
+
+  const imp = useMutation({
+    mutationFn: async (file: File) => {
+      const text = await readFileText(file);
+      return api.booksImport(text);
+    },
+    onSuccess: (r) => {
+      setMsg(
+        `取込: ${r.items} 件(読了 ${r.seen} / 読書中 ${r.reading} / 積読 ${r.watchlist})`,
+      );
+      setPendingDates(r.finish_dates);
+      qc.invalidateQueries({ queryKey: ["identity"] });
+    },
+    onError: () => setMsg("取込に失敗しました(CSV を確認してください)"),
+  });
+  const backfill = useMutation({
+    mutationFn: (dates: string[]) => api.booksBackfillReading(dates),
+    onSuccess: (r) => {
+      setMsg(`読書アクションを ${r.logged.length} 日分 記録しました`);
+      setPendingDates([]);
+      qc.invalidateQueries({ queryKey: ["garden"] });
+      qc.invalidateQueries({ queryKey: ["today"] });
+      qc.invalidateQueries({ queryKey: ["life-tree"] });
+      qc.invalidateQueries({ queryKey: ["becoming"] });
+    },
+  });
+
+  return (
+    <Card
+      title="蔵書を取り込む(Book Tracker)"
+      subtitle={taste.total ? `${taste.total} 冊 / 読了 ${taste.seen ?? 0}` : "未取込"}
+    >
+      <div className="space-y-2">
+        <label
+          className={`inline-block cursor-pointer rounded-lg bg-prog-700 px-3 py-1.5 text-xs hover:bg-prog-500 ${
+            imp.isPending ? "pointer-events-none opacity-50" : ""
+          }`}
+        >
+          {imp.isPending ? "取込中…" : "Book Tracker CSV を選択"}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            disabled={imp.isPending}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) {
+                setMsg("");
+                imp.mutate(f);
+              }
+            }}
+          />
+        </label>
+        {msg && <p className="text-[11px] text-prog-300/80">{msg}</p>}
+
+        {pendingDates.length > 0 && (
+          <div className="rounded-lg border border-hairline bg-hull/40 p-2 text-xs">
+            <p className="text-ink-dim">
+              読了日が {pendingDates.length} 日分あります。その日の「読書」を庭に記録しますか?
+            </p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <button
+                disabled={backfill.isPending}
+                onClick={() => backfill.mutate(pendingDates)}
+                className="rounded-lg bg-prog-700 px-2.5 py-1 font-medium text-ink hover:bg-prog-500 disabled:opacity-50"
+              >
+                {backfill.isPending ? "記録中…" : "読書として記録"}
+              </button>
+              <button
+                onClick={() => setPendingDates([])}
+                className="text-ink-faint hover:text-ink-dim"
+              >
+                しない
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 読書の傾向(好み)。レコメンドの「リスト外提案」もこの傾向に寄ります。 */}
+        {taste.total > 0 && (
+          <div className="rounded-lg border border-hairline bg-hull/40 p-2 text-xs">
+            <p className="telemetry-label">読書の傾向</p>
+            <div className="mt-1 space-y-0.5 text-ink-dim">
+              {taste.avg_rating != null && <div>平均評価 {taste.avg_rating}</div>}
+              {(taste.top_authors?.length ?? 0) > 0 && (
+                <div>
+                  好きな著者:{" "}
+                  <span className="text-ink">
+                    {taste.top_authors!.slice(0, 5).map((a) => a.name).join("、")}
+                  </span>
+                </div>
+              )}
+              {(taste.top_categories?.length ?? 0) > 0 && (
+                <div>
+                  よく読む分野:{" "}
+                  <span className="text-ink">
+                    {taste.top_categories!.slice(0, 5).map((c) => c.name).join("、")}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="text-[10px] leading-relaxed text-ink-faint">
+          読了管理は Book Tracker のまま。ここに CSV を取り込むと、重複しない新作提案・
+          読書傾向の把握・読了日からの読書記録に使います(本はレコメンド枠を汚しません)。
         </p>
       </div>
     </Card>

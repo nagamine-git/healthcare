@@ -233,3 +233,78 @@ def recommend_media(session: Session, *, per_category: int = 12) -> list[dict]:
         out.append(r)
         caps[cat] = caps.get(cat, 0) + 1
     return out
+
+
+def _split_multi(s: str | None) -> list[str]:
+    """authors/categories のような区切り文字列をトークン化(, ; / & 、 対応)。"""
+    if not s:
+        return []
+    cur = s
+    for sep in (";", "/", "&", "、", "，"):
+        cur = cur.replace(sep, ",")
+    return [t.strip() for t in cur.split(",") if t.strip()]
+
+
+def book_taste(session: Session) -> dict:
+    """Book Tracker 由来の蔵書から読書傾向(嗜好)を集計する。
+
+    レコメンド改善(リスト外提案を好みに寄せる)と画面表示の両方に使う。
+    """
+    from collections import Counter
+
+    items = list(
+        session.execute(select(MediaItem).where(MediaItem.source == "book_tracker")).scalars()
+    )
+    if not items:
+        return {"total": 0}
+    logs = {r.media_item_id: r for r in session.execute(select(MediaLog)).scalars()}
+    authors: Counter[str] = Counter()
+    categories: Counter[str] = Counter()
+    ratings: list[float] = []
+    finished: list[tuple[str, float]] = []
+    n_seen = n_reading = n_want = 0
+    for it in items:
+        meta = it.metadata_json or {}
+        authors.update(_split_multi(meta.get("authors")))
+        categories.update(_split_multi(meta.get("categories")))
+        log = logs.get(it.id)
+        status = log.status if log else "watchlist"
+        if status == "seen":
+            n_seen += 1
+        elif status == "reading":
+            n_reading += 1
+        else:
+            n_want += 1
+        rating = log.rating if log else None
+        if rating is not None:
+            ratings.append(float(rating))
+            if status == "seen":
+                finished.append((it.title, float(rating)))
+    finished.sort(key=lambda x: x[1], reverse=True)
+    return {
+        "total": len(items),
+        "seen": n_seen,
+        "reading": n_reading,
+        "want": n_want,
+        "avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
+        "top_authors": [{"name": a, "count": c} for a, c in authors.most_common(8)],
+        "top_categories": [{"name": a, "count": c} for a, c in categories.most_common(8)],
+        "top_books": [{"title": t, "rating": r} for t, r in finished[:6]],
+    }
+
+
+def book_taste_hint(session: Session) -> str | None:
+    """LLM のリスト外提案に渡す『読書の好み』短文。蔵書が無ければ None。"""
+    t = book_taste(session)
+    if not t.get("total"):
+        return None
+    parts: list[str] = []
+    if t.get("top_authors"):
+        parts.append("好きな著者: " + ", ".join(a["name"] for a in t["top_authors"][:5]))
+    if t.get("top_categories"):
+        parts.append("よく読む分野: " + ", ".join(c["name"] for c in t["top_categories"][:5]))
+    if t.get("top_books"):
+        parts.append(
+            "高評価だった本: " + ", ".join(f"{b['title']}({b['rating']})" for b in t["top_books"][:5])
+        )
+    return "\n".join(parts) or None

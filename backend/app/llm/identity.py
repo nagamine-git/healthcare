@@ -361,7 +361,12 @@ _SUGGEST_SYSTEM = """\
   (映画ばかりにしない)。kind は内容に合った正しい種別を付ける。
 - 各提案に、最も効く dimension_id を 1 つと、なぜ効くかの理由 (日本語1-2文) を付ける。
 - 起業家マインド (founder) の形成に資する、骨太な作品を優先する。
+- **利用者の読書の好み(下記)があれば、それに寄せる**(著者・分野・高評価作の傾向を尊重しつつ、
+  伸びしろ次元を満たす作品を選ぶ)。好みが空なら無視してよい。
 必ず submit_suggestions ツールで返すこと。
+
+# 利用者の読書の好み
+{taste}
 
 # すでにリストにある作品 (重複させない)
 {avoid}
@@ -510,12 +515,17 @@ async def reflect_to_intention(
 
 
 async def suggest_new_media(
-    *, weak_dims: list[tuple[str, str]], avoid_titles: list[str], n: int = 8
+    *,
+    weak_dims: list[tuple[str, str]],
+    avoid_titles: list[str],
+    n: int = 8,
+    taste: str | None = None,
 ) -> list[dict[str, Any]]:
     """伸びしろの大きい次元向けに、リスト外の新規作品を提案する。
 
     weak_dims: [(dimension_id, name_ja)] の弱い次元 (上位)。
     avoid_titles: 既にライブラリにある作品名 (重複させない)。
+    taste: 利用者の読書の好み(蔵書 CSV 由来)。提案をこれに寄せる。
     返り値: [{title, kind, year, dimension_id, reason}]。
     """
     from app.scoring.identity.dimensions import BY_ID
@@ -524,7 +534,12 @@ async def suggest_new_media(
     weak_str = "\n".join(f"- {d_id} ({name})" for d_id, name in weak_dims) or "(なし)"
     avoid_str = "\n".join(f"- {t}" for t in avoid_titles[:200]) or "(なし)"
     system = [
-        {"type": "text", "text": _SUGGEST_SYSTEM.format(weak_dims=weak_str, avoid=avoid_str)}
+        {
+            "type": "text",
+            "text": _SUGGEST_SYSTEM.format(
+                weak_dims=weak_str, avoid=avoid_str, taste=taste or "(未登録)"
+            ),
+        }
     ]
     convo = [{"role": "user", "content": f"{n} 作品ほど提案してください。"}]
     out = await _suggest_completion(

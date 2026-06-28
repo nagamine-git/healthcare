@@ -1225,11 +1225,22 @@ export type IdentityIntention = {
   rating: number;
   seen_at: string | null;
 };
+export type BookTaste = {
+  total: number;
+  seen?: number;
+  reading?: number;
+  want?: number;
+  avg_rating?: number | null;
+  top_authors?: { name: string; count: number }[];
+  top_categories?: { name: string; count: number }[];
+  top_books?: { title: string; rating: number }[];
+};
 export type IdentityResponse = {
   date: string;
   catalog: IdentityDimensionDef[];
   report: IdentityGapReport;
   recommendations: IdentityRecommendation[];
+  book_taste: BookTaste;
   recent_logs: Array<{ id: number; date: string; text: string; inferred: IdentityDecisionSignal[] }>;
   intentions: IdentityIntention[];
   library: { total: number; seen: number; untagged: number };
@@ -1672,6 +1683,21 @@ export const api = {
       "/api/identity/imdb-import",
       { method: "POST", body: JSON.stringify({ csv, list_kind }) },
     ),
+  booksImport: (csv: string) =>
+    request<{
+      status: string;
+      items: number;
+      seen: number;
+      reading: number;
+      watchlist: number;
+      finish_dates: string[];
+      book_taste: BookTaste;
+    }>("/api/identity/books/import", { method: "POST", body: JSON.stringify({ csv }) }),
+  booksBackfillReading: (dates: string[]) =>
+    request<{ logged: string[] }>("/api/identity/books/backfill-reading", {
+      method: "POST",
+      body: JSON.stringify({ dates }),
+    }),
   identityAddMedia: (body: {
     title: string;
     kind: "film" | "tv" | "manga" | "book";
