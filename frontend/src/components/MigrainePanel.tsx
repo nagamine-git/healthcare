@@ -47,11 +47,11 @@ export function MigrainePanel() {
   const active = list.data?.active ?? null;
 
   return (
-    <div className="rounded-2xl bg-slate-900/70 p-4 sm:p-6">
+    <div className="rounded-xl bg-hull/70 p-4 sm:p-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm tracking-wider text-slate-300">偏頭痛トラッカー</h3>
+        <h3 className="text-sm tracking-wider text-ink-dim">偏頭痛トラッカー</h3>
         {list.data && (
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] text-ink-faint">
             直近 30 日: {list.data.count_30d} 回
           </span>
         )}
@@ -124,34 +124,34 @@ function ActiveBlock({
   const mm = elapsedMin % 60;
 
   return (
-    <div className="rounded-xl border border-rose-700/60 bg-rose-900/20 p-4">
+    <div className="rounded-xl border border-risk/60 bg-risk/20 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div className="text-xs uppercase tracking-wider text-rose-300">
+          <div className="text-xs uppercase tracking-wider text-risk">
             進行中
           </div>
-          <div className="mt-1 font-mono text-2xl tabular-nums text-rose-100">
+          <div className="mt-1 telemetry-num text-2xl tabular-nums text-risk">
             {hh}h {mm.toString().padStart(2, "0")}m 経過
           </div>
-          <div className="mt-0.5 text-xs text-rose-300/70">
+          <div className="mt-0.5 text-xs text-risk/70">
             開始 {episode.started_at_jst}
             {episode.severity != null && ` · 強度 ${episode.severity}/10`}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <label className="flex items-center gap-1 text-[10px] text-rose-300/70">
+          <label className="flex items-center gap-1 text-[10px] text-risk/70">
             終了時刻
             <input
               type="datetime-local"
               value={endTs}
               onChange={(e) => setEndTs(e.target.value)}
-              className="rounded border border-rose-700/40 bg-rose-950/40 px-1.5 py-0.5 text-[10px] text-rose-100 focus:border-emerald-500 focus:outline-none"
+              className="rounded border border-risk/40 bg-risk/40 px-1.5 py-0.5 text-[10px] text-risk focus:border-prog focus:outline-none"
             />
             {endTs && (
               <button
                 type="button"
                 onClick={() => setEndTs("")}
-                className="text-rose-400/60 hover:text-rose-200"
+                className="text-risk/60 hover:text-risk"
                 title="クリアして今に戻す"
               >
                 ×
@@ -161,7 +161,7 @@ function ActiveBlock({
           <button
             onClick={() => onEnd(endTs)}
             disabled={pending}
-            className="rounded-full border border-emerald-700/60 bg-emerald-900/30 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-50"
+            className="rounded-full border border-prog-700/60 bg-prog-900/30 px-4 py-2 text-sm text-prog-300 hover:bg-prog-900/60 disabled:opacity-50"
           >
             {pending ? "..." : "治った"}
           </button>
@@ -188,11 +188,11 @@ function IdleBlock({
       <button
         onClick={() => onStart(startTs)}
         disabled={pending}
-        className="rounded-full border border-rose-700/70 bg-rose-900/30 px-5 py-3 text-base text-rose-200 hover:bg-rose-900/60 disabled:opacity-50"
+        className="rounded-full border border-risk/70 bg-risk/30 px-5 py-3 text-base text-risk hover:bg-risk/60 disabled:opacity-50"
       >
         {pending ? "..." : "痛くなった"}
       </button>
-      <label className="flex items-center gap-2 text-xs text-slate-400">
+      <label className="flex items-center gap-2 text-xs text-ink-dim">
         強度
         <input
           type="range"
@@ -200,31 +200,31 @@ function IdleBlock({
           max={10}
           value={severity}
           onChange={(e) => onSeverityChange(parseInt(e.target.value, 10))}
-          className="accent-rose-400"
+          className="accent-risk"
         />
-        <span className="w-6 text-right font-mono tabular-nums text-slate-200">
+        <span className="w-6 text-right telemetry-num tabular-nums text-ink">
           {severity}
         </span>
       </label>
-      <label className="ml-auto flex items-center gap-1 text-[10px] text-slate-500">
+      <label className="ml-auto flex items-center gap-1 text-[10px] text-ink-faint">
         開始時刻
         <input
           type="datetime-local"
           value={startTs}
           onChange={(e) => setStartTs(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-300 focus:border-rose-500 focus:outline-none"
+          className="rounded border border-hairline bg-hull px-1.5 py-0.5 text-[10px] text-ink-dim focus:border-risk focus:outline-none"
         />
         {startTs ? (
           <button
             type="button"
             onClick={() => setStartTs("")}
-            className="text-slate-500 hover:text-slate-300"
+            className="text-ink-faint hover:text-ink-dim"
             title="クリアして今に戻す"
           >
             ×
           </button>
         ) : (
-          <span className="text-slate-600">空=今</span>
+          <span className="text-ink-faint">空=今</span>
         )}
       </label>
     </div>
@@ -243,8 +243,8 @@ function HistoryList({
   onEdit: (id: number) => void;
 }) {
   return (
-    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-      <div className="mb-2 text-[10px] uppercase tracking-wider text-slate-500">
+    <div className="mt-4 rounded-xl border border-panel bg-hull/40 p-3">
+      <div className="mb-2 text-[10px] uppercase tracking-wider text-ink-faint">
         履歴 (直近 30 日)
       </div>
       <ul className="space-y-1">
@@ -253,27 +253,27 @@ function HistoryList({
           .slice(0, 10)
           .map((it) => (
             <li key={it.id} className="flex items-baseline gap-2 text-xs">
-              <span className="font-mono tabular-nums text-slate-400">
+              <span className="telemetry-num tabular-nums text-ink-dim">
                 {it.started_at_jst}
               </span>
               {it.duration_min != null && (
-                <span className="text-slate-500">
+                <span className="text-ink-faint">
                   → {formatDuration(it.duration_min)}
                 </span>
               )}
               {it.severity != null && (
-                <span className="rounded border border-rose-700/40 px-1 text-[10px] text-rose-300">
+                <span className="rounded border border-risk/40 px-1 text-[10px] text-risk">
                   {it.severity}/10
                 </span>
               )}
               {it.note && (
-                <span className="truncate text-slate-500" title={it.note}>
+                <span className="truncate text-ink-faint" title={it.note}>
                   · {it.note}
                 </span>
               )}
               <button
                 onClick={() => onEdit(it.id)}
-                className="ml-auto text-slate-500 hover:text-amber-300"
+                className="ml-auto text-ink-faint hover:text-act-300"
                 title="編集"
               >
                 ✎
@@ -281,7 +281,7 @@ function HistoryList({
               <button
                 onClick={() => onDelete(it.id)}
                 disabled={deletingId === it.id}
-                className="text-slate-600 hover:text-rose-400 disabled:opacity-30"
+                className="text-ink-faint hover:text-risk disabled:opacity-30"
                 title="削除"
               >
                 ×
@@ -355,35 +355,35 @@ function EditModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-hairline bg-hull p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 text-sm tracking-wider text-slate-300">
+        <div className="mb-3 text-sm tracking-wider text-ink-dim">
           偏頭痛エピソードの編集
         </div>
         <div className="space-y-3 text-xs">
           <label className="flex items-center justify-between gap-3">
-            <span className="text-slate-400">開始</span>
+            <span className="text-ink-dim">開始</span>
             <input
               type="datetime-local"
               value={startTs}
               onChange={(e) => setStartTs(e.target.value)}
-              className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-slate-200"
+              className="flex-1 rounded border border-hairline bg-panel px-2 py-1 text-ink"
             />
           </label>
           <label className="flex items-center justify-between gap-3">
-            <span className="text-slate-400">終了</span>
+            <span className="text-ink-dim">終了</span>
             <input
               type="datetime-local"
               value={endTs}
               onChange={(e) => setEndTs(e.target.value)}
-              className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-slate-200"
+              className="flex-1 rounded border border-hairline bg-panel px-2 py-1 text-ink"
             />
             {endTs && (
               <button
                 type="button"
                 onClick={() => setEndTs("")}
-                className="text-slate-500 hover:text-rose-300"
+                className="text-ink-faint hover:text-risk"
                 title="クリア (再 active 化)"
               >
                 ×
@@ -391,39 +391,39 @@ function EditModal({
             )}
           </label>
           <label className="flex items-center justify-between gap-3">
-            <span className="text-slate-400">強度</span>
+            <span className="text-ink-dim">強度</span>
             <input
               type="range"
               min={1}
               max={10}
               value={severity}
               onChange={(e) => setSeverity(parseInt(e.target.value, 10))}
-              className="flex-1 accent-rose-400"
+              className="flex-1 accent-risk"
             />
-            <span className="w-6 text-right font-mono tabular-nums text-slate-200">
+            <span className="w-6 text-right telemetry-num tabular-nums text-ink">
               {severity}
             </span>
           </label>
           <label className="flex items-start justify-between gap-3">
-            <span className="pt-1 text-slate-400">メモ</span>
+            <span className="pt-1 text-ink-dim">メモ</span>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
-              className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-slate-200"
+              className="flex-1 rounded border border-hairline bg-panel px-2 py-1 text-ink"
             />
           </label>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-400 hover:bg-slate-800"
+            className="rounded-full border border-hairline px-3 py-1 text-xs text-ink-dim hover:bg-panel"
           >
             キャンセル
           </button>
           <button
             onClick={handleSave}
-            className="rounded-full border border-amber-700/60 bg-amber-900/30 px-3 py-1 text-xs text-amber-200 hover:bg-amber-900/60"
+            className="rounded-full border border-act-700/60 bg-act-700/30 px-3 py-1 text-xs text-act-300 hover:bg-act-700/60"
           >
             保存
           </button>

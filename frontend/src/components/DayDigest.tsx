@@ -106,7 +106,7 @@ export function DayDigest({ segments, t, originJst, nowH }: {
       c.soreness != null ? `筋肉痛${c.soreness}` : null,
     ].filter(Boolean);
     entries.push({
-      h: c.h, icon: ClipboardCheck, color: "text-slate-200",
+      h: c.h, icon: ClipboardCheck, color: "text-ink",
       text: "調子を記録", sub: bits.join(" / ") || undefined,
     });
   }
@@ -128,12 +128,12 @@ export function DayDigest({ segments, t, originJst, nowH }: {
   if (entries.length === 0) return null;
 
   return (
-    <div className="rounded-xl bg-slate-900/50">
+    <div className="rounded-xl bg-hull/50">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 px-3 py-2 text-left">
-        <ListChecks size={14} className="text-slate-400" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">今日のハイライト</span>
-        <span className="ml-auto text-[10px] text-slate-600">{entries.length}件</span>
-        <ChevronDown size={14} className={`text-slate-500 transition-transform ${open ? "" : "-rotate-90"}`} />
+        <ListChecks size={14} className="text-ink-dim" />
+        <span className="text-xs uppercase tracking-wider text-ink-dim">今日のハイライト</span>
+        <span className="ml-auto text-[10px] text-ink-faint">{entries.length}件</span>
+        <ChevronDown size={14} className={`text-ink-faint transition-transform ${open ? "" : "-rotate-90"}`} />
       </button>
       {open && (
         <ul className="px-3 pb-2.5">
@@ -141,11 +141,11 @@ export function DayDigest({ segments, t, originJst, nowH }: {
             const Icon = e.icon;
             return (
               <li key={i} className="flex items-center gap-2.5 py-1">
-                <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-slate-500">{clock(e.h)}</span>
+                <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-ink-faint">{clock(e.h)}</span>
                 <Icon size={14} className={`shrink-0 ${e.color}`} />
                 <span className="min-w-0 leading-tight">
-                  <span className="text-[13px] text-slate-200">{e.text}</span>
-                  {e.sub && <span className="ml-1.5 text-[11px] text-slate-500">{e.sub}</span>}
+                  <span className="text-[13px] text-ink">{e.text}</span>
+                  {e.sub && <span className="ml-1.5 text-[11px] text-ink-faint">{e.sub}</span>}
                 </span>
               </li>
             );

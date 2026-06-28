@@ -5,9 +5,9 @@ type Props = {
 };
 
 const STYLE: Record<WellbeingAlert["severity"], string> = {
-  critical: "border-rose-700/70 bg-rose-900/25 text-rose-100",
-  warning: "border-orange-700/60 bg-orange-900/20 text-orange-200",
-  info: "border-amber-700/50 bg-amber-900/15 text-amber-200",
+  critical: "border-risk/70 bg-risk/25 text-risk",
+  warning: "border-act-700/60 bg-act-700/20 text-act-300",
+  info: "border-act-700/50 bg-act-700/15 text-act-300",
 };
 
 const ICON: Record<WellbeingAlert["severity"], string> = {

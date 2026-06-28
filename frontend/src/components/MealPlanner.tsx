@@ -38,14 +38,14 @@ export function MealPlanner() {
   const sug = plan.data;
 
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/70 p-4 sm:p-5">
+    <section className="space-y-3 rounded-xl bg-hull/70 p-4 sm:p-5">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
         className="flex w-full items-center gap-1.5 text-left">
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <UtensilsCrossed size={14} className="text-lime-300" />
-        <span className="text-sm tracking-wide text-slate-100">食事プラン</span>
+        <UtensilsCrossed size={14} className="text-prog-300" />
+        <span className="text-sm tracking-wide text-ink">食事プラン</span>
         {sug?.usual?.estimate && (
-          <span className="ml-auto text-[11px] tabular-nums text-slate-400">
+          <span className="ml-auto text-[11px] tabular-nums text-ink-dim">
             {sug.usual.complete ? "普段" : "固定"} P{Math.round(sug.usual.estimate.protein_g)}g
           </span>
         )}
@@ -53,11 +53,11 @@ export function MealPlanner() {
 
       {/* サジェスト (常時表示: 食事の核心) */}
       {sug && (
-        <div className="space-y-2 rounded-xl border border-lime-700/25 bg-lime-950/15 p-3">
+        <div className="space-y-2 rounded-xl border border-prog-700/25 bg-prog-500/15 p-3">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[11px] font-medium text-lime-200">置換・追加サジェスト</span>
+            <span className="text-[11px] font-medium text-prog-300">置換・追加サジェスト</span>
             {sug.usual && (
-              <span className="text-[9px] text-slate-500">
+              <span className="text-[9px] text-ink-faint">
                 {!sug.usual.estimate
                   ? "記録か頻用食品の登録で推定が始まります"
                   : sug.usual.complete
@@ -67,8 +67,8 @@ export function MealPlanner() {
             )}
           </div>
           {sug.suggestions.map((s, i) => (
-            <div key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-200">
-              <Sparkles size={12} className="mt-0.5 shrink-0 text-lime-300" />
+            <div key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-ink">
+              <Sparkles size={12} className="mt-0.5 shrink-0 text-prog-300" />
               <span>{s.text}</span>
             </div>
           ))}
@@ -114,43 +114,43 @@ function FoodRegister({ onSaved }: { onSaved: () => void }) {
   });
 
   return (
-    <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">頻用食品を登録 (LLMがマクロ推定)</div>
+    <div className="space-y-2 rounded-xl border border-panel bg-hull/40 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-ink-faint">頻用食品を登録 (LLMがマクロ推定)</div>
       <div className="flex flex-wrap items-center gap-2">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 唐揚げ / プロテインバー"
-          className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-lime-500 focus:outline-none" />
+          className="min-w-0 flex-1 rounded border border-hairline bg-hull px-2 py-1 text-xs text-ink focus:border-prog focus:outline-none" />
         <input value={qty} onChange={(e) => setQty(e.target.value)} placeholder="量(任意 例:5個)"
-          className="w-28 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-lime-500 focus:outline-none" />
+          className="w-28 rounded border border-hairline bg-hull px-2 py-1 text-xs text-ink focus:border-prog focus:outline-none" />
         <button disabled={!name.trim() || estimate.isPending} onClick={() => estimate.mutate()}
-          className="rounded-full border border-lime-700/60 bg-lime-900/20 px-3 py-1 text-xs text-lime-200 hover:bg-lime-900/50 disabled:opacity-40">
+          className="rounded-full border border-prog-700/60 bg-prog-900/20 px-3 py-1 text-xs text-prog-300 hover:bg-prog-900/50 disabled:opacity-40">
           {estimate.isPending ? "推定中…" : "推定"}
         </button>
       </div>
 
       {draft && (
-        <div className="space-y-2 rounded-lg bg-slate-950/40 p-2">
+        <div className="space-y-2 rounded-lg bg-void/40 p-2">
           <div className="grid grid-cols-4 gap-1.5">
             {(["kcal", "protein_g", "fat_g", "carb_g"] as const).map((k) => (
-              <label key={k} className="text-[9px] text-slate-500">
+              <label key={k} className="text-[9px] text-ink-faint">
                 {k === "kcal" ? "kcal" : k === "protein_g" ? "P(g)" : k === "fat_g" ? "F(g)" : "C(g)"}
                 <input type="number" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: parseFloat(e.target.value) || 0 })}
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-right text-xs text-slate-200 tabular-nums" />
+                  className="w-full rounded border border-hairline bg-hull px-1.5 py-1 text-right text-xs text-ink tabular-nums" />
               </label>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input value={draft.unit_label} onChange={(e) => setDraft({ ...draft, unit_label: e.target.value })}
-              className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200" />
-            <label className="flex items-center gap-1 text-[10px] text-slate-400">
+              className="w-24 rounded border border-hairline bg-hull px-2 py-1 text-xs text-ink" />
+            <label className="flex items-center gap-1 text-[10px] text-ink-dim">
               <input type="checkbox" checked={draft.is_protein_source}
                 onChange={(e) => setDraft({ ...draft, is_protein_source: e.target.checked })} />
               タンパク源
             </label>
             <button disabled={save.isPending} onClick={() => save.mutate()}
-              className="ml-auto rounded-full border border-emerald-700/60 bg-emerald-900/30 px-3 py-1 text-xs text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-40">
+              className="ml-auto rounded-full border border-prog-700/60 bg-prog-900/30 px-3 py-1 text-xs text-prog-300 hover:bg-prog-900/60 disabled:opacity-40">
               保存
             </button>
-            <button onClick={() => setDraft(null)} className="text-xs text-slate-500 hover:text-slate-300">取消</button>
+            <button onClick={() => setDraft(null)} className="text-xs text-ink-faint hover:text-ink-dim">取消</button>
           </div>
         </div>
       )}
@@ -161,17 +161,17 @@ function FoodRegister({ onSaved }: { onSaved: () => void }) {
 function FoodList({ foods, onDelete }: { foods: FoodItemDto[]; onDelete: (id: number) => void }) {
   if (!foods.length) return null;
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">登録済み食品 ({foods.length})</div>
+    <div className="rounded-xl border border-panel bg-hull/40 p-3">
+      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-ink-faint">登録済み食品 ({foods.length})</div>
       <ul className="space-y-1">
         {foods.map((f) => (
           <li key={f.id} className="flex items-baseline gap-2 text-xs">
-            <span className="text-slate-200">{f.name}</span>
-            <span className="text-[10px] text-slate-500">{f.unit_label}</span>
-            <span className="font-mono tabular-nums text-amber-300">{Math.round(f.protein_g)}gP</span>
-            <span className="font-mono tabular-nums text-slate-500">{Math.round(f.kcal)}kcal</span>
-            {f.is_protein_source && <span className="text-[9px] text-emerald-300">タンパク源</span>}
-            <button onClick={() => onDelete(f.id)} className="ml-auto text-slate-600 hover:text-rose-400">×</button>
+            <span className="text-ink">{f.name}</span>
+            <span className="text-[10px] text-ink-faint">{f.unit_label}</span>
+            <span className="telemetry-num tabular-nums text-act-300">{Math.round(f.protein_g)}gP</span>
+            <span className="telemetry-num tabular-nums text-ink-faint">{Math.round(f.kcal)}kcal</span>
+            {f.is_protein_source && <span className="text-[9px] text-prog-300">タンパク源</span>}
+            <button onClick={() => onDelete(f.id)} className="ml-auto text-ink-faint hover:text-risk">×</button>
           </li>
         ))}
       </ul>
@@ -186,13 +186,13 @@ function PatternEditor({ foods, slots, onAdd, onDelete }: {
   onDelete: (id: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">普段のパターン (記録が無い日の推定に使用)</div>
-      <p className="mb-1.5 text-[10px] leading-tight text-slate-600">
-        登録した枠＝<span className="text-slate-400">固定メニュー</span>。空の枠（昼・夜など）は
-        <span className="text-slate-400">ランダム</span>扱いで、固定分から残りの必要量を提案します。朝だけ登録でOK。
+    <div className="rounded-xl border border-panel bg-hull/40 p-3">
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-ink-faint">普段のパターン (記録が無い日の推定に使用)</div>
+      <p className="mb-1.5 text-[10px] leading-tight text-ink-faint">
+        登録した枠＝<span className="text-ink-dim">固定メニュー</span>。空の枠（昼・夜など）は
+        <span className="text-ink-dim">ランダム</span>扱いで、固定分から残りの必要量を提案します。朝だけ登録でOK。
       </p>
-      {!foods.length && <p className="text-[10px] text-slate-600">先に頻用食品を登録してください。</p>}
+      {!foods.length && <p className="text-[10px] text-ink-faint">先に頻用食品を登録してください。</p>}
       <div className="space-y-2.5">
         {SLOTS.map((s) => (
           <SlotRow key={s.key} slot={s.key} label={s.label} foods={foods}
@@ -215,29 +215,29 @@ function SlotRow({ slot, label, foods, items, onAdd, onDelete }: {
   return (
     <div>
       <div className="mb-1 flex flex-wrap items-center gap-1.5">
-        <span className="w-8 shrink-0 text-xs text-slate-300">{label}</span>
+        <span className="w-8 shrink-0 text-xs text-ink-dim">{label}</span>
         {items.map((it) => (
-          <span key={it.id} className="flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+          <span key={it.id} className="flex items-center gap-1 rounded-full bg-panel px-2 py-0.5 text-[10px] text-ink-dim">
             {it.name}{it.qty !== 1 ? `×${it.qty}` : ""}・{FREQ_LABEL[it.frequency]}
-            <button onClick={() => onDelete(it.id)} className="text-slate-500 hover:text-rose-400">×</button>
+            <button onClick={() => onDelete(it.id)} className="text-ink-faint hover:text-risk">×</button>
           </span>
         ))}
       </div>
       {foods.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pl-8">
           <select value={foodId} onChange={(e) => setFoodId(e.target.value ? Number(e.target.value) : "")}
-            className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200">
+            className="rounded border border-hairline bg-hull px-1.5 py-1 text-[11px] text-ink">
             <option value="">食品を選択</option>
             {foods.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} min={0.5} step={0.5}
-            className="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-right text-[11px] text-slate-200 tabular-nums" />
+            className="w-12 rounded border border-hairline bg-hull px-1.5 py-1 text-right text-[11px] text-ink tabular-nums" />
           <select value={freq} onChange={(e) => setFreq(e.target.value as MealFrequency)}
-            className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200">
+            className="rounded border border-hairline bg-hull px-1.5 py-1 text-[11px] text-ink">
             {(["daily", "often", "sometimes"] as const).map((f) => <option key={f} value={f}>{FREQ_LABEL[f]}</option>)}
           </select>
           <button disabled={!foodId} onClick={() => { if (foodId) { onAdd({ slot, food_id: foodId, qty: parseFloat(qty) || 1, frequency: freq }); setFoodId(""); setQty("1"); } }}
-            className="rounded-full border border-lime-700/60 bg-lime-900/20 px-2.5 py-1 text-[11px] text-lime-200 hover:bg-lime-900/50 disabled:opacity-40">
+            className="rounded-full border border-prog-700/60 bg-prog-900/20 px-2.5 py-1 text-[11px] text-prog-300 hover:bg-prog-900/50 disabled:opacity-40">
             + 追加
           </button>
         </div>

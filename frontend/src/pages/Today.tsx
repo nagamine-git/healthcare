@@ -149,7 +149,7 @@ export function TodayPage({ onOpenDebug }: Props) {
   }
   if (today.isError || !today.data) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-rose-400">
+      <div className="flex min-h-screen items-center justify-center text-risk">
         取得に失敗しました: {(today.error as Error)?.message}
       </div>
     );
@@ -208,7 +208,7 @@ export function TodayPage({ onOpenDebug }: Props) {
             aria-label="設定"
             title="設定"
             className={`rounded-lg p-1.5 transition-colors ${
-              tab === "settings" ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"
+              tab === "settings" ? "bg-panel text-ink" : "text-ink-dim hover:text-ink"
             }`}
           >
             <SettingsIcon size={16} />
@@ -272,12 +272,12 @@ export function TodayPage({ onOpenDebug }: Props) {
       <MigraineRiskBanner />
 
       {/* ===== メニュー: セクション切替を最上部に固定(常時表示の要点は「総合」タブへ集約)===== */}
-      <div className="sticky top-0 z-20 -mx-1 bg-slate-950/80 py-1 backdrop-blur">
-        <div className="flex gap-1 rounded-xl bg-slate-900/70 p-1">
+      <div className="sticky top-0 z-20 -mx-1 bg-void/80 py-1 backdrop-blur">
+        <div className="flex gap-1 rounded-xl bg-hull p-1">
           {TABS.map((t) => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
               className={`flex-1 rounded-lg py-1.5 text-[12px] font-medium transition-colors ${
-                tab === t.key ? "bg-slate-700 text-slate-100" : "text-slate-400 hover:text-slate-200"}`}>
+                tab === t.key ? "bg-panel text-ink" : "text-ink-dim hover:text-ink"}`}>
               {t.label}
             </button>
           ))}
@@ -321,11 +321,11 @@ export function TodayPage({ onOpenDebug }: Props) {
         <button
           type="button"
           onClick={() => (window.location.hash = "#garden")}
-          className="w-full rounded-xl bg-slate-900/70 p-3 text-left transition-colors hover:bg-slate-900"
+          className="w-full rounded-xl bg-hull p-3 text-left transition-colors hover:bg-panel"
         >
           <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-xs tracking-wider text-slate-400">🌱 理想の庭</span>
-            <span className="text-sm font-bold text-emerald-400">{gardenQ.data.streak}日連続</span>
+            <span className="text-xs tracking-wider text-ink-dim">🌱 理想の庭</span>
+            <span className="text-sm font-bold text-prog-300">{gardenQ.data.streak}日連続</span>
           </div>
           <div className="flex gap-[2px]">
             {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => {
@@ -334,7 +334,7 @@ export function TodayPage({ onOpenDebug }: Props) {
                 <div
                   key={c.date}
                   style={style ?? undefined}
-                  className={`h-2 w-2 rounded-sm ${style ? "" : "bg-slate-800"}`}
+                  className={`h-2 w-2 rounded-sm ${style ? "" : "bg-panel"}`}
                 />
               );
             })}
@@ -447,7 +447,7 @@ export function TodayPage({ onOpenDebug }: Props) {
         <DistributionPanel />
         <BodyLoadCard />
         <FitnessTestPanel />
-        <p className="px-1 text-[11px] text-slate-500">
+        <p className="px-1 text-[11px] text-ink-faint">
           目標体型・体組成は歯車（設定）の身体セクションで調整できます。
         </p>
       </div>
@@ -501,11 +501,11 @@ export function TodayPage({ onOpenDebug }: Props) {
 
 function SectionHeader({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="mb-3 mt-2 flex items-baseline gap-3 border-b border-slate-800 pb-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+    <div className="mb-3 mt-2 flex items-baseline gap-3 border-b border-hairline pb-1.5">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-dim">
         {label}
       </h2>
-      {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+      {hint && <span className="text-[10px] text-ink-faint">{hint}</span>}
     </div>
   );
 }

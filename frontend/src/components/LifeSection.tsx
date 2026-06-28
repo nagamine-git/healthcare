@@ -8,10 +8,10 @@ import type { LifeDomain } from "../lib/api";
 function barColor(ach: number | null): string {
   // 閾値は lib/achievement に一元化 (StatusLamps と共有)
   switch (achState(ach)) {
-    case "good": return "bg-emerald-500";
-    case "warn": return "bg-amber-500";
-    case "bad": return "bg-rose-500";
-    default: return "bg-slate-700";
+    case "good": return "bg-prog-500";
+    case "warn": return "bg-act";
+    case "bad": return "bg-risk";
+    default: return "bg-panel";
   }
 }
 
@@ -34,23 +34,23 @@ function DomainRow({
 }) {
   const ach = domain.achievement;
   return (
-    <div className="rounded-xl bg-slate-900/70 p-3">
+    <div className="rounded-xl bg-hull/70 p-3">
       <div className="flex items-baseline justify-between">
-        <span className="text-sm text-slate-200">{domain.label}</span>
-        <span className="text-lg font-light tabular-nums text-slate-100">
+        <span className="text-sm text-ink">{domain.label}</span>
+        <span className="text-lg font-light tabular-nums text-ink">
           {ach != null ? Math.round(ach) : "--"}
         </span>
       </div>
-      {domain.detail && <div className="text-[10px] text-slate-500">{domain.detail}</div>}
+      {domain.detail && <div className="text-[10px] text-ink-faint">{domain.detail}</div>}
       {domain.stale && domain.weight > 0 && (
-        <div className="text-[10px] text-amber-400">⚠ {staleLabel(domain.last_data_at)}</div>
+        <div className="text-[10px] text-act-300">⚠ {staleLabel(domain.last_data_at)}</div>
       )}
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-panel">
         <div className={`h-full rounded-full ${barColor(ach)}`} style={{ width: `${ach ?? 0}%` }} />
       </div>
       {showSlider && (
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] text-slate-500">重み</span>
+          <span className="text-[10px] text-ink-faint">重み</span>
           <input
             type="range"
             min={0}
@@ -58,9 +58,9 @@ function DomainRow({
             step={0.5}
             value={domain.weight}
             onChange={(e) => onWeight(parseFloat(e.target.value))}
-            className="flex-1 accent-emerald-500"
+            className="flex-1 accent-prog-500"
           />
-          <span className="w-8 text-right text-[10px] tabular-nums text-slate-400">
+          <span className="w-8 text-right text-[10px] tabular-nums text-ink-dim">
             {domain.weight.toFixed(1)}
           </span>
         </div>
@@ -85,19 +85,19 @@ export function LifeSection() {
   const data = life.data;
 
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-3 rounded-2xl bg-hull/40 p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-slate-400">
+        <span className="text-xs uppercase tracking-wider text-ink-dim">
           理想への総合接近度
         </span>
         <span className="flex items-baseline gap-2">
           {data?.coverage && data.coverage.active < data.coverage.total && (
-            <span className="text-[10px] tabular-nums text-amber-400/80"
+            <span className="text-[10px] tabular-nums text-act-300/80"
                   title="達成度データがあるドメイン数。少ないほどライフスコアは一部のドメインだけの平均になる">
               記録 {data.coverage.active}/{data.coverage.total}
             </span>
           )}
-          <span className="text-3xl font-light tabular-nums text-emerald-300">
+          <span className="text-3xl font-light tabular-nums text-prog-300">
             {data?.life_score != null ? Math.round(data.life_score) : "--"}
           </span>
         </span>
@@ -108,7 +108,7 @@ export function LifeSection() {
         type="button"
         onClick={() => setEditWeights(!editWeights)}
         aria-expanded={editWeights}
-        className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-300"
+        className="flex items-center gap-1.5 text-[11px] text-ink-dim hover:text-ink-dim"
       >
         {editWeights ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <SlidersHorizontal size={12} />
@@ -121,7 +121,7 @@ export function LifeSection() {
             <button
               key={p.key}
               onClick={() => applyPreset.mutate(p.key)}
-              className="rounded-full bg-slate-800/70 px-3 py-1 text-[11px] text-slate-300 hover:bg-slate-700"
+              className="rounded-full bg-panel/70 px-3 py-1 text-[11px] text-ink-dim hover:bg-panel"
             >
               {p.label}
             </button>
@@ -130,7 +130,7 @@ export function LifeSection() {
       )}
 
       {life.isLoading ? (
-        <div className="text-sm text-slate-400">読み込み中...</div>
+        <div className="text-sm text-ink-dim">読み込み中...</div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {data?.domains

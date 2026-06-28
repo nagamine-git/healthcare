@@ -23,15 +23,15 @@ export function StatusStrip({ score, headline }: { score: SubScores | null; head
 
   return (
     <Panel title="状態 — 今日(身体) / 人生(目的)">
-      {/* 今日(身体): リング=瞬間の計器 */}
-      <button onClick={() => go("#today")} className="flex w-full items-center gap-4 text-left">
+      {/* 今日(身体): リング=瞬間の計器(既に home なのでリンクなし) */}
+      <div className="flex w-full items-center gap-4 text-left">
         <RingGauge value={score?.total ?? null} label="今日" tone="prog" size={92} />
         <div className="flex-1 space-y-2">
           <BarGauge label="SLEEP" value={score?.sleep ?? null} />
           <BarGauge label="AUTONOMIC" value={score?.hrv ?? null} />
           <BarGauge label="ENERGY" value={score?.body_battery ?? null} />
         </div>
-      </button>
+      </div>
 
       {headline && (
         <p className="mt-2 text-sm text-ink-dim">{headline}</p>

@@ -12,9 +12,9 @@ export default defineConfig({
       manifest: {
         name: "Ascend",
         short_name: "Ascend",
-        description: "Personal healthcare dashboard (tailnet only)",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
+        description: "Ascend — 人生最適化 OS (tailnet only)",
+        theme_color: "#0a0e14",
+        background_color: "#0a0e14",
         display: "standalone",
         start_url: "/",
         scope: "/",

@@ -104,9 +104,9 @@ export function BodyCompositionMap({
           <div key={z.key} className="flex items-start gap-1.5 text-[9px] leading-tight">
             <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: z.fill, border: `1px solid ${z.stroke}` }} />
             <span>
-              <span className="text-slate-300">{z.label}</span>
-              <span className="text-slate-500"> · {EVIDENCE_LABEL[z.evidence]}</span>
-              <span className="block text-slate-600">{z.source}</span>
+              <span className="text-ink-dim">{z.label}</span>
+              <span className="text-ink-faint"> · {EVIDENCE_LABEL[z.evidence]}</span>
+              <span className="block text-ink-faint">{z.source}</span>
             </span>
           </div>
         ))}

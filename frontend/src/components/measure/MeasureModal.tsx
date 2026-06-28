@@ -33,13 +33,13 @@ export function MeasureModal({
   }, [wake, mode]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col bg-void/95 backdrop-blur-sm">
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm text-slate-300">{label}</span>
+        <span className="text-sm text-ink-dim">{label}</span>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-lg px-3 py-1.5 text-xs text-ink-dim hover:bg-panel hover:text-ink"
         >
           中止
         </button>

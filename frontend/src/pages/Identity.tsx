@@ -33,21 +33,21 @@ export function IdentityPage({ onBack }: Props) {
 
   return (
     <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4 text-ink">
-      <header className="safe-area-top flex items-center justify-between pb-1">
+      <header className="flex items-center justify-between pb-1">
         <button
           onClick={onBack}
-          className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:text-slate-200"
+          className="rounded-lg px-2 py-1 text-sm text-ink-dim hover:text-ink"
         >
           ← 戻る
         </button>
-        <h1 className="text-sm tracking-wider text-slate-300">
-          Compass <span className="text-[10px] text-slate-500">価値観 × マインドセット</span>
+        <h1 className="text-sm tracking-wider text-ink-dim">
+          Compass <span className="text-[10px] text-ink-faint">価値観 × マインドセット</span>
         </h1>
         <span className="w-12" />
       </header>
 
-      {q.isLoading && <p className="text-sm text-slate-500">読み込み中…</p>}
-      {q.isError && <p className="text-sm text-rose-400">取得に失敗しました</p>}
+      {q.isLoading && <p className="text-sm text-ink-faint">読み込み中…</p>}
+      {q.isError && <p className="text-sm text-risk">取得に失敗しました</p>}
       {q.data && (
         <>
           <OverviewCard data={q.data} />
@@ -76,10 +76,10 @@ export function IdentityPage({ onBack }: Props) {
 
 function Card({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
   return (
-    <section className="space-y-3 rounded-2xl bg-slate-900/70 p-4">
+    <section className="space-y-3 rounded-xl bg-hull p-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm tracking-wide text-slate-300">{title}</h2>
-        {subtitle && <span className="text-[10px] text-slate-500">{subtitle}</span>}
+        <h2 className="text-sm tracking-wide text-ink-dim">{title}</h2>
+        {subtitle && <span className="text-[10px] text-ink-faint">{subtitle}</span>}
       </div>
       {children}
     </section>
@@ -95,7 +95,7 @@ function OverviewCard({ data }: { data: IdentityResponse }) {
         <Metric label="マインドセット" value={report.layers.mindset} />
         <Metric label="価値観" value={report.layers.values} />
       </div>
-      <p className="text-[11px] leading-relaxed text-slate-500">
+      <p className="text-[11px] leading-relaxed text-ink-faint">
         「欠陥を直す」ではなく、選んだ価値に沿って一歩進むための地図です。弱い次元に効く作品を観て、
         小さな実行意図(if-then)に変えていきます。
       </p>
@@ -106,7 +106,7 @@ function OverviewCard({ data }: { data: IdentityResponse }) {
 function Metric({ label, value }: { label: string; value: number | null }) {
   return (
     <div>
-      <div className="text-[10px] tracking-wider text-slate-500">{label}</div>
+      <div className="text-[10px] tracking-wider text-ink-faint">{label}</div>
       <div className="text-3xl font-light tabular-nums" style={{ color: alignColor(value) }}>
         {value != null ? Math.round(value) : "--"}
       </div>
@@ -155,7 +155,7 @@ function RadarPanel({
         ) : null}
       </div>
       {!hasData && (
-        <p className="text-[11px] text-amber-400/70">
+        <p className="text-[11px] text-act-300">
           まだ現在地が測れていません。下の「状況判断テスト(SJT)」を 1 回やると現在地が出ます。
         </p>
       )}
@@ -176,20 +176,20 @@ function GapList({ dims, weakest }: { dims: IdentityGapDimension[]; weakest: str
           return (
             <div key={d.id} className="space-y-1">
               <div className="flex items-baseline justify-between text-xs">
-                <span className="text-slate-300">{d.name}</span>
-                <span className="tabular-nums text-slate-400">
+                <span className="text-ink-dim">{d.name}</span>
+                <span className="tabular-nums text-ink-dim">
                   {d.current != null ? (
                     <span style={{ color: alignColor(d.current) }}>{Math.round(d.current)}</span>
                   ) : (
-                    <span className="text-amber-400/70">--</span>
+                    <span className="text-act-300">--</span>
                   )}
-                  <span className="text-slate-600"> / {Math.round(d.target)}</span>
+                  <span className="text-ink-faint"> / {Math.round(d.target)}</span>
                   {d.gap != null && d.gap > 0 && (
-                    <span className="ml-1 text-[10px] text-slate-500">(−{Math.round(d.gap)})</span>
+                    <span className="ml-1 text-[10px] text-ink-faint">(−{Math.round(d.gap)})</span>
                   )}
                 </span>
               </div>
-              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-panel">
                 <div className="h-full rounded-full" style={{ width: `${Math.round(ratio * 100)}%`, background: alignColor(d.current) }} />
               </div>
             </div>
@@ -251,21 +251,21 @@ function SjtPanel() {
   return (
     <Card title="状況判断テスト(SJT)" subtitle={`${assessed.length} 次元 測定済み`}>
       {!started ? (
-        <button onClick={start} className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm hover:bg-emerald-600">
+        <button onClick={start} className="rounded-lg bg-prog-700 px-4 py-2 text-sm hover:bg-prog-500">
           測定を始める
         </button>
       ) : (
         <div className="space-y-3">
-          {turn.isPending && <p className="text-sm text-slate-500">考え中…</p>}
+          {turn.isPending && <p className="text-sm text-ink-faint">考え中…</p>}
           {scenario && !turn.isPending && (
             <div className="space-y-2">
-              <p className="text-sm leading-relaxed text-slate-200">{scenario.situation}</p>
+              <p className="text-sm leading-relaxed text-ink">{scenario.situation}</p>
               <div className="grid gap-2">
                 {scenario.options.map((opt, i) => (
                   <button
                     key={i}
                     onClick={() => choose(opt)}
-                    className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-left text-sm hover:border-emerald-600"
+                    className="rounded-lg border border-hairline bg-panel px-3 py-2 text-left text-sm hover:border-prog-500"
                   >
                     {opt}
                   </button>
@@ -274,14 +274,14 @@ function SjtPanel() {
             </div>
           )}
           {(done || (!scenario && !turn.isPending && assessed.length > 0)) && (
-            <div className="space-y-2 border-t border-slate-800 pt-3">
-              <p className="text-xs text-slate-400">
+            <div className="space-y-2 border-t border-hairline pt-3">
+              <p className="text-xs text-ink-dim">
                 {done ? "全次元を測り終えました。" : "ここまでの結果を保存できます。"}
               </p>
               <button
                 onClick={() => commit.mutate()}
                 disabled={commit.isPending}
-                className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm hover:bg-emerald-600 disabled:opacity-50"
+                className="rounded-lg bg-prog-700 px-4 py-2 text-sm hover:bg-prog-500 disabled:opacity-50"
               >
                 {commit.isPending ? "保存中…" : "現在地として保存"}
               </button>
@@ -314,25 +314,25 @@ function DecisionLogPanel({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="例: 担当外だが障害対応を引き受けた"
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm outline-none focus:border-emerald-600"
+          className="flex-1 rounded-lg border border-hairline bg-panel px-3 py-2 text-sm outline-none focus:border-prog-500"
         />
         <button
           onClick={() => text.trim() && post.mutate(text.trim())}
           disabled={post.isPending || !text.trim()}
-          className="rounded-lg bg-emerald-600/80 px-3 py-2 text-sm hover:bg-emerald-600 disabled:opacity-50"
+          className="rounded-lg bg-prog-700 px-3 py-2 text-sm hover:bg-prog-500 disabled:opacity-50"
         >
           記録
         </button>
       </div>
       <div className="space-y-2">
         {recent.map((r) => (
-          <div key={r.id} className="rounded-lg bg-slate-800/40 px-3 py-2">
-            <div className="text-xs text-slate-300">{r.text}</div>
+          <div key={r.id} className="rounded-lg bg-panel px-3 py-2">
+            <div className="text-xs text-ink-dim">{r.text}</div>
             <div className="mt-1 flex flex-wrap gap-1">
               {r.inferred.map((s, i) => (
                 <span
                   key={i}
-                  className="rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] text-slate-300"
+                  className="rounded-full bg-panel px-2 py-0.5 text-[10px] text-ink-dim"
                   title={s.rationale}
                 >
                   {s.dimension_id} {s.signal > 0 ? "+" : ""}{s.signal.toFixed(1)}
@@ -352,9 +352,9 @@ const CATEGORY_LABEL: Record<IdentityRecommendation["category"], string> = {
   new: "新規発見",
 };
 const CATEGORY_BADGE: Record<IdentityRecommendation["category"], string> = {
-  rewatch: "bg-amber-600/30 text-amber-200",
+  rewatch: "bg-act/20 text-act-300",
   watchlist: "bg-sky-600/30 text-sky-200",
-  new: "bg-emerald-600/30 text-emerald-200",
+  new: "bg-prog-700/40 text-prog-300",
 };
 const KIND_LABEL: Record<string, string> = {
   film: "🎬 映画",
@@ -410,7 +410,7 @@ function RecommendationsPanel({
             key={f}
             onClick={() => setFilter(f)}
             className={`rounded-full px-3 py-1 text-[11px] ${
-              filter === f ? "bg-slate-200 text-slate-900" : "bg-slate-800/60 text-slate-300"
+              filter === f ? "bg-ink text-void" : "bg-panel text-ink-dim"
             }`}
           >
             {f === "all" ? "すべて" : CATEGORY_LABEL[f]} ({counts[f] ?? 0})
@@ -419,7 +419,7 @@ function RecommendationsPanel({
         <button
           onClick={() => suggest.mutate()}
           disabled={suggest.isPending}
-          className="ml-auto rounded-lg border border-emerald-700/60 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
+          className="ml-auto rounded-lg border border-prog-700 px-3 py-1 text-[11px] text-prog-300 hover:bg-prog-900/30 disabled:opacity-50"
         >
           {suggest.isPending ? "提案生成中…" : "＋ リスト外を提案"}
         </button>
@@ -432,7 +432,7 @@ function RecommendationsPanel({
             key={k}
             onClick={() => setKind(k)}
             className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-              kind === k ? "bg-slate-200 text-slate-900" : "bg-slate-800/60 text-slate-400"
+              kind === k ? "bg-ink text-void" : "bg-panel text-ink-dim"
             }`}
           >
             {k === "all" ? "全種別" : KIND_LABEL[k]} ({kindCounts[k] ?? 0})
@@ -441,27 +441,27 @@ function RecommendationsPanel({
       </div>
 
       {recs.length === 0 ? (
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-ink-faint">
           作品を取り込み・タグ付けするか、「＋ リスト外を提案」で推薦が出ます。
         </p>
       ) : (
         <div className="space-y-2">
           {shown.map((r, i) => (
-            <div key={r.media_item_id} className="flex items-start justify-between gap-3 rounded-lg bg-slate-800/40 px-3 py-2">
+            <div key={r.media_item_id} className="flex items-start justify-between gap-3 rounded-lg bg-panel px-3 py-2">
               <div className="min-w-0 flex-1 space-y-1">
                 {/* バッジ行 */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-semibold tabular-nums text-slate-400">#{i + 1}</span>
+                  <span className="text-[11px] font-semibold tabular-nums text-ink-dim">#{i + 1}</span>
                   <span className={`rounded px-1.5 py-0.5 text-[9px] ${CATEGORY_BADGE[r.category]}`}>
                     {CATEGORY_LABEL[r.category]}
                   </span>
-                  <span className="text-[10px] text-slate-400">{KIND_LABEL[r.kind] ?? r.kind}</span>
-                  {r.rating != null && <span className="text-[10px] text-amber-300/80">★{r.rating}</span>}
+                  <span className="text-[10px] text-ink-dim">{KIND_LABEL[r.kind] ?? r.kind}</span>
+                  {r.rating != null && <span className="text-[10px] text-act-300">★{r.rating}</span>}
                 </div>
                 {/* タイトル: 2行表示、クリックで全文 */}
                 <button
                   onClick={() => toggleExpand(r.media_item_id)}
-                  className="block w-full text-left text-sm text-slate-200"
+                  className="block w-full text-left text-sm text-ink"
                   title={r.title}
                   style={
                     expanded.has(r.media_item_id)
@@ -469,13 +469,13 @@ function RecommendationsPanel({
                       : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }
                   }
                 >
-                  {r.title} {r.year && <span className="text-[10px] text-slate-500">({r.year})</span>}
+                  {r.title} {r.year && <span className="text-[10px] text-ink-faint">({r.year})</span>}
                 </button>
-                <div className="text-[10px] text-slate-500">{r.reason}</div>
+                <div className="text-[10px] text-ink-faint">{r.reason}</div>
                 {/* レバレッジ相対バー (リスト内の最大を 100%) */}
-                <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-slate-700/50">
+                <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-hairline">
                   <div
-                    className="h-full rounded-full bg-emerald-400/70"
+                    className="h-full rounded-full bg-prog-500"
                     style={{ width: `${Math.round((r.score / maxScore) * 100)}%` }}
                   />
                 </div>
@@ -484,17 +484,17 @@ function RecommendationsPanel({
                     href={r.imdb_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-amber-300/90 hover:text-amber-200"
+                    className="inline-flex items-center gap-1 text-[10px] text-act-300 hover:text-act-300"
                     title="IMDbで評価して「観た記録」にする"
                   >
-                    <span className="rounded bg-amber-400/20 px-1 font-bold tracking-tight">IMDb</span>
+                    <span className="rounded bg-act/20 px-1 font-bold tracking-tight">IMDb</span>
                     で評価↗
                   </a>
                 )}
               </div>
               <button
                 onClick={() => onReflect(r)}
-                className="shrink-0 rounded-lg border border-slate-700 px-3 py-1 text-xs hover:border-emerald-600"
+                className="shrink-0 rounded-lg border border-hairline px-3 py-1 text-xs hover:border-prog-500"
               >
                 {(() => {
                   const read = r.kind === "book" || r.kind === "manga";
@@ -505,7 +505,7 @@ function RecommendationsPanel({
             </div>
           ))}
           {shown.length === 0 && (
-            <p className="text-[11px] text-slate-500">この区分の作品はまだありません。</p>
+            <p className="text-[11px] text-ink-faint">この区分の作品はまだありません。</p>
           )}
         </div>
       )}
@@ -570,41 +570,41 @@ function ReflectionPanel({
   return (
     <Card title={`内省: ${target.title}`} subtitle="作品 → 内省 → 実行意図">
       {!started ? (
-        <button onClick={begin} className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm hover:bg-emerald-600">
+        <button onClick={begin} className="rounded-lg bg-prog-700 px-4 py-2 text-sm hover:bg-prog-500">
           内省を始める
         </button>
       ) : (
         <div className="space-y-3">
-          {reflect.isPending && <p className="text-sm text-slate-500">考え中…</p>}
+          {reflect.isPending && <p className="text-sm text-ink-faint">考え中…</p>}
           {question && !intention && !reflect.isPending && (
             <div className="space-y-2">
-              <p className="text-sm leading-relaxed text-slate-200">{question}</p>
+              <p className="text-sm leading-relaxed text-ink">{question}</p>
               <div className="flex gap-2">
                 <input
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm outline-none focus:border-emerald-600"
+                  className="flex-1 rounded-lg border border-hairline bg-panel px-3 py-2 text-sm outline-none focus:border-prog-500"
                 />
-                <button onClick={send} className="rounded-lg bg-emerald-600/80 px-3 py-2 text-sm hover:bg-emerald-600">
+                <button onClick={send} className="rounded-lg bg-prog-700 px-3 py-2 text-sm hover:bg-prog-500">
                   返答
                 </button>
               </div>
             </div>
           )}
           {intention && (
-            <div className="space-y-2 border-t border-slate-800 pt-3">
-              <div className="text-[10px] tracking-wider text-slate-500">実行意図(if-then)</div>
-              <p className="rounded-lg bg-slate-800/60 px-3 py-2 text-sm text-emerald-200">{intention.text}</p>
+            <div className="space-y-2 border-t border-hairline pt-3">
+              <div className="text-[10px] tracking-wider text-ink-faint">実行意図(if-then)</div>
+              <p className="rounded-lg bg-panel px-3 py-2 text-sm text-prog-300">{intention.text}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => save.mutate()}
                   disabled={save.isPending}
-                  className="rounded-lg bg-emerald-600/80 px-4 py-2 text-sm hover:bg-emerald-600 disabled:opacity-50"
+                  className="rounded-lg bg-prog-700 px-4 py-2 text-sm hover:bg-prog-500 disabled:opacity-50"
                 >
                   {save.isPending ? "保存中…" : "これを実行する"}
                 </button>
-                <button onClick={onClose} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-400">
+                <button onClick={onClose} className="rounded-lg border border-hairline px-3 py-2 text-sm text-ink-dim">
                   やめる
                 </button>
               </div>
@@ -632,25 +632,25 @@ function IntentionsPanel({
     <Card title="実行意図の振り返り" subtitle="効いたか検証する">
       <div className="space-y-2">
         {intentions.map((it) => (
-          <div key={it.media_item_id} className="rounded-lg bg-slate-800/40 px-3 py-2">
-            <div className="text-sm text-emerald-200">{it.intention}</div>
-            <div className="mt-0.5 text-[10px] text-slate-500">{it.title}</div>
+          <div key={it.media_item_id} className="rounded-lg bg-panel px-3 py-2">
+            <div className="text-sm text-prog-300">{it.intention}</div>
+            <div className="mt-0.5 text-[10px] text-ink-faint">{it.title}</div>
             <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={() => fb.mutate({ id: it.media_item_id, done: !it.done, rating: it.rating })}
-                className={`rounded-lg px-2 py-1 text-xs ${it.done ? "bg-emerald-600/70" : "border border-slate-700 text-slate-400"}`}
+                className={`rounded-lg px-2 py-1 text-xs ${it.done ? "bg-prog-700" : "border border-hairline text-ink-dim"}`}
               >
                 {it.done ? "✓ 実行した" : "実行した"}
               </button>
               <button
                 onClick={() => fb.mutate({ id: it.media_item_id, done: it.done, rating: it.rating === 1 ? 0 : 1 })}
-                className={`rounded-lg px-2 py-1 text-xs ${it.rating === 1 ? "bg-emerald-600/70" : "border border-slate-700 text-slate-400"}`}
+                className={`rounded-lg px-2 py-1 text-xs ${it.rating === 1 ? "bg-prog-700" : "border border-hairline text-ink-dim"}`}
               >
                 👍
               </button>
               <button
                 onClick={() => fb.mutate({ id: it.media_item_id, done: it.done, rating: it.rating === -1 ? 0 : -1 })}
-                className={`rounded-lg px-2 py-1 text-xs ${it.rating === -1 ? "bg-rose-600/70" : "border border-slate-700 text-slate-400"}`}
+                className={`rounded-lg px-2 py-1 text-xs ${it.rating === -1 ? "bg-risk" : "border border-hairline text-ink-dim"}`}
               >
                 👎
               </button>
@@ -739,7 +739,7 @@ function LibraryPanel({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <label
-            className={`cursor-pointer rounded-lg bg-emerald-600/80 px-3 py-1.5 hover:bg-emerald-600 ${
+            className={`cursor-pointer rounded-lg bg-prog-700 px-3 py-1.5 hover:bg-prog-500 ${
               imp.isPending ? "pointer-events-none opacity-50" : ""
             }`}
           >
@@ -763,17 +763,17 @@ function LibraryPanel({
           <button
             onClick={runTag}
             disabled={tagging || library.untagged === 0}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 disabled:opacity-50"
+            className="rounded-lg border border-hairline px-3 py-1.5 disabled:opacity-50"
           >
             {tagging ? "タグ付け中…" : `未タグをタグ付け${library.untagged ? ` (${library.untagged})` : ""}`}
           </button>
         </div>
-        {msg && <p className="text-[11px] text-emerald-300/80">{msg}</p>}
+        {msg && <p className="text-[11px] text-prog-300/80">{msg}</p>}
         {tagMsg && <p className="text-[11px] text-sky-300/80">{tagMsg}</p>}
-        <p className="text-[10px] leading-relaxed text-slate-600">
+        <p className="text-[10px] leading-relaxed text-ink-faint">
           IMDb の Your Ratings / Watchlist ページで「Export」してダウンロードした
-          <code className="mx-1 rounded bg-slate-800 px-1">ratings.csv</code>/
-          <code className="mx-1 rounded bg-slate-800 px-1">WATCHLIST.csv</code>
+          <code className="mx-1 rounded bg-panel px-1">ratings.csv</code>/
+          <code className="mx-1 rounded bg-panel px-1">WATCHLIST.csv</code>
           をそのまま選ぶだけ(複数同時可・ファイル名で自動判別)。
           マンガ・本は手動登録(API 経由)で追加できます。
         </p>

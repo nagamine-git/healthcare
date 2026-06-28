@@ -44,11 +44,11 @@ export function RangeBar({ current, target, scaleMax }: Props) {
   const finalColor = farOver ? overColor : fillColor;
 
   return (
-    <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-800">
+    <div className="relative h-2 w-full overflow-hidden rounded-full bg-panel">
       {/* 推奨範囲帯 (うっすら緑) */}
       {minPct != null && maxPct != null && (
         <div
-          className="absolute h-full bg-emerald-900/30"
+          className="absolute h-full bg-prog-900/30"
           style={{ left: `${minPct}%`, width: `${maxPct - minPct}%` }}
         />
       )}
@@ -60,21 +60,21 @@ export function RangeBar({ current, target, scaleMax }: Props) {
       {/* min マーカー */}
       {minPct != null && (
         <div
-          className="absolute top-0 h-full w-px bg-slate-500"
+          className="absolute top-0 h-full w-px bg-ink-faint"
           style={{ left: `${minPct}%` }}
         />
       )}
       {/* ideal マーカー (太め) */}
       {idealPct != null && (
         <div
-          className="absolute top-0 h-full w-0.5 bg-slate-300"
+          className="absolute top-0 h-full w-0.5 bg-ink-dim"
           style={{ left: `${idealPct}%` }}
         />
       )}
       {/* max マーカー */}
       {maxPct != null && (
         <div
-          className="absolute top-0 h-full w-px bg-slate-500"
+          className="absolute top-0 h-full w-px bg-ink-faint"
           style={{ left: `${maxPct}%` }}
         />
       )}

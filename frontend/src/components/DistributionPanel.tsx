@@ -16,12 +16,12 @@ export function DistributionPanel() {
   if (!data) return null;
 
   return (
-    <section className="space-y-3 rounded-2xl bg-gradient-to-b from-slate-900/80 to-slate-900/40 p-4 sm:p-5 ring-1 ring-slate-800">
+    <section className="space-y-3 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       <div className="flex items-center gap-2">
         <Users size={16} className="text-sky-300" />
-        <h3 className="text-sm tracking-wide text-slate-100">母集団での現在地</h3>
+        <h3 className="text-sm tracking-wide text-ink">母集団での現在地</h3>
       </div>
-      <p className="text-[11px] leading-relaxed text-slate-500">
+      <p className="text-[11px] leading-relaxed text-ink-faint">
         日本人 同年代・同性の分布に対する自分の位置。BMI に加え、筋肉質さ (FFMI) と
         最強の予後指標である心肺フィットネス (VO2max) も。
         {!data.evaluable && " 設定で生年月日・性別・身長を入れると percentile が出ます。"}
@@ -40,21 +40,21 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
   const showVo2Help = m.key === "vo2max" && m.value == null;
 
   return (
-    <div className="rounded-xl bg-slate-950/40 p-3 ring-1 ring-slate-800/60">
+    <div className="rounded-xl bg-void/40 p-3 ring-1 ring-panel/60">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-100">{m.label}</span>
-          <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-400">
+          <span className="text-sm font-medium text-ink">{m.label}</span>
+          <span className="rounded-full bg-panel/80 px-2 py-0.5 text-[10px] text-ink-dim">
             {m.source}
           </span>
         </div>
         {m.value != null ? (
-          <span className="text-lg font-semibold tabular-nums text-slate-100">
+          <span className="text-lg font-semibold tabular-nums text-ink">
             {m.value}
-            <span className="ml-0.5 text-xs font-normal text-slate-400">{m.unit}</span>
+            <span className="ml-0.5 text-xs font-normal text-ink-dim">{m.unit}</span>
           </span>
         ) : (
-          <span className="text-[11px] text-slate-500">記録待ち</span>
+          <span className="text-[11px] text-ink-faint">記録待ち</span>
         )}
       </div>
 
@@ -70,27 +70,27 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
           />
           <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
             {m.percentile != null ? (
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-ink-dim">
                 同年代・同性で{" "}
                 <span className="font-semibold tabular-nums text-sky-300">
                   {Math.round(m.percentile)}
                 </span>
-                <span className="text-slate-500"> パーセンタイル (下位からの位置)</span>
+                <span className="text-ink-faint"> パーセンタイル (下位からの位置)</span>
               </span>
             ) : (
-              <span className="text-[11px] text-slate-600">
+              <span className="text-[11px] text-ink-faint">
                 生年月日・性別・身長を設定すると現在地 (percentile) が出ます。
               </span>
             )}
             {m.target_low != null && (
-              <span className="text-[11px] text-amber-300/80">
-                <span className="text-slate-500">目標 </span>
+              <span className="text-[11px] text-act-300/80">
+                <span className="text-ink-faint">目標 </span>
                 <span className="tabular-nums">
                   {m.target_high != null && m.target_high > m.target_low
                     ? `${m.target_low}–${m.target_high}`
                     : m.target_low}
                 </span>
-                {m.unit && <span className="text-slate-500">{m.unit}</span>}
+                {m.unit && <span className="text-ink-faint">{m.unit}</span>}
               </span>
             )}
           </div>
@@ -105,7 +105,7 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
 function Vo2MaxHelp() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-2 border-t border-slate-800/50 pt-2">
+    <div className="mt-2 border-t border-panel/50 pt-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -115,20 +115,20 @@ function Vo2MaxHelp() {
         <ChevronDown size={13} className={open ? "rotate-180 transition" : "transition"} />
       </button>
       {open && (
-        <div className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-slate-400">
+        <div className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-ink-dim">
           <p>
-            Garmin (Instinct 3) は<strong className="text-slate-300">屋外ランニング</strong>から推定します。
-            GPSオンで、<strong className="text-slate-300">最大心拍の70%以上を10分以上</strong>継続するのが条件 (週1回が目安)。
+            Garmin (Instinct 3) は<strong className="text-ink-dim">屋外ランニング</strong>から推定します。
+            GPSオンで、<strong className="text-ink-dim">最大心拍の70%以上を10分以上</strong>継続するのが条件 (週1回が目安)。
           </p>
           <p>
-            サイクリングでも出ますが<strong className="text-slate-300">パワーメーター必須</strong> (高強度20分以上)。
+            サイクリングでも出ますが<strong className="text-ink-dim">パワーメーター必須</strong> (高強度20分以上)。
           </p>
-          <p className="text-slate-500">
+          <p className="text-ink-faint">
             筋トレ・ラッキング・ボクシング・屋内ランは対象外 (VO2maxは生成されません)。
             ウォーキングは直近30日にランの推定が無いときだけ代替で出ることがあります。
           </p>
-          <p className="text-slate-500">
-            → 一度<strong className="text-slate-300">屋外ランを1本</strong>走れば値が入り、ここに分布が出ます。
+          <p className="text-ink-faint">
+            → 一度<strong className="text-ink-dim">屋外ランを1本</strong>走れば値が入り、ここに分布が出ます。
           </p>
         </div>
       )}

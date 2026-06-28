@@ -38,10 +38,10 @@ type LampState = AchState;
 
 const STATE_CLASS: Record<LampState, string> = {
   // good は発光を弱め、warn/bad を相対的に目立たせる (図と地の分離)
-  good: "text-emerald-300/90 bg-emerald-400/5",
-  warn: "text-amber-300 bg-amber-400/10",
-  bad: "text-rose-400 bg-rose-500/10 lamp-throb",
-  off: "text-slate-700/70",
+  good: "text-prog-300/90 bg-prog-500/5",
+  warn: "text-act-300 bg-act/10",
+  bad: "text-risk bg-risk/10 lamp-throb",
+  off: "text-hairline/70",
 };
 
 // SVG は textShadow が効かないので drop-shadow フィルタで発光させる。
@@ -174,7 +174,7 @@ function LampCell({
 }) {
   const Icon = lamp.icon;
   // reduced-motion 時は点滅の代わりにリングで bad を静的強調
-  const badRing = lamp.state === "bad" ? "motion-reduce:ring-1 motion-reduce:ring-rose-500/80" : "";
+  const badRing = lamp.state === "bad" ? "motion-reduce:ring-1 motion-reduce:ring-risk/80" : "";
   return (
     <button
       type="button"
@@ -186,12 +186,12 @@ function LampCell({
     >
       <span
         className={`relative grid h-8 w-8 place-items-center rounded-md transition-transform active:scale-90 ${STATE_CLASS[lamp.state]} ${badRing} ${
-          selected ? "ring-1 ring-slate-400/70" : ""
+          selected ? "ring-1 ring-ink-dim/70" : ""
         }`}
       >
         <Icon size={16} strokeWidth={2.2} style={{ filter: STATE_GLOW[lamp.state] }} />
         {lamp.badge != null && lamp.badge > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-rose-500 px-0.5 text-[9px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-risk px-0.5 text-[9px] font-bold text-white">
             {lamp.badge}
           </span>
         )}
@@ -199,7 +199,7 @@ function LampCell({
         {ignite && (
           <span
             aria-hidden
-            className="lamp-ignite-overlay pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-slate-200/10 text-slate-100"
+            className="lamp-ignite-overlay pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-ink/10 text-ink"
             style={{ animationDelay: `${index * 45}ms` }}
           >
             <Icon
@@ -335,7 +335,7 @@ export function StatusLamps({
 
   return (
     <section
-      className="rounded-2xl bg-slate-950/80 p-2 ring-1 ring-slate-800/60"
+      className="rounded-xl bg-void/80 p-2 ring-1 ring-panel/60"
       aria-label="状態インジケータ"
     >
       <div className="flex flex-wrap items-center gap-0.5">
@@ -353,7 +353,7 @@ export function StatusLamps({
 
       {/* マルチインフォメーションディスプレイ (タップしたランプの詳細) */}
       {open && (
-        <div className="mt-2 rounded-lg bg-slate-900/80 px-3 py-2 ring-1 ring-slate-800/80">
+        <div className="mt-2 rounded-lg bg-hull/80 px-3 py-2 ring-1 ring-panel/80">
           <div className="flex items-center justify-between">
             <span className={`text-xs font-medium ${STATE_CLASS[open.state].split(" ")[0]}`}>
               {open.heading}
@@ -362,7 +362,7 @@ export function StatusLamps({
               type="button"
               aria-label="閉じる"
               onClick={() => setOpenId(null)}
-              className="grid h-5 w-5 place-items-center rounded text-slate-500 hover:text-slate-300"
+              className="grid h-5 w-5 place-items-center rounded text-ink-faint hover:text-ink-dim"
             >
               <X size={12} />
             </button>
@@ -370,11 +370,11 @@ export function StatusLamps({
           <div className="mt-0.5 space-y-0.5">
             {open.rows.map((row, i) => {
               const isAction = row.startsWith("→");
-              const tone = open.state === "good" ? "text-emerald-300" : "text-amber-300";
+              const tone = open.state === "good" ? "text-prog-300" : "text-act-300";
               return (
                 <div
                   key={i}
-                  className={`text-[11px] leading-snug ${isAction ? `font-medium ${tone}` : "text-slate-400"}`}
+                  className={`text-[11px] leading-snug ${isAction ? `font-medium ${tone}` : "text-ink-dim"}`}
                 >
                   {row}
                 </div>

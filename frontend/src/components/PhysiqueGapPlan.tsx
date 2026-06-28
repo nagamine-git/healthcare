@@ -22,24 +22,24 @@ export function PhysiqueGapPlan() {
   if (!p) return null;
   if (!p.available) {
     return (
-      <div className="rounded-2xl bg-slate-900/40 p-4 text-xs text-slate-500">
+      <div className="rounded-xl bg-hull/40 p-4 text-xs text-ink-faint">
         ギャップ分析: {p.reason}（体重・体脂肪率を記録すると表示されます）
       </div>
     );
   }
 
   const dirColor =
-    p.direction === "cut" ? "text-amber-300"
-    : p.direction === "recomp" ? "text-emerald-300"
+    p.direction === "cut" ? "text-act-300"
+    : p.direction === "recomp" ? "text-prog-300"
     : p.direction === "lean_bulk" ? "text-sky-300"
-    : "text-slate-300";
+    : "text-ink-dim";
 
   return (
-    <section className="space-y-4 rounded-2xl bg-gradient-to-b from-slate-900/80 to-slate-900/40 p-4 sm:p-5 ring-1 ring-slate-800">
+    <section className="space-y-4 rounded-xl bg-gradient-to-b from-hull/80 to-hull/40 p-4 sm:p-5 ring-1 ring-panel">
       {/* ヘッダ */}
       <div className="flex items-center gap-2">
         <Target size={16} className={dirColor} />
-        <h3 className="text-sm tracking-wide text-slate-100">ギャップを埋めるには</h3>
+        <h3 className="text-sm tracking-wide text-ink">ギャップを埋めるには</h3>
       </div>
 
       {/* 方針 */}
@@ -47,11 +47,11 @@ export function PhysiqueGapPlan() {
 
       {/* 12週ブロック: 持続できる単位の達成目標を主役に */}
       {p.block && (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-600/30 bg-emerald-950/25 p-3">
-          <CalendarCheck size={20} className="shrink-0 text-emerald-300" />
+        <div className="flex items-center gap-3 rounded-xl border border-prog/30 bg-prog-500/25 p-3">
+          <CalendarCheck size={20} className="shrink-0 text-prog-300" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-emerald-100">{p.block.label}</div>
-            <div className="text-[10px] text-emerald-200/60">
+            <div className="text-sm font-medium text-prog-300">{p.block.label}</div>
+            <div className="text-[10px] text-prog-300/60">
               人が集中を保てる単位。まずここを完走 → 積み重ねで全体へ（全体目安 {p.timeline.eta_label}）
             </div>
           </div>
@@ -61,15 +61,15 @@ export function PhysiqueGapPlan() {
       {/* 今日やること: 平均実績からの具体行動 */}
       {p.today_actions.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">今日やること</div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-faint">今日やること</div>
           {p.today_actions.map((a) => (
-            <div key={a.key} className="flex items-start gap-2 rounded-lg bg-slate-950/40 px-3 py-2">
+            <div key={a.key} className="flex items-start gap-2 rounded-lg bg-void/40 px-3 py-2">
               {a.status === "ok"
-                ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
-                : <Circle size={15} className="mt-0.5 shrink-0 text-amber-400" />}
+                ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-prog-300" />
+                : <Circle size={15} className="mt-0.5 shrink-0 text-act-300" />}
               <div className="min-w-0">
-                <div className={`text-xs font-medium ${a.status === "ok" ? "text-slate-400" : "text-slate-100"}`}>{a.title}</div>
-                <div className="text-[10px] leading-tight text-slate-500">{a.detail}</div>
+                <div className={`text-xs font-medium ${a.status === "ok" ? "text-ink-dim" : "text-ink"}`}>{a.title}</div>
+                <div className="text-[10px] leading-tight text-ink-faint">{a.detail}</div>
               </div>
             </div>
           ))}
@@ -77,45 +77,45 @@ export function PhysiqueGapPlan() {
       )}
 
       {/* 現在 → 目標 (現在は測定ノイズを除いた平滑トレンド) */}
-      <div className="flex items-center gap-3 rounded-xl bg-slate-950/40 p-3 text-xs">
+      <div className="flex items-center gap-3 rounded-xl bg-void/40 p-3 text-xs">
         <GapCol label={p.current.smoothed ? "現在(トレンド)" : "現在"}
           w={p.current.weight_kg} bf={p.current.body_fat_pct}
           fat={p.current.fat_mass_kg} lean={p.current.lean_mass_kg}
           raw={p.current.smoothed ? `実測 ${p.current.raw_weight_kg}kg${p.current.raw_body_fat_pct != null ? ` / ${p.current.raw_body_fat_pct}%` : ""}` : undefined} />
-        <ArrowRight size={18} className="shrink-0 text-slate-600" />
+        <ArrowRight size={18} className="shrink-0 text-ink-faint" />
         <GapCol label="目標" w={p.target.weight_kg} bf={p.target.body_fat_pct}
           fat={p.target.fat_mass_kg} lean={p.target.lean_mass_kg} accent />
-        <div className="ml-auto hidden text-right text-[11px] tabular-nums text-slate-400 sm:block">
+        <div className="ml-auto hidden text-right text-[11px] tabular-nums text-ink-dim sm:block">
           {p.gap.d_fat_mass_kg != null && (
-            <div>脂肪 <b className="text-amber-300">{fmtDelta(p.gap.d_fat_mass_kg)}kg</b></div>
+            <div>脂肪 <b className="text-act-300">{fmtDelta(p.gap.d_fat_mass_kg)}kg</b></div>
           )}
           {p.gap.d_lean_mass_kg != null && (
-            <div>筋 <b className="text-emerald-300">{fmtDelta(p.gap.d_lean_mass_kg)}kg</b></div>
+            <div>筋 <b className="text-prog-300">{fmtDelta(p.gap.d_lean_mass_kg)}kg</b></div>
           )}
         </div>
       </div>
 
       {/* 結局やること = 優先度 */}
       <div className="space-y-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500">なぜそれが効くか (効果の優先度)</div>
+        <div className="text-[10px] uppercase tracking-wider text-ink-faint">なぜそれが効くか (効果の優先度)</div>
         {p.levers.map((l) => (
           <div key={l.name} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2 text-xs">
-              <span className="text-slate-200">{l.name}</span>
-              <span className="font-mono tabular-nums text-slate-400">{l.share_pct}%</span>
+              <span className="text-ink">{l.name}</span>
+              <span className="telemetry-num tabular-nums text-ink-dim">{l.share_pct}%</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-500/70 to-emerald-400"
+            <div className="h-1.5 overflow-hidden rounded-full bg-panel">
+              <div className="h-full rounded-full bg-gradient-to-r from-prog-500/70 to-prog-300"
                 style={{ width: `${l.share_pct}%` }} />
             </div>
-            <p className="text-[10px] leading-tight text-slate-500">{l.why}</p>
+            <p className="text-[10px] leading-tight text-ink-faint">{l.why}</p>
           </div>
         ))}
       </div>
 
       {/* エネルギー & マクロ */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat icon={<Flame size={12} className="text-orange-300" />} label="1日の目標"
+        <Stat icon={<Flame size={12} className="text-act-300" />} label="1日の目標"
           value={`${p.energy.calorie_target} kcal`}
           hint={`${p.energy.delta_kcal >= 0 ? "+" : ""}${p.energy.delta_kcal} vs 消費 ${p.energy.tdee}`} />
         <Stat label="タンパク質" value={`${p.macros.protein_g} g`}
@@ -129,33 +129,33 @@ export function PhysiqueGapPlan() {
       {/* 食事 vs 運動 の核心 (方向で色を変える) */}
       <div className={`rounded-xl border p-3 ${
         p.direction === "lean_bulk" ? "border-sky-700/30 bg-sky-950/20"
-        : p.direction === "maintain" ? "border-slate-700/40 bg-slate-900/40"
-        : "border-amber-700/30 bg-amber-950/20"
+        : p.direction === "maintain" ? "border-hairline/40 bg-hull/40"
+        : "border-act-700/30 bg-act/20"
       }`}>
         <div className={`mb-1 flex items-center gap-1.5 text-[11px] font-medium ${
           p.direction === "lean_bulk" ? "text-sky-200"
-          : p.direction === "maintain" ? "text-slate-200" : "text-amber-200"
+          : p.direction === "maintain" ? "text-ink" : "text-act-300"
         }`}>
           <Utensils size={12} /> {p.diet_vs_exercise.headline}
         </div>
-        <p className="text-[11px] leading-relaxed text-slate-300/90">{p.diet_vs_exercise.note}</p>
+        <p className="text-[11px] leading-relaxed text-ink-dim/90">{p.diet_vs_exercise.note}</p>
       </div>
 
       {/* トレーニング処方 */}
-      <div className="space-y-1.5 rounded-xl bg-slate-950/40 p-3">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-200">
-          <Dumbbell size={12} className="text-emerald-300" /> トレーニング (週 {p.training.resistance_sessions_per_week} 回・筋トレ主)
+      <div className="space-y-1.5 rounded-xl bg-void/40 p-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink">
+          <Dumbbell size={12} className="text-prog-300" /> トレーニング (週 {p.training.resistance_sessions_per_week} 回・筋トレ主)
         </div>
-        <p className="text-[10px] leading-tight text-slate-400">{p.training.primary}</p>
-        <p className="text-[10px] leading-tight text-slate-400">🥊 {p.training.shadowboxing}</p>
-        <p className="text-[10px] leading-tight text-slate-500">⚠ {p.training.interference}</p>
+        <p className="text-[10px] leading-tight text-ink-dim">{p.training.primary}</p>
+        <p className="text-[10px] leading-tight text-ink-dim">🥊 {p.training.shadowboxing}</p>
+        <p className="text-[10px] leading-tight text-ink-faint">⚠ {p.training.interference}</p>
       </div>
 
       {/* 注記 */}
       {p.notes.length > 0 && (
         <ul className="space-y-0.5">
           {p.notes.map((n, i) => (
-            <li key={i} className="text-[10px] leading-tight text-slate-500">· {n}</li>
+            <li key={i} className="text-[10px] leading-tight text-ink-faint">· {n}</li>
           ))}
         </ul>
       )}
@@ -168,15 +168,15 @@ function GapCol({ label, w, bf, fat, lean, accent, raw }: {
 }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-[9px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className={`font-mono text-base tabular-nums ${accent ? "text-emerald-200" : "text-slate-200"}`}>
-        {w}<span className="text-[10px] text-slate-500"> kg</span>
+      <div className="text-[9px] uppercase tracking-wider text-ink-faint">{label}</div>
+      <div className={`telemetry-num text-base tabular-nums ${accent ? "text-prog-300" : "text-ink"}`}>
+        {w}<span className="text-[10px] text-ink-faint"> kg</span>
       </div>
-      {bf != null && <div className="text-[10px] tabular-nums text-slate-400">体脂肪 {bf}%</div>}
+      {bf != null && <div className="text-[10px] tabular-nums text-ink-dim">体脂肪 {bf}%</div>}
       {fat != null && lean != null && (
-        <div className="text-[9px] tabular-nums text-slate-500">脂肪{fat} / 筋{lean}kg</div>
+        <div className="text-[9px] tabular-nums text-ink-faint">脂肪{fat} / 筋{lean}kg</div>
       )}
-      {raw && <div className="text-[8px] tabular-nums text-slate-600">{raw}</div>}
+      {raw && <div className="text-[8px] tabular-nums text-ink-faint">{raw}</div>}
     </div>
   );
 }
@@ -185,12 +185,12 @@ function Stat({ icon, label, value, hint, accent }: {
   icon?: React.ReactNode; label: string; value: string; hint?: string; accent?: boolean;
 }) {
   return (
-    <div className={`rounded-xl border px-3 py-2 ${accent ? "border-emerald-700/40 bg-emerald-950/20" : "border-slate-800 bg-slate-900/40"}`}>
-      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
+    <div className={`rounded-xl border px-3 py-2 ${accent ? "border-prog-700/40 bg-prog-500/20" : "border-panel bg-hull/40"}`}>
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-faint">
         {icon}{label}
       </div>
-      <div className={`font-mono text-sm tabular-nums ${accent ? "text-emerald-200" : "text-slate-200"}`}>{value}</div>
-      {hint && <div className="text-[10px] text-slate-500">{hint}</div>}
+      <div className={`telemetry-num text-sm tabular-nums ${accent ? "text-prog-300" : "text-ink"}`}>{value}</div>
+      {hint && <div className="text-[10px] text-ink-faint">{hint}</div>}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
 import { DayDigest } from "./DayDigest";
+import { Skeleton } from "./ui/cockpit";
 
 type Win = "day" | "24h";
 
@@ -94,21 +95,33 @@ export function DayStory() {
   const originHour = d ? new Date(d.origin_jst).getHours() : 0;
 
   const toggle = (
-    <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[11px]">
+    <div className="flex rounded-lg bg-panel/70 p-0.5 text-[11px]">
       {(["24h", "day"] as Win[]).map((w) => (
         <button key={w} onClick={() => setWin(w)}
-          className={`rounded-md px-2.5 py-0.5 ${win === w ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
+          className={`rounded-md px-2.5 py-0.5 ${win === w ? "bg-ink-faint text-ink" : "text-ink-dim"}`}>
           {w === "24h" ? "直近24h" : "今日"}
         </button>
       ))}
     </div>
   );
 
-  if (story.isLoading || !d || d.segments.length === 0) {
+  if (story.isLoading) {
     return (
-      <div className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
+      <div className="space-y-2 rounded-xl border border-hairline bg-hull p-4">
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10" />
+          ))}
+        </div>
+        <Skeleton className="h-24" />
+      </div>
+    );
+  }
+  if (!d || d.segments.length === 0) {
+    return (
+      <div className="space-y-2 rounded-xl bg-hull/40 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-400">{story.isLoading ? "読み込み中..." : "まだデータがありません"}</span>
+          <span className="text-sm text-ink-dim">まだデータがありません</span>
           {toggle}
         </div>
       </div>
@@ -171,9 +184,9 @@ export function DayStory() {
   const longSed = sedRuns.filter((r) => r.end_h - r.start_h >= 0.5);
 
   return (
-    <div className="space-y-3 rounded-2xl bg-slate-900/40 p-4">
+    <div className="space-y-3 rounded-xl bg-hull/40 p-4">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-base font-medium leading-snug text-slate-100">{d.summary}</p>
+        <p className="text-base font-medium leading-snug text-ink">{d.summary}</p>
         {toggle}
       </div>
 
@@ -371,7 +384,7 @@ export function DayStory() {
         {/* 今夜の理想スケジュール凡例 (時刻は重ならないようここで読みやすく) */}
         {schedMarks.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 px-1 text-[10px] text-indigo-300/80">
-            <span className="text-slate-500">今夜の予定</span>
+            <span className="text-ink-faint">今夜の予定</span>
             {schedMarks.map((m, i) => (
               <span key={i} className="tabular-nums">
                 {m.icon} {m.label} <b className="text-indigo-200">{m.time}</b>
@@ -419,7 +432,7 @@ export function DayStory() {
       </div>
 
       {/* 行動カラー凡例 (帯の色が何を意味するか) */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-dim">
         <Swatch c="#6366f1" t="睡眠" />
         <Swatch c="#f59e0b" t="集中・活動" />
         <Swatch c="#22d3ee" t="家事・育児など" />
@@ -428,14 +441,14 @@ export function DayStory() {
         <Swatch c="#34d399" t="ワークアウト" />
         <Swatch c="#334155" t="記録なし" />
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2.5 w-3 rounded-sm border border-dashed border-slate-400" />
+          <span className="inline-block h-2.5 w-3 rounded-sm border border-dashed border-ink-dim" />
           予定(参考のみ)
         </span>
       </div>
 
       {/* 線/点の凡例 + 拡大コントロール */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
           <span><span className="text-emerald-400">━</span> Body Battery</span>
           <span><span className="text-amber-400">━</span> ストレス(覚醒)</span>
           <span><span className="text-rose-400">━</span> 心拍</span>
@@ -446,20 +459,20 @@ export function DayStory() {
           <span><span className="text-amber-400">⌑</span> 集中ピーク窓</span>
           <span><span className="text-emerald-400/60">▦</span> 回復ゾーン</span>
           <span><span className="text-indigo-400/60">▦</span> 就寝窓</span>
-          <span><span className="text-slate-200">◆</span> 体調記録 / <span className="text-slate-400">◇</span> 推定</span>
-          <span className="text-slate-600">帯: 濃=記録 / 淡=推定</span>
+          <span><span className="text-ink">◆</span> 体調記録 / <span className="text-ink-dim">◇</span> 推定</span>
+          <span className="text-ink-faint">帯: 濃=記録 / 淡=推定</span>
         </div>
-        <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-[10px]">
+        <div className="flex rounded-lg bg-panel/70 p-0.5 text-[10px]">
           {(["fit", "wide", "max"] as Zoom[]).map((z) => (
             <button key={z} onClick={() => setZoom(z)}
-              className={`rounded-md px-2 py-0.5 ${zoom === z ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>
+              className={`rounded-md px-2 py-0.5 ${zoom === z ? "bg-ink-faint text-ink" : "text-ink-dim"}`}>
               {z === "fit" ? "フィット" : z === "wide" ? "1.5倍" : "2倍"}
             </button>
           ))}
         </div>
       </div>
       {zoom !== "fit" && (
-        <p className="text-[10px] text-slate-600">← 横にスクロールできます (全グラフ連動) →</p>
+        <p className="text-[10px] text-ink-faint">← 横にスクロールできます (全グラフ連動) →</p>
       )}
 
       {/* 気づき + 次の一手 */}
@@ -467,13 +480,13 @@ export function DayStory() {
         <div className="space-y-1.5 pt-1">
           {d.insights.map((ins, i) => {
             const Icon = INSIGHT_ICON[ins.icon] ?? Check;
-            const tone = ins.tone === "good" ? "text-emerald-300" : "text-amber-300";
+            const tone = ins.tone === "good" ? "text-prog-300" : "text-act-300";
             return (
-              <div key={i} className="flex items-start gap-2 rounded-xl bg-slate-900/60 px-3 py-2">
+              <div key={i} className="flex items-start gap-2 rounded-xl bg-hull/60 px-3 py-2">
                 <Icon size={16} className={`mt-0.5 shrink-0 ${tone}`} />
                 <div className="min-w-0">
-                  <div className="text-sm text-slate-200">{ins.text}</div>
-                  <div className="text-xs text-slate-400">→ {ins.action}</div>
+                  <div className="text-sm text-ink">{ins.text}</div>
+                  <div className="text-xs text-ink-dim">→ {ins.action}</div>
                 </div>
               </div>
             );
@@ -486,11 +499,11 @@ export function DayStory() {
 
 function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 px-2 py-1.5">
-      <Icon size={13} className="shrink-0 text-slate-500" />
+    <div className="flex items-center gap-1.5 rounded-lg bg-hull/60 px-2 py-1.5">
+      <Icon size={13} className="shrink-0 text-ink-faint" />
       <div className="min-w-0 leading-tight">
-        <div className="truncate text-[9px] text-slate-500">{label}</div>
-        <div className="truncate text-xs font-medium tabular-nums text-slate-200">{value}</div>
+        <div className="truncate text-[9px] text-ink-faint">{label}</div>
+        <div className="truncate text-xs font-medium tabular-nums text-ink">{value}</div>
       </div>
     </div>
   );

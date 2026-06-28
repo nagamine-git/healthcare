@@ -52,9 +52,9 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
   if (lead > 0) {
     return (
       <div className="text-center">
-        <div className="text-sm text-slate-400">まもなく開始</div>
+        <div className="text-sm text-ink-dim">まもなく開始</div>
         <div className="mt-2 text-7xl font-bold tabular-nums text-sky-300">{lead}</div>
-        <div className="mt-4 text-xs text-slate-500">腕を胸の前で組み、30秒で完全な立ち座りを繰り返す。</div>
+        <div className="mt-4 text-xs text-ink-faint">腕を胸の前で組み、30秒で完全な立ち座りを繰り返す。</div>
       </div>
     );
   }
@@ -62,16 +62,16 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
   return (
     <div className="flex w-full max-w-sm flex-col items-center gap-6">
       <div className="text-center">
-        <div className="text-xs text-slate-400">残り</div>
+        <div className="text-xs text-ink-dim">残り</div>
         <div className="text-6xl font-bold tabular-nums text-sky-300">{remaining}s</div>
       </div>
       <div className="text-center">
-        <div className="text-xs text-slate-400">回数</div>
-        <div className="text-8xl font-bold tabular-nums text-slate-100">{onset.count}</div>
-        <div className="mt-1 text-[11px] text-amber-300/70">立ち上がりで息を吐く</div>
+        <div className="text-xs text-ink-dim">回数</div>
+        <div className="text-8xl font-bold tabular-nums text-ink">{onset.count}</div>
+        <div className="mt-1 text-[11px] text-act-300/70">立ち上がりで息を吐く</div>
       </div>
       {onset.denied && (
-        <div className="rounded-lg bg-slate-900/60 px-3 py-2 text-center text-[11px] text-amber-300/80">
+        <div className="rounded-lg bg-hull/60 px-3 py-2 text-center text-[11px] text-act-300/80">
           マイクが使えないので、+ ボタンで自分で数えてください
         </div>
       )}
@@ -79,7 +79,7 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
         <button
           type="button"
           onClick={() => onset.adjust(-1)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-panel text-ink hover:bg-panel"
         >
           <Minus size={22} />
         </button>
@@ -97,7 +97,7 @@ export function ChairStandMeasure({ onFinish }: { onFinish: (count: number) => v
           onset.stop();
           onFinish(onset.count);
         }}
-        className="w-full rounded-xl bg-slate-800 py-3 text-sm font-medium text-slate-200 hover:bg-slate-700"
+        className="w-full rounded-xl bg-panel py-3 text-sm font-medium text-ink hover:bg-panel"
       >
         終了して記録へ
       </button>

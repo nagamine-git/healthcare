@@ -18,7 +18,7 @@ const DIR_LABEL: Record<TrendDirection, string> = {
   improving: "改善傾向", stable: "横ばい", declining: "低下傾向",
 };
 const DIR_COLOR: Record<TrendDirection, string> = {
-  improving: "text-emerald-400", stable: "text-slate-400", declining: "text-rose-400",
+  improving: "text-prog-300", stable: "text-ink-dim", declining: "text-risk",
 };
 const LINE = "#34d399";
 const BAND = "#34d39922";
@@ -172,20 +172,20 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
   );
 
   return (
-    <div className="rounded-2xl bg-slate-900/70 p-4">
+    <div className="rounded-xl bg-hull/70 p-4">
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-sm text-slate-200">{metric.label}</span>
-        <span className="text-2xl font-light tabular-nums text-slate-100">
+        <span className="text-sm text-ink">{metric.label}</span>
+        <span className="text-2xl font-light tabular-nums text-ink">
           {fmtCurrent(metricKey, metric)}
         </span>
       </div>
-      {hint ? <div className="mb-1 text-xs text-slate-500">{hint}</div> : null}
+      {hint ? <div className="mb-1 text-xs text-ink-faint">{hint}</div> : null}
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className={dir ? (calm ? "text-slate-400" : DIR_COLOR[dir]) : "text-slate-500"}>
+        <span className={dir ? (calm ? "text-ink-dim" : DIR_COLOR[dir]) : "text-ink-faint"}>
           {dir ? DIR_LABEL[dir] : metric.direction ? "横ばい圏" : "データ不足"}
           {metric.achievement != null ? ` · 達成度 ${Math.round(metric.achievement)}` : ""}
         </span>
-        <span className="text-slate-500">
+        <span className="text-ink-faint">
           {wow ? `前週比 ${wow.delta > 0 ? "+" : ""}${wow.delta.toFixed(0)}` : ""}
         </span>
       </div>
@@ -233,7 +233,7 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
         </ResponsiveContainer>
       </div>
       {pdata && (
-        <div className="mt-1 flex flex-wrap gap-x-3 text-[9px] text-slate-500">
+        <div className="mt-1 flex flex-wrap gap-x-3 text-[9px] text-ink-faint">
           <span><span style={{ color: LINE }}>━</span> 実測</span>
           <span><span style={{ color: PRED }}>┈</span> 予測(欠損/未来)</span>
           <span><span style={{ color: "#38bdf8" }}>▓</span> 範囲</span>
@@ -259,20 +259,20 @@ export function TrendsSection({ hints, extras }: {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-slate-400">
+        <span className="text-xs uppercase tracking-wider text-ink-dim">
           トレンド(理想への接近度)
         </span>
-        <div className="flex rounded-lg bg-slate-800/70 p-0.5 text-xs">
+        <div className="flex rounded-lg bg-panel/70 p-0.5 text-xs">
           <button onClick={() => setGranularity("daily")}
-            className={`rounded-md px-3 py-1 ${granularity === "daily" ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>日次</button>
+            className={`rounded-md px-3 py-1 ${granularity === "daily" ? "bg-ink-faint text-ink" : "text-ink-dim"}`}>日次</button>
           <button onClick={() => setGranularity("weekly")}
-            className={`rounded-md px-3 py-1 ${granularity === "weekly" ? "bg-slate-600 text-slate-100" : "text-slate-400"}`}>週次</button>
+            className={`rounded-md px-3 py-1 ${granularity === "weekly" ? "bg-ink-faint text-ink" : "text-ink-dim"}`}>週次</button>
         </div>
       </div>
       {query.isLoading ? (
-        <div className="text-sm text-slate-400">読み込み中...</div>
+        <div className="text-sm text-ink-dim">読み込み中...</div>
       ) : query.isError || !query.data ? (
-        <div className="text-sm text-rose-400">トレンド取得に失敗しました</div>
+        <div className="text-sm text-risk">トレンド取得に失敗しました</div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ORDER.map((key) => {

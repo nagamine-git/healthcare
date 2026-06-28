@@ -16,9 +16,9 @@ const LABEL: Record<string, string> = {
 };
 
 const CONF: Record<string, { text: string; cls: string }> = {
-  high: { text: "信頼度 高", cls: "text-emerald-300" },
+  high: { text: "信頼度 高", cls: "text-prog-300" },
   medium: { text: "信頼度 中", cls: "text-sky-300" },
-  low: { text: "信頼度 低", cls: "text-slate-400" },
+  low: { text: "信頼度 低", cls: "text-ink-dim" },
 };
 
 function fmt(metric: string, v: number): string {
@@ -30,29 +30,29 @@ export function ImputedNotice({ imputed }: { imputed?: Record<string, ImputedMet
   const items = imputed ? Object.values(imputed) : [];
   if (items.length === 0) return null;
   return (
-    <section className="space-y-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] p-3">
+    <section className="space-y-2 rounded-xl border border-act/25 bg-act/[0.06] p-3">
       <div className="flex items-center gap-1.5">
-        <Sparkles size={13} className="text-amber-300" />
-        <span className="text-[11px] font-semibold text-amber-200">推定モード</span>
-        <span className="text-[10px] text-slate-400">一次データ欠損 — 過去・気圧・曜日などから推定</span>
+        <Sparkles size={13} className="text-act-300" />
+        <span className="text-[11px] font-semibold text-act-300">推定モード</span>
+        <span className="text-[10px] text-ink-dim">一次データ欠損 — 過去・気圧・曜日などから推定</span>
       </div>
       <div className="grid gap-1">
         {items.map((it) => {
           const conf = CONF[it.confidence] ?? CONF.low;
           return (
             <div key={it.metric} className="flex items-baseline gap-2 text-[11px]">
-              <span className="w-24 shrink-0 text-slate-300">{LABEL[it.metric] ?? it.metric}</span>
-              <span className="shrink-0 tabular-nums text-slate-100">
+              <span className="w-24 shrink-0 text-ink-dim">{LABEL[it.metric] ?? it.metric}</span>
+              <span className="shrink-0 tabular-nums text-ink">
                 {fmt(it.metric, it.value)}
                 {it.low != null && it.high != null && (
-                  <span className="ml-1 text-[9px] text-slate-500">
+                  <span className="ml-1 text-[9px] text-ink-faint">
                     ({fmt(it.metric, it.low)}〜{fmt(it.metric, it.high)})
                   </span>
                 )}
               </span>
               <span className={`shrink-0 text-[9px] ${conf.cls}`}>{conf.text}</span>
               {it.drivers.length > 0 && (
-                <span className="min-w-0 flex-1 truncate text-[9px] text-slate-500">
+                <span className="min-w-0 flex-1 truncate text-[9px] text-ink-faint">
                   根拠: {it.drivers.join("・")}
                 </span>
               )}
@@ -60,7 +60,7 @@ export function ImputedNotice({ imputed }: { imputed?: Record<string, ImputedMet
           );
         })}
       </div>
-      <p className="text-[9px] text-slate-500">
+      <p className="text-[9px] text-ink-faint">
         推定値です。実測ではありません。装着すれば実測に切り替わります。
       </p>
     </section>

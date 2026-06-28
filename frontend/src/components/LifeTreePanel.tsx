@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type LifeCapital } from "../lib/api";
 import { kindLabel } from "../lib/labels";
-import { BarGauge, Panel, Pill } from "./ui/cockpit";
+import { BarGauge, Panel, Pill, Skeleton } from "./ui/cockpit";
 
 function go(hash: string) {
   window.location.hash = hash;
@@ -25,7 +25,7 @@ export function LifeTreePanel() {
   );
   const loggedToday = new Set(Object.keys(garden.data?.today.contributions ?? {}));
   const d = q.data;
-  if (!d) return null;
+  if (!d) return <Skeleton className="h-44" />;
   const focus = d.focus_capital;
 
   return (

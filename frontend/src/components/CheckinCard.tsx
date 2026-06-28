@@ -30,9 +30,9 @@ const DIMS: Dim[] = [
 function filledColor(value: number, goodHigh: boolean): string {
   const good = goodHigh ? value >= 4 : value <= 2;
   const bad = goodHigh ? value <= 2 : value >= 4;
-  if (good) return "bg-emerald-500";
-  if (bad) return "bg-rose-500";
-  return "bg-amber-500";
+  if (good) return "bg-prog-500";
+  if (bad) return "bg-risk";
+  return "bg-act";
 }
 
 /** 「直近2〜3時間の体感」の建付けなので、3時間経過した入力は現在の状態
@@ -108,20 +108,20 @@ export function CheckinCard() {
     : null;
 
   return (
-    <section className="space-y-2 rounded-2xl bg-slate-900/40 p-4">
+    <section className="space-y-2 rounded-xl bg-hull/40 p-4">
       <div className="flex items-center gap-1.5">
-        <Smile size={14} className="text-emerald-300" />
-        <span className="text-xs uppercase tracking-wider text-slate-400">いまの調子</span>
+        <Smile size={14} className="text-prog-300" />
+        <span className="text-xs uppercase tracking-wider text-ink-dim">いまの調子</span>
         <span className="ml-auto flex items-center gap-2">
           {hasAny && (
             <button
               onClick={() => save.mutate({ clear: ["mood", "energy", "stress", "soreness"] })}
-              className="text-[10px] text-slate-500 hover:text-slate-300"
+              className="text-[10px] text-ink-faint hover:text-ink-dim"
             >
               クリア
             </button>
           )}
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] text-ink-faint">
             {stale && recordedLabel ? `${recordedLabel}の記録` : "直近2〜3時間の体感"}
           </span>
         </span>
@@ -134,19 +134,19 @@ export function CheckinCard() {
           return (
             <div key={d.key} className="flex items-center gap-2">
               <span className="w-24 shrink-0">
-                <span className="text-[11px] text-slate-300">{d.label}</span>
-                <span className="block text-[9px] leading-tight text-slate-500">{d.desc}</span>
+                <span className="text-[11px] text-ink-dim">{d.label}</span>
+                <span className="block text-[9px] leading-tight text-ink-faint">{d.desc}</span>
               </span>
               <div className="flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((lvl) => {
                   const isFilled = value != null && lvl <= value;
                   const isHint = value == null && hint != null && lvl === hint;
-                  let cls = "bg-slate-800 ring-1 ring-slate-700"; // 空
+                  let cls = "bg-panel ring-1 ring-hairline"; // 空
                   if (isFilled) {
                     // 3時間経過した入力は「いま」ではないので淡色化
                     cls = `${filledColor(value, d.goodHigh)}${stale ? " opacity-35" : ""}`;
                   } else if (isHint) {
-                    cls = "bg-slate-600/40 ring-1 ring-slate-500"; // サジェスト=淡色
+                    cls = "bg-ink-faint/40 ring-1 ring-ink-faint"; // サジェスト=淡色
                   }
                   return (
                     <button
@@ -176,9 +176,9 @@ export function CheckinCard() {
                 })}
               </div>
               {value != null ? (
-                <span className="text-[10px] tabular-nums text-slate-400">{value}</span>
+                <span className="text-[10px] tabular-nums text-ink-dim">{value}</span>
               ) : hint != null ? (
-                <span className="text-[10px] tabular-nums text-slate-500">推定 {hint}</span>
+                <span className="text-[10px] tabular-nums text-ink-faint">推定 {hint}</span>
               ) : null}
             </div>
           );
@@ -192,13 +192,13 @@ export function CheckinCard() {
             : null;
           return (
             <div className="flex items-center gap-2">
-              <span className="w-14 text-[11px] text-slate-300">頭痛</span>
+              <span className="w-14 text-[11px] text-ink-dim">頭痛</span>
               <div className="flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((lvl) => {
                   const isFilled = headache != null && lvl <= headache;
                   const cls = isFilled
                     ? filledColor(headache, false)
-                    : "bg-slate-800 ring-1 ring-slate-700";
+                    : "bg-panel ring-1 ring-hairline";
                   return (
                     <button
                       key={lvl}
@@ -218,17 +218,17 @@ export function CheckinCard() {
                 })}
               </div>
               {active ? (
-                <span className="text-[10px] text-rose-400">
+                <span className="text-[10px] text-risk">
                   発作中 {active.started_at_jst?.slice(11, 16)}〜（同じ強度を再タップで「治った」）
                 </span>
               ) : (
-                <span className="text-[10px] text-slate-500">なし</span>
+                <span className="text-[10px] text-ink-faint">なし</span>
               )}
             </div>
           );
         })()}
       </div>
-      <div className="text-[10px] text-slate-500">
+      <div className="text-[10px] text-ink-faint">
         ● 濃色＝あなたの入力 / ○ 淡色＝関連指標からの推定（タップで確定・再タップで取消）
         {stale ? " ／ 3時間以上前の記録は淡色（タップで「いまも同じ」と再確認）" : ""}
       </div>

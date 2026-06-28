@@ -18,17 +18,17 @@ export function DebugPage({ onBack }: Props) {
       <header className="safe-area-top flex items-center justify-between pb-2">
         <button
           onClick={onBack}
-          className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          className="rounded-full border border-hairline px-3 py-1 text-xs text-ink-dim hover:bg-panel"
         >
           ← ダッシュボードに戻る
         </button>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-ink-faint">
           <label htmlFor="days">直近</label>
           <select
             id="days"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+            className="rounded border border-hairline bg-hull px-2 py-1"
           >
             <option value={3}>3 日</option>
             <option value={7}>7 日</option>
@@ -39,10 +39,10 @@ export function DebugPage({ onBack }: Props) {
         </div>
       </header>
 
-      <h2 className="text-base text-slate-200">Debug — ソース別ローデータ</h2>
+      <h2 className="text-base text-ink">Debug — ソース別ローデータ</h2>
 
-      {q.isLoading && <p className="text-slate-400">読み込み中...</p>}
-      {q.isError && <p className="text-rose-400">取得失敗</p>}
+      {q.isLoading && <p className="text-ink-dim">読み込み中...</p>}
+      {q.isError && <p className="text-risk">取得失敗</p>}
 
       {q.data && (
         <>
@@ -110,13 +110,13 @@ function Section({
 }) {
   const [open, setOpen] = useState(!collapsed);
   return (
-    <section className="rounded-2xl bg-slate-900/70 p-3 sm:p-4">
+    <section className="rounded-xl bg-hull/70 p-3 sm:p-4">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between text-left text-sm text-slate-200"
+        className="flex w-full items-center justify-between text-left text-sm text-ink"
       >
         <span>{title}</span>
-        <span className="text-xs text-slate-500">{open ? "−" : "+"}</span>
+        <span className="text-xs text-ink-faint">{open ? "−" : "+"}</span>
       </button>
       {open && <div className="mt-2 overflow-x-auto">{children}</div>}
     </section>
@@ -125,12 +125,12 @@ function Section({
 
 function Table({ rows }: { rows: Array<Record<string, unknown>> }) {
   if (!rows || rows.length === 0) {
-    return <p className="text-xs text-slate-500">— データなし</p>;
+    return <p className="text-xs text-ink-faint">— データなし</p>;
   }
   const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
   return (
     <table className="w-full text-left text-[11px]">
-      <thead className="border-b border-slate-800 text-slate-400">
+      <thead className="border-b border-panel text-ink-dim">
         <tr>
           {keys.map((k) => (
             <th key={k} className="px-2 py-1 font-normal">
@@ -139,9 +139,9 @@ function Table({ rows }: { rows: Array<Record<string, unknown>> }) {
           ))}
         </tr>
       </thead>
-      <tbody className="text-slate-300">
+      <tbody className="text-ink-dim">
         {rows.map((r, i) => (
-          <tr key={i} className="border-b border-slate-900/60">
+          <tr key={i} className="border-b border-hull/60">
             {keys.map((k) => (
               <td key={k} className="px-2 py-1 align-top tabular-nums">
                 {formatCell(r[k])}
@@ -156,7 +156,7 @@ function Table({ rows }: { rows: Array<Record<string, unknown>> }) {
 
 function Pre({ obj }: { obj: unknown }) {
   return (
-    <pre className="overflow-x-auto whitespace-pre-wrap break-all text-[11px] text-slate-300">
+    <pre className="overflow-x-auto whitespace-pre-wrap break-all text-[11px] text-ink-dim">
       {JSON.stringify(obj, null, 2)}
     </pre>
   );

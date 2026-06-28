@@ -71,15 +71,15 @@ export function SubScoreRadar({ subs, total }: Props) {
   const [open, setOpen] = useCollapse("totalScore", false);
 
   return (
-    <div className="rounded-2xl bg-slate-900/70 p-4 sm:p-6">
+    <div className="rounded-xl bg-hull/70 p-4 sm:p-6">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-baseline justify-between gap-3 text-left"
       >
         <div className="flex items-baseline gap-3">
-          <h3 className="text-sm tracking-wider text-slate-300">
+          <h3 className="text-sm tracking-wider text-ink-dim">
             総合スコア
-            <span className="ml-2 text-[10px] font-normal text-slate-500">
+            <span className="ml-2 text-[10px] font-normal text-ink-faint">
               24h の振り返り
             </span>
           </h3>
@@ -89,25 +89,25 @@ export function SubScoreRadar({ subs, total }: Props) {
           >
             {total != null ? Math.round(total) : "--"}
           </span>
-          <span className="text-xs text-slate-400">{totalLabel(total)}</span>
+          <span className="text-xs text-ink-dim">{totalLabel(total)}</span>
         </div>
-        <span className="text-xs text-slate-500">{open ? "▴" : "▾"}</span>
+        <span className="text-xs text-ink-faint">{open ? "▴" : "▾"}</span>
       </button>
 
       {!open && (
-        <p className="mt-1 text-[10px] text-slate-600">
+        <p className="mt-1 text-[10px] text-ink-faint">
           各軸の詳細とレーダーチャートを見るには展開
         </p>
       )}
 
       {open && (
       <>
-      <div className="mt-2 mb-2 flex items-center justify-end gap-3 text-[10px] text-slate-500">
+      <div className="mt-2 mb-2 flex items-center justify-end gap-3 text-[10px] text-ink-faint">
         <span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-3 bg-emerald-400" />現状
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-0 w-3 border-t border-dashed border-slate-400" />
+          <span className="inline-block h-0 w-3 border-t border-dashed border-ink-dim" />
           目標
         </span>
       </div>
@@ -161,7 +161,7 @@ export function SubScoreRadar({ subs, total }: Props) {
             </RadarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-full items-center justify-center text-sm text-ink-faint">
             計測可能な軸が 3 つ以上揃うとレーダーが表示されます
           </div>
         )}
@@ -176,11 +176,11 @@ export function SubScoreRadar({ subs, total }: Props) {
 
       {/* 学習中バッジ */}
       {learning.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-800 pt-3">
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-panel pt-3">
           {learning.map((s) => (
             <span
               key={s.label}
-              className="inline-flex items-center gap-1 rounded-full bg-slate-800/70 px-3 py-1 text-xs text-slate-400"
+              className="inline-flex items-center gap-1 rounded-full bg-panel/70 px-3 py-1 text-xs text-ink-dim"
               title={s.reason}
             >
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/70" />
@@ -203,26 +203,26 @@ function GapRow({ sub }: { sub: Sub }) {
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="text-slate-300">{label}</span>
-        <span className="tabular-nums text-slate-400">
+        <span className="text-ink-dim">{label}</span>
+        <span className="tabular-nums text-ink-dim">
           {value == null ? (
             <span className="text-amber-400/70">--</span>
           ) : (
             <>
               <span style={{ color }}>{Math.round(value)}</span>
-              <span className="text-slate-600"> / </span>
-              <span className="text-slate-500">{ideal}</span>
+              <span className="text-ink-faint"> / </span>
+              <span className="text-ink-faint">{ideal}</span>
               {gap != null && gap > 0 && (
-                <span className="ml-1 text-[10px] text-slate-500">(−{gap})</span>
+                <span className="ml-1 text-[10px] text-ink-faint">(−{gap})</span>
               )}
             </>
           )}
         </span>
       </div>
       {realWorld && (
-        <div className="text-[10px] tabular-nums text-slate-500">{realWorld}</div>
+        <div className="text-[10px] tabular-nums text-ink-faint">{realWorld}</div>
       )}
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-panel">
         <div
           className="h-full rounded-full transition-all"
           style={{
@@ -231,7 +231,7 @@ function GapRow({ sub }: { sub: Sub }) {
           }}
         />
         {/* 理想ラインの目印 */}
-        <div className="absolute right-0 top-0 h-full w-px bg-slate-600" />
+        <div className="absolute right-0 top-0 h-full w-px bg-ink-faint" />
       </div>
     </div>
   );
