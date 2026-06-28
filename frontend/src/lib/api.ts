@@ -1624,6 +1624,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  journalExtract: (text: string, date?: string) =>
+    request<{
+      proposals: {
+        kind: string;
+        evidence: string;
+        confidence: "high" | "med" | "low";
+        already_logged: boolean;
+      }[];
+    }>("/api/journal/extract", { method: "POST", body: JSON.stringify({ text, date }) }),
+  journalExtractCommit: (kinds: string[], date?: string) =>
+    request<{ logged: string[] }>("/api/journal/extract/commit", {
+      method: "POST",
+      body: JSON.stringify({ kinds, date }),
+    }),
   journalEntryDelete: (entryDate: string) =>
     request<{ entries: { date: string; text: string; source: string }[] }>(
       `/api/journal/entry/${entryDate}`,

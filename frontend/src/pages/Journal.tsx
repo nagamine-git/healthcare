@@ -215,13 +215,59 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** 手書きジャーナルの写真→文字起こし(要確認・修正)→ 保存・アーカイブ。 */
+type Proposal = {
+  kind: string;
+  evidence: string;
+  confidence: "high" | "med" | "low";
+  already_logged: boolean;
+};
+
+const CONF_LABEL: Record<Proposal["confidence"], string> = {
+  high: "確信 高",
+  med: "確信 中",
+  low: "確信 低",
+};
+
+/** 手書きジャーナルの写真→文字起こし(要確認・修正)→ 保存・アーカイブ + 行動抽出。 */
 function JournalArchive() {
   const qc = useQueryClient();
   const entries = useQuery({ queryKey: ["journal-entries"], queryFn: api.journalEntries });
   const [draft, setDraft] = useState("");
   const [source, setSource] = useState<"text" | "image">("text");
   const [logged, setLogged] = useState(false);
+  // 控えから抽出した行動の提案(import 直後 or 保存済みの「解析」ボタン)。
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
+  const [proposalDate, setProposalDate] = useState<string | undefined>(undefined);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const invalidateActionData = () => {
+    qc.invalidateQueries({ queryKey: ["garden"] });
+    qc.invalidateQueries({ queryKey: ["today"] });
+    qc.invalidateQueries({ queryKey: ["life-tree"] });
+    qc.invalidateQueries({ queryKey: ["becoming"] });
+  };
+
+  const extract = useMutation({
+    mutationFn: (v: { text: string; date?: string }) => api.journalExtract(v.text, v.date),
+    onSuccess: (r, v) => {
+      setProposals(r.proposals);
+      setProposalDate(v.date);
+      // 高確信かつ未記録のみ事前チェック。
+      setSelected(
+        new Set(
+          r.proposals.filter((p) => p.confidence === "high" && !p.already_logged).map((p) => p.kind),
+        ),
+      );
+    },
+  });
+  const commit = useMutation({
+    mutationFn: (v: { kinds: string[]; date?: string }) => api.journalExtractCommit(v.kinds, v.date),
+    onSuccess: () => {
+      setProposals(null);
+      setSelected(new Set());
+      invalidateActionData();
+    },
+  });
 
   const transcribe = useMutation({
     mutationFn: async (file: File) => {
@@ -231,6 +277,8 @@ function JournalArchive() {
     onSuccess: (r) => {
       setDraft(r.text);
       setSource("image");
+      // 取込時に自動解析(今日の日付として提案)。
+      extract.mutate({ text: r.text, date: undefined });
     },
   });
   const save = useMutation({
@@ -240,16 +288,21 @@ function JournalArchive() {
       setSource("text");
       setLogged(r.journaling_logged);
       qc.invalidateQueries({ queryKey: ["journal-entries"] });
-      // 控え保存でジャーナリングが「やったこと」になる → 庭/今日/人生木を更新。
-      qc.invalidateQueries({ queryKey: ["garden"] });
-      qc.invalidateQueries({ queryKey: ["today"] });
-      qc.invalidateQueries({ queryKey: ["life-tree"] });
+      invalidateActionData();
     },
   });
   const del = useMutation({
     mutationFn: (date: string) => api.journalEntryDelete(date),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["journal-entries"] }),
   });
+
+  const toggle = (kind: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
 
   return (
     <Panel title="手書きを取り込む / 控え">
@@ -287,15 +340,82 @@ function JournalArchive() {
         )}
       </div>
 
+      {extract.isPending && <p className="mt-2 text-xs text-ink-faint">行動を解析中…</p>}
+      {proposals !== null && !extract.isPending && (
+        <div className="mt-3 rounded-lg border border-hairline bg-hull/40 p-2">
+          <p className="telemetry-label">
+            控えから推定した行動 — 確認して記録{proposalDate ? `(${proposalDate})` : "(今日)"}
+          </p>
+          {proposals.length === 0 ? (
+            <p className="mt-1 text-xs text-ink-faint">記録できそうな行動は見つかりませんでした。</p>
+          ) : (
+            <>
+              <div className="mt-1 space-y-1">
+                {proposals.map((p) => (
+                  <label
+                    key={p.kind}
+                    className={`flex items-start gap-2 text-xs ${p.already_logged ? "opacity-60" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-prog-500"
+                      checked={p.already_logged || selected.has(p.kind)}
+                      disabled={p.already_logged}
+                      onChange={() => toggle(p.kind)}
+                    />
+                    <span className="flex-1">
+                      <span className="text-ink">{kindLabel(p.kind)}</span>
+                      <span className="ml-1 text-[10px] text-ink-faint">
+                        {p.already_logged ? "記録済み" : CONF_LABEL[p.confidence]}
+                      </span>
+                      {p.evidence && (
+                        <span className="block text-[10px] text-ink-faint/70">「{p.evidence}」</span>
+                      )}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  disabled={commit.isPending || selected.size === 0}
+                  onClick={() => commit.mutate({ kinds: [...selected], date: proposalDate })}
+                >
+                  {commit.isPending ? "記録中…" : `選んだ${selected.size}件を記録`}
+                </Button>
+                <button
+                  onClick={() => setProposals(null)}
+                  className="text-xs text-ink-faint hover:text-ink-dim"
+                >
+                  閉じる
+                </button>
+              </div>
+              <p className="mt-1 text-[10px] text-ink-faint/70">
+                推定なので必ず確認を。記録は後から庭で個別に消せます。
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {(entries.data?.entries.length ?? 0) > 0 && (
         <div className="mt-3 space-y-2 border-t border-hairline pt-2">
           {entries.data!.entries.map((e) => (
             <div key={e.date} className="text-xs">
               <div className="flex items-center justify-between">
                 <span className="telemetry-num text-ink-dim">{e.date}</span>
-                <button onClick={() => del.mutate(e.date)} className="text-ink-faint hover:text-risk">
-                  削除
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => extract.mutate({ text: e.text, date: e.date })}
+                    disabled={extract.isPending}
+                    className="text-info-300 hover:text-info disabled:opacity-50"
+                  >
+                    行動を解析
+                  </button>
+                  <button onClick={() => del.mutate(e.date)} className="text-ink-faint hover:text-risk">
+                    削除
+                  </button>
+                </div>
               </div>
               <pre className="mt-0.5 whitespace-pre-wrap font-mono text-[11px] text-ink-faint">{e.text}</pre>
             </div>

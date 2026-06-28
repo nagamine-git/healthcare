@@ -50,6 +50,45 @@ def test_entry_save_records_journaling_action_idempotently(app_client):
         assert logs[0].dedup_key == "journal-entry:2026-06-27"
 
 
+def test_extract_proposes_and_marks_already_logged(app_client, monkeypatch):
+    import app.api.journal as japi
+
+    async def fake_extract(text, catalog):
+        # catalog 内の kind のみ返る前提
+        return [
+            {"kind": "reading", "evidence": "14時 読書", "confidence": "high"},
+            {"kind": "journaling", "evidence": "今日の控え", "confidence": "high"},
+        ]
+
+    monkeypatch.setattr(japi, "extract_actions", fake_extract)
+    # 先に控えを保存 → journaling は既に記録済みになる
+    app_client.put("/api/journal/entry", json={"date": "2026-06-27", "text": "x"})
+    r = app_client.post("/api/journal/extract", json={"date": "2026-06-27", "text": "14時 読書"})
+    props = {p["kind"]: p for p in r.json()["proposals"]}
+    assert props["reading"]["already_logged"] is False
+    assert props["journaling"]["already_logged"] is True  # 控え保存で記録済み
+
+
+def test_extract_commit_is_idempotent_and_skips_existing(app_client):
+    # reading をコミット → 記録される
+    r1 = app_client.post(
+        "/api/journal/extract/commit", json={"date": "2026-06-27", "kinds": ["reading"]}
+    )
+    assert r1.json()["logged"] == ["reading"]
+    # 再コミットしても二重計上しない
+    r2 = app_client.post(
+        "/api/journal/extract/commit", json={"date": "2026-06-27", "kinds": ["reading"]}
+    )
+    assert r2.json()["logged"] == []
+
+    from app.db import session_scope
+    from app.models.health import GoodActionLog
+
+    with session_scope() as session:
+        rows = session.query(GoodActionLog).filter_by(kind="reading").all()
+        assert len(rows) == 1 and rows[0].source == "journal"
+
+
 def test_transcribe_uses_llm(app_client, monkeypatch):
     import app.api.journal as japi
 

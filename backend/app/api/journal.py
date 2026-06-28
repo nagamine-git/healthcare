@@ -9,7 +9,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.db import session_scope
+from app.llm.journal_extract import extract_actions
 from app.llm.journal_ocr import transcribe_journal
 from app.models.health import GoodActionLog, JournalEntry
 from app.scoring.garden.recompute import recompute_garden_for_date
@@ -55,6 +57,57 @@ async def journal_transcribe(body: TranscribeIn) -> dict[str, Any]:
     return {"text": text}
 
 
+class ExtractIn(BaseModel):
+    text: str
+    date: str | None = None
+
+
+@router.post("/api/journal/extract")
+async def extract_entry(body: ExtractIn) -> dict[str, Any]:
+    """控えテキストから『やった良い行動』を保守的に抽出して提案(記録はしない)。"""
+    d = date_type.fromisoformat(body.date) if body.date else app_today()
+    catalog = [
+        {"kind": c["kind"], "label": c.get("evidence", c["kind"])}
+        for c in get_settings().garden_catalog
+    ]
+    actions = await extract_actions(body.text, catalog)
+    if not actions:
+        return {"proposals": []}
+    with session_scope() as session:
+        logged = _logged_kinds_on(session, d)
+    proposals = [
+        {
+            "kind": a["kind"],
+            "evidence": a.get("evidence", ""),
+            "confidence": a.get("confidence", "med"),
+            "already_logged": a["kind"] in logged,
+        }
+        for a in actions
+    ]
+    return {"proposals": proposals}
+
+
+class ExtractCommitIn(BaseModel):
+    kinds: list[str]
+    date: str | None = None
+
+
+@router.post("/api/journal/extract/commit")
+async def extract_commit(body: ExtractCommitIn) -> dict[str, Any]:
+    """確認済みの行動をその日付にバックフィル(冪等)。"""
+    d = date_type.fromisoformat(body.date) if body.date else app_today()
+    allowed = {c["kind"] for c in get_settings().garden_catalog}
+    logged: list[str] = []
+    with session_scope() as session:
+        for k in body.kinds:
+            if k in allowed and _log_extracted_action(session, d, k):
+                logged.append(k)
+        session.flush()
+        if logged:
+            recompute_garden_for_date(session, d)
+    return {"logged": logged}
+
+
 class EntryIn(BaseModel):
     text: str
     date: str | None = None
@@ -76,6 +129,29 @@ def _ensure_journaling_log(session, d: date_type) -> bool:
         GoodActionLog(
             ts=ts, kind="journaling", source="manual", value=1.0, dedup_key=dedup,
             note="今日の控え保存",
+        )
+    )
+    return True
+
+
+def _logged_kinds_on(session, d: date_type) -> set[str]:
+    """その日(JST)に既に記録済みの行動 kind 集合(手動チップ・自動取込含む)。"""
+    start, end = jst_day_bounds(d)
+    return {
+        k for (k,) in session.query(GoodActionLog.kind)
+        .filter(GoodActionLog.ts >= start, GoodActionLog.ts < end).all()
+    }
+
+
+def _log_extracted_action(session, d: date_type, kind: str) -> bool:
+    """控えから抽出した行動をその日付に記録。同日・同 kind が既にあればスキップ(False)。"""
+    if kind in _logged_kinds_on(session, d):
+        return False
+    start, _ = jst_day_bounds(d)
+    session.add(
+        GoodActionLog(
+            ts=start + timedelta(hours=12), kind=kind, source="journal", value=1.0,
+            dedup_key=f"journal-extract:{d.isoformat()}:{kind}", note="控えから抽出",
         )
     )
     return True
