@@ -90,6 +90,26 @@ def test_import_and_taste(db_engine):
         assert store.book_taste(session)["total"] == 3
 
 
+def test_import_handles_duplicate_rows(db_engine):
+    # 同一ISBNが複数行(再読・重複エクスポート)あっても MediaLog 二重insertで落ちない
+    csv = "\n".join([
+        HEADER,
+        _row("Same Book", isbn13="9781111111111", rating="4", status="finished", end="2026-05-01"),
+        _row("Same Book", isbn13="9781111111111", rating="5", status="finished", end="2026-05-09"),
+    ])
+    with session_scope() as session:
+        counts = import_books(session, parse_book_tracker_csv(csv))
+        assert counts["items"] == 2  # 行は2回処理されるが…
+    with session_scope() as session:
+        # MediaItem / MediaLog は1件に集約され、最新の評価で更新されている
+        from app.models.health import MediaItem, MediaLog
+
+        items = session.query(MediaItem).filter_by(source="book_tracker").all()
+        assert len(items) == 1
+        log = session.get(MediaLog, items[0].id)
+        assert log.rating == 5
+
+
 def test_books_import_endpoint_returns_taste_and_finish_dates(app_client_books):
     csv = "\n".join([
         HEADER,

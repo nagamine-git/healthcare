@@ -148,6 +148,7 @@ def import_books(session: Session, rows: list[BookRow]) -> dict[str, Any]:
         if log is None:
             log = MediaLog(media_item_id=media.id, status=it.status)
             session.add(log)
+            session.flush()  # autoflush=False のため、CSV内の重複本でも get で拾えるよう即 flush
         else:
             log.status = it.status
         if it.rating is not None:
