@@ -153,7 +153,7 @@ def _imdb_url(item: MediaItem) -> str | None:
     return f"https://www.imdb.com/find/?q={quote(item.title)}&s=tt"
 
 
-def recommend_media(session: Session, *, per_category: int = 12) -> list[dict]:
+def recommend_media(session: Session, *, per_category: int = 16) -> list[dict]:
     """最弱ギャップ次元に効く作品を、category 別に上位 per_category 件ずつ推薦する。
 
     category:

@@ -394,7 +394,7 @@ async def tag_untagged(limit: int = Body(default=5, embed=True)) -> dict[str, An
 
 
 @router.post("/api/identity/suggest-new")
-async def suggest_new(n: int = Body(default=8, embed=True)) -> dict[str, Any]:
+async def suggest_new(n: int = Body(default=12, embed=True)) -> dict[str, Any]:
     """伸びしろの大きい次元向けに、リスト外の新規作品を LLM 提案して保存する。
 
     保存した提案は source="llm_suggestion" として推薦リストに category="new" で並ぶ。
