@@ -18,11 +18,12 @@ from app.scoring.identity.store import build_gap_report
 
 # capital → そこに効く garden 行動種別(最適配分の提案で使う)。
 CAPITAL_ACTION_KINDS: dict[str, list[str]] = {
-    "body": ["aerobic", "strength", "sleep", "steps", "nature", "healthy_meal"],
-    "mind": ["meditation", "journaling", "reflection", "gratitude"],
-    "intellect": ["reading", "learning"],
+    "body": ["aerobic", "strength", "sleep", "steps", "nature", "healthy_meal", "mobility"],
+    "mind": ["meditation", "journaling", "reflection", "gratitude", "music", "breathwork",
+             "digital_detox", "tidying", "planning"],
+    "intellect": ["reading", "learning", "cultural_input"],
     "creation": ["coding", "creative", "deepwork"],
-    "relationships": ["social", "family"],
+    "relationships": ["social", "family", "teaching"],
     "economy": ["finance"],
 }
 
