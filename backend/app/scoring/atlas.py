@@ -27,7 +27,12 @@ from app.models.health import (
 )
 from app.scoring import population_norms as norms
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
-from app.scoring.fitness_test import FITNESS_TESTS, fitness_percentile, srt_percentile
+from app.scoring.fitness_test import (
+    FITNESS_TESTS,
+    fitness_norm,
+    fitness_percentile,
+    srt_percentile,
+)
 from app.scoring.profile import resolve_profile
 from app.scoring.timewindow import app_today, jst_day_bounds, jst_window_start
 
@@ -76,8 +81,10 @@ def _leaf(
     direction: str = "none",
     score: float | None = None,
     series: list[dict] | None = None,
+    median: float | None = None,
 ) -> dict[str, Any]:
-    median_v = population.get("median") if population else None
+    # median はスコア計算用の中央値(表示は population)。明示が無ければ population から。
+    median_v = median if median is not None else (population.get("median") if population else None)
     explicit_target = target  # 中央値フォールバック前の実目標
     # スコアは「実目標(明示/推定)」基準で算出(目標が無い時は中央値=50点扱い)。
     if score is None:
@@ -209,13 +216,18 @@ def _fitness_branch(session: Session, prof) -> dict[str, Any]:
             .order_by(FitnessTestResult.performed_on.desc()).limit(1)
         ).scalars().first()
         value = row.value if row else None
-        # SRT(座って立つ)は専用換算。他は同年代・同性 percentile。
+        # 「世の中」列はパーセンタイル(順位)を表示。SRT は専用換算。
         if value is None:
             pct = None
         elif key == "srt":
             pct = srt_percentile(value)
         else:
             pct = fitness_percentile(key, value, age, sex)
+        # レーダー/スコアは「良好値(目標)への達成度」で他ドメインと尺度を揃える。
+        # 目標(良好値)= 基準 mean + 0.5*sd ≒ 上位3割。SRT は満点近い 9 を良好とする。
+        norm = None if key == "srt" else fitness_norm(key, age, sex)
+        good = (norm[0] + 0.5 * norm[1]) if norm else (9.0 if key == "srt" else None)
+        median_val = norm[0] if norm else None
         hist = session.execute(
             select(FitnessTestResult.performed_on, FitnessTestResult.value)
             .where(FitnessTestResult.test_key == key).order_by(FitnessTestResult.performed_on)
@@ -224,8 +236,8 @@ def _fitness_branch(session: Session, prof) -> dict[str, Any]:
         children.append(
             _leaf(key, defn.label, unit=defn.unit, current=value,
                   population={"percentile": _r(pct)} if pct is not None else None,
-                  direction="up" if defn.higher_is_better else "down",
-                  score=_r(pct), series=series)
+                  median=median_val, target=_r(good),
+                  direction="up" if defn.higher_is_better else "down", series=series)
         )
     return _branch("fitness", "体力測定", children, direction="up")
 
