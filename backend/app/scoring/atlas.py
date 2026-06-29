@@ -27,7 +27,7 @@ from app.models.health import (
 )
 from app.scoring import population_norms as norms
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
-from app.scoring.fitness_test import FITNESS_TESTS, fitness_percentile
+from app.scoring.fitness_test import FITNESS_TESTS, fitness_percentile, srt_percentile
 from app.scoring.profile import resolve_profile
 from app.scoring.timewindow import app_today, jst_day_bounds, jst_window_start
 
@@ -209,7 +209,13 @@ def _fitness_branch(session: Session, prof) -> dict[str, Any]:
             .order_by(FitnessTestResult.performed_on.desc()).limit(1)
         ).scalars().first()
         value = row.value if row else None
-        pct = fitness_percentile(key, value, age, sex) if value is not None else None
+        # SRT(座って立つ)は専用換算。他は同年代・同性 percentile。
+        if value is None:
+            pct = None
+        elif key == "srt":
+            pct = srt_percentile(value)
+        else:
+            pct = fitness_percentile(key, value, age, sex)
         hist = session.execute(
             select(FitnessTestResult.performed_on, FitnessTestResult.value)
             .where(FitnessTestResult.test_key == key).order_by(FitnessTestResult.performed_on)
@@ -225,7 +231,6 @@ def _fitness_branch(session: Session, prof) -> dict[str, Any]:
 
 
 def _headache_branch(session: Session, target: date_type) -> dict[str, Any]:
-    s = get_settings()
     lo = jst_window_start(30, target)
     _, hi = jst_day_bounds(target)
     rows = session.execute(
@@ -235,13 +240,11 @@ def _headache_branch(session: Session, target: date_type) -> dict[str, Any]:
         )
     ).scalars().all()
     med_days = len({(t + timedelta(hours=9)).date() for t in rows})  # JST 暦日
-    moh = float(s.med_max_doses_per_day) if hasattr(s, "med_max_doses_per_day") else None
-    # MOH(薬物乱用頭痛)の警戒は月10日。target=10未満、基準範囲の上限として 10 を出す。
+    # MOH(薬物乱用頭痛)警戒は月10-15日。基準上限=10、目標(理想)=月4日以下に。
     leaf = _leaf(
         "med_days", "鎮痛薬 使用日数 (30日)", unit="日", current=float(med_days),
-        population={"range": [None, 10]}, target=9.0, direction="down",
+        population={"range": [None, 10]}, target=4.0, direction="down",
     )
-    _ = moh
     return _branch("headache", "頭痛 (鎮痛薬)", [leaf], direction="down")
 
 

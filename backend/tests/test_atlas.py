@@ -62,6 +62,19 @@ def test_domains_have_score_and_estimated_targets(db_engine):
     assert body["body_fat"]["target"] is not None and body["body_fat"]["score"] is not None
 
 
+def test_srt_contributes_to_fitness_score(db_engine):
+    from app.models.health import FitnessTestResult
+
+    with session_scope() as session:
+        session.add(FitnessTestResult(test_key="srt", performed_on=date(2026, 6, 1), value=10.0))
+    with session_scope() as session:
+        tree = build_atlas(session)
+    fitness = next(c for c in tree["children"] if c["key"] == "fitness")
+    srt = next(c for c in fitness["children"] if c["key"] == "srt")
+    assert srt["score"] == 100.0  # 満点 10/10 → 100点(従来は None で除外されていた)
+    assert fitness["score"] is not None
+
+
 def test_checkup_leaf_has_range(db_engine):
     with session_scope() as session:
         session.add(HealthCheckup(date=date(2026, 6, 1),
