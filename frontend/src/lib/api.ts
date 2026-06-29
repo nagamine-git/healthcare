@@ -1225,6 +1225,16 @@ export type IdentityIntention = {
   rating: number;
   seen_at: string | null;
 };
+export type AtlasNode = {
+  key: string;
+  label: string;
+  unit: string;
+  direction: "up" | "down" | "band" | "none";
+  current: number | null;
+  population: { median?: number; percentile?: number; range?: (number | null)[] } | null;
+  target: number | null;
+  children: AtlasNode[];
+};
 export type BodyCompDraft = {
   skeletal_muscle_kg: number | null;
   skeletal_muscle_pct: number | null;
@@ -1644,6 +1654,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
   bodyComposition: () => request<BodyCompResponse>("/api/body-composition"),
   bodyCompExtract: (image_base64: string, media_type: string) =>
     request<{ draft: BodyCompDraft }>("/api/body-composition/extract", {

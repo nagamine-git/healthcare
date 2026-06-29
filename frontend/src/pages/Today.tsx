@@ -26,6 +26,7 @@ import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
 import { PhysiqueGapPlan } from "../components/PhysiqueGapPlan";
 import { BodyCompositionPanel } from "../components/BodyCompositionPanel";
+import { AtlasTree } from "../components/AtlasTree";
 import { FitnessTestPanel, FitnessDueBanner } from "../components/FitnessTestPanel";
 import { DistributionPanel } from "../components/DistributionPanel";
 import { ActivitySignalCard } from "../components/ActivitySignalCard";
@@ -60,9 +61,11 @@ type Props = {
 };
 
 // ドメイン別タブ。設定は歯車アイコン (タブ外) から開く。
-type Tab = "summary" | "sleep" | "migraine" | "physique" | "health" | "learning" | "settings";
+type Tab =
+  | "summary" | "atlas" | "sleep" | "migraine" | "physique" | "health" | "learning" | "settings";
 const TABS: { key: Tab; label: string }[] = [
   { key: "summary", label: "総合" },
+  { key: "atlas", label: "全体" },
   { key: "sleep", label: "睡眠" },
   { key: "migraine", label: "頭痛" },
   { key: "physique", label: "体型" },
@@ -420,6 +423,14 @@ export function TodayPage({ onOpenDebug }: Props) {
       )}
 
       {/* ============ タブ: 睡眠 ============ */}
+      {/* ============ タブ: 全体マップ ============ */}
+      {tab === "atlas" && (
+      <div className="space-y-3">
+        <SectionHeader label="全体マップ" hint="総合点→ドメイン→指標。現状 / 世の中 / 目標 を一覧" />
+        <AtlasTree />
+      </div>
+      )}
+
       {tab === "sleep" && (
       <div className="space-y-3">
         <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
