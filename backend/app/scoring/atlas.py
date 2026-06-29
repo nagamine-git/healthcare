@@ -78,16 +78,22 @@ def _leaf(
     series: list[dict] | None = None,
 ) -> dict[str, Any]:
     median_v = population.get("median") if population else None
+    explicit_target = target  # 中央値フォールバック前の実目標
     # スコアは「実目標(明示/推定)」基準で算出(目標が無い時は中央値=50点扱い)。
     if score is None:
-        score = _score_from(current, median_v, target, direction)
+        score = _score_from(current, median_v, explicit_target, direction)
+    # 中央値を同じ正規化に載せたスコア(レーダーの「中央値」系列用)。
+    score_pop = (
+        _score_from(median_v, median_v, explicit_target, direction)
+        if median_v is not None else None
+    )
     # 表示目標: 推定できなければ中央値を目標とする(ユーザー指定のフォールバック)。
     if target is None and median_v is not None:
         target = median_v
     return {
         "key": key, "label": label, "unit": unit, "direction": direction,
         "current": _r(current), "population": population, "target": _r(target),
-        "score": _r(score), "series": series or [],
+        "score": _r(score), "score_pop": _r(score_pop), "series": series or [],
         "children": [],
     }
 
@@ -99,10 +105,12 @@ def _branch(key: str, label: str, children: list[dict], *, direction: str = "non
     if score is None:
         vals = [c["score"] for c in children if c.get("score") is not None]
         score = round(sum(vals) / len(vals), 1) if vals else None
+    pops = [c["score_pop"] for c in children if c.get("score_pop") is not None]
+    score_pop = round(sum(pops) / len(pops), 1) if pops else None
     return {
         "key": key, "label": label, "unit": "", "direction": direction,
         "current": _r(current), "population": None, "target": _r(target),
-        "score": _r(score), "series": series or [], "children": children,
+        "score": _r(score), "score_pop": score_pop, "series": series or [], "children": children,
     }
 
 

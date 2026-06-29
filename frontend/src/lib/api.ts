@@ -1234,6 +1234,7 @@ export type AtlasNode = {
   population: { median?: number; percentile?: number; range?: (number | null)[] } | null;
   target: number | null;
   score: number | null;
+  score_pop: number | null;
   series: { date: string; value: number }[];
   children: AtlasNode[];
 };

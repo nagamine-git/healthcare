@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Legend,
   Line,
   LineChart,
   PolarAngleAxis,
@@ -84,22 +85,33 @@ function MetricRow({ n }: { n: AtlasNode }) {
   );
 }
 
-/** ドメイン直下の子が 0-100 score を持つなら、バランスをレーダーで一望。 */
+/** ドメイン直下の子が 0-100 score を持つなら、現状/中央値/目標 をレーダーで一望。 */
 function DomainRadar({ children }: { children: AtlasNode[] }) {
   const data = children
     .filter((c) => c.score != null)
-    .map((c) => ({ axis: c.label, score: c.score as number }));
+    .map((c) => ({
+      axis: c.label,
+      現状: c.score as number,
+      中央値: c.score_pop ?? null,
+      目標: 100, // 正規化上、目標=満点(外周)
+    }));
   if (data.length < 3) return null;
+  const hasPop = data.some((d) => d.中央値 != null);
   return (
-    <div className="h-44">
+    <div className="h-52">
       <ResponsiveContainer width="100%" height="100%">
-        <RadarChart data={data} outerRadius="70%">
+        <RadarChart data={data} outerRadius="65%">
           <PolarGrid stroke="#243044" />
           <PolarAngleAxis dataKey="axis" tick={{ fill: "#9aa7b8", fontSize: 10 }} />
-          <Radar dataKey="score" stroke="#10b981" fill="#10b981" fillOpacity={0.35} />
+          <Radar name="目標" dataKey="目標" stroke="#f59e0b" fill="none" strokeDasharray="3 3" />
+          {hasPop && (
+            <Radar name="中央値" dataKey="中央値" stroke="#9aa7b8" fill="#9aa7b8" fillOpacity={0.12} connectNulls />
+          )}
+          <Radar name="現状" dataKey="現状" stroke="#10b981" fill="#10b981" fillOpacity={0.35} />
+          <Legend wrapperStyle={{ fontSize: 10 }} />
           <Tooltip
             contentStyle={{ background: "#1a2230", border: "1px solid #243044", borderRadius: 8, fontSize: 11 }}
-            formatter={(v: number) => [Math.round(v), "score"]}
+            formatter={(v: number, name: string) => [Math.round(v), name]}
           />
         </RadarChart>
       </ResponsiveContainer>
