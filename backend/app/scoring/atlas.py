@@ -33,6 +33,7 @@ from app.scoring.fitness_test import (
     fitness_percentile,
     srt_percentile,
 )
+from app.scoring.learning import TOTAL_SECTIONS
 from app.scoring.profile import resolve_profile
 from app.scoring.timewindow import app_today, jst_day_bounds, jst_window_start
 
@@ -276,7 +277,8 @@ def _learning_activity_branch(session: Session, target: date_type) -> dict[str, 
     ).all()
     step_series = [{"date": d.isoformat(), "value": v} for d, v in srows if v is not None]
     return _branch("life", "学習・活動", [
-        _leaf("learning_sections", "学習: 読了した節", unit="節", current=float(sections_read), direction="up"),
+        _leaf("learning_sections", "学習: 読了した節", unit="節", current=float(sections_read),
+              target=float(TOTAL_SECTIONS), direction="up"),  # 目標=全節読了 → 進捗%
         _leaf("steps", "歩数 (直近)", unit="歩", current=steps,
               target=float(get_settings().garden_steps_goal), direction="up", series=step_series),
     ], direction="up")

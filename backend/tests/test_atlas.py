@@ -75,6 +75,17 @@ def test_srt_contributes_to_fitness_score(db_engine):
     assert fitness["score"] is not None
 
 
+def test_learning_leaf_has_progress_target(db_engine):
+    from app.scoring.learning import TOTAL_SECTIONS
+
+    with session_scope() as session:
+        tree = build_atlas(session)
+    life = next(c for c in tree["children"] if c["key"] == "life")
+    learn = next(c for c in life["children"] if c["key"] == "learning_sections")
+    assert learn["target"] == float(TOTAL_SECTIONS)  # 全節読了が目標 → 進捗%でスコア化
+    assert learn["score"] is not None
+
+
 def test_checkup_leaf_has_range(db_engine):
     with session_scope() as session:
         session.add(HealthCheckup(date=date(2026, 6, 1),
