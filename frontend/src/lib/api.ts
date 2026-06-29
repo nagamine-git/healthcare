@@ -1233,6 +1233,8 @@ export type AtlasNode = {
   current: number | null;
   population: { median?: number; percentile?: number; range?: (number | null)[] } | null;
   target: number | null;
+  score: number | null;
+  series: { date: string; value: number }[];
   children: AtlasNode[];
 };
 export type BodyCompDraft = {
