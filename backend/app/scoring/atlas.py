@@ -36,6 +36,35 @@ def _r(v: float | None, n: int = 1) -> float | None:
     return None if v is None else round(float(v), n)
 
 
+def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
+    return max(lo, min(hi, v))
+
+
+def _score_from(
+    current: float | None, median: float | None, target: float | None, direction: str
+) -> float | None:
+    """指標を 0-100 の「良さ」に正規化(レーダー/ドメイン総合点用)。
+
+    目標があれば目標基準、無ければ中央値基準(中央値=50点)。band は目標/中央値からの距離。
+    あくまで俯瞰用の近似。
+    """
+    if current is None or direction == "none":
+        return None
+    ref = target if target is not None else median
+    if ref is None or ref == 0:
+        return None
+    if direction == "up":
+        scale = 100.0 if target is not None else 50.0
+        return round(_clamp(current / ref * scale), 1)
+    if direction == "down":
+        if current <= 0:
+            return 100.0
+        scale = 100.0 if target is not None else 50.0
+        return round(_clamp(ref / current * scale), 1)
+    # band: 目標/中央値からの相対距離
+    return round(_clamp(100.0 - abs(current - ref) / ref * 100.0), 1)
+
+
 def _leaf(
     key: str,
     label: str,
@@ -48,6 +77,13 @@ def _leaf(
     score: float | None = None,
     series: list[dict] | None = None,
 ) -> dict[str, Any]:
+    median_v = population.get("median") if population else None
+    # スコアは「実目標(明示/推定)」基準で算出(目標が無い時は中央値=50点扱い)。
+    if score is None:
+        score = _score_from(current, median_v, target, direction)
+    # 表示目標: 推定できなければ中央値を目標とする(ユーザー指定のフォールバック)。
+    if target is None and median_v is not None:
+        target = median_v
     return {
         "key": key, "label": label, "unit": unit, "direction": direction,
         "current": _r(current), "population": population, "target": _r(target),
@@ -57,11 +93,16 @@ def _leaf(
 
 
 def _branch(key: str, label: str, children: list[dict], *, direction: str = "none",
-            current: float | None = None, target: float | None = None) -> dict[str, Any]:
+            current: float | None = None, target: float | None = None,
+            score: float | None = None, series: list[dict] | None = None) -> dict[str, Any]:
+    # ドメイン総合点: 明示が無ければ子リーフ score の平均(レーダー軸/閉時表示に使う)。
+    if score is None:
+        vals = [c["score"] for c in children if c.get("score") is not None]
+        score = round(sum(vals) / len(vals), 1) if vals else None
     return {
         "key": key, "label": label, "unit": "", "direction": direction,
         "current": _r(current), "population": None, "target": _r(target),
-        "score": None, "series": [], "children": children,
+        "score": _r(score), "series": series or [], "children": children,
     }
 
 
@@ -92,8 +133,10 @@ def _condition_branch(session: Session, target: date_type, score: DailyScore | N
               series=_ds_series(session, target, field))
         for k, label, v, field in subs
     ]
+    total = score.total if score else None
     return _branch("condition", "コンディション (日次)", children, direction="up",
-                   current=score.total if score else None, target=100.0)
+                   current=total, target=100.0, score=total,
+                   series=_ds_series(session, target, DailyScore.total))
 
 
 def _body_branch(session: Session, target: date_type, prof) -> dict[str, Any]:
@@ -133,14 +176,17 @@ def _body_branch(session: Session, target: date_type, prof) -> dict[str, Any]:
         _leaf("body_fat", "体脂肪率", unit="%", current=bf, population=_median("body_fat", age, sex),
               target=s.target_body_fat_pct, direction="band", series=bf_series),
         _leaf("ffmi", "FFMI (筋肉質さ)", unit="", current=ffmi,
-              population=_median("ffmi", age, sex), direction="up"),
-        _leaf("bmi", "BMI", unit="", current=bmi, population=_median("bmi", age, sex), direction="band"),
+              population=_median("ffmi", age, sex),
+              target=20.0 if sex == "male" else 16.0, direction="up"),  # 推定: 良好域
+        _leaf("bmi", "BMI", unit="", current=bmi, population=_median("bmi", age, sex),
+              target=22.0, direction="band"),  # 推定: 標準体重(BMI22)
     ]
     if bc:
         children += [
             _leaf("skeletal_muscle", "骨格筋量", unit="kg", current=bc.skeletal_muscle_kg,
                   direction="up", series=sm_series),
-            _leaf("visceral_fat", "内臓脂肪レベル", unit="lv", current=bc.visceral_fat_level, direction="down"),
+            _leaf("visceral_fat", "内臓脂肪レベル", unit="lv", current=bc.visceral_fat_level,
+                  target=9.0, direction="down"),  # 推定: 標準上限(Tanita ≤9)
             _leaf("bmr", "基礎代謝", unit="kcal", current=bc.bmr_kcal, direction="none"),
         ]
     return _branch("body", "体型", children)
@@ -223,11 +269,24 @@ def _checkup_branch(session: Session) -> dict[str, Any]:
     for item in s.checkup_items:
         v = by_key.get(item["key"])
         lo, hi = item.get("lo"), item.get("hi")
+        cur = (v or {}).get("value")
+        # 推定目標: 両側は基準範囲の中央、片側はその境界(範囲内に収める)。
+        if lo is not None and hi is not None:
+            tgt = (lo + hi) / 2
+        else:
+            tgt = hi if hi is not None else lo
+        # スコア: 範囲内なら100、外なら境界からの逸脱で減点。
+        if cur is None:
+            sc = None
+        elif (lo is None or cur >= lo) and (hi is None or cur <= hi):
+            sc = 100.0
+        else:
+            ref = hi if (hi is not None and cur > hi) else lo
+            sc = round(_clamp(100.0 - abs(cur - ref) / ref * 100.0), 1) if ref else 50.0
         children.append(
-            _leaf(item["key"], item["label"], unit=item.get("unit", ""),
-                  current=(v or {}).get("value"),
+            _leaf(item["key"], item["label"], unit=item.get("unit", ""), current=cur,
                   population={"range": [lo, hi]} if (lo is not None or hi is not None) else None,
-                  direction="band")
+                  target=tgt, direction="band", score=sc)
         )
     return _branch("checkup", "健康診断", children, direction="band")
 

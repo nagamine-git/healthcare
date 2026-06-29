@@ -114,13 +114,12 @@ function DomainSection({ n }: { n: AtlasNode }) {
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 py-2 text-left">
         <span className="text-ink-faint">{open ? "▾" : "▸"}</span>
         <span className="flex-1 text-sm font-semibold text-ink">{n.label}</span>
-        {n.current != null && (
-          <span className="telemetry-num text-sm text-prog-300">
-            {fmt(n.current, n.unit)}
-            {n.target != null && <span className="ml-1 text-[10px] text-ink-faint">/ {n.target}</span>}
+        {n.score != null && (
+          <span className="telemetry-num text-sm font-bold text-prog-300" title="ドメイン総合点 (0-100)">
+            {Math.round(n.score)}
           </span>
         )}
-        <span className="telemetry-label text-[10px] text-ink-faint">{n.children.length}</span>
+        <span className="telemetry-label w-6 text-right text-[10px] text-ink-faint">{n.children.length}</span>
       </button>
       {open && (
         <div className="ml-4 border-l border-hairline pl-2">
@@ -149,6 +148,8 @@ export function AtlasTree() {
         </span>
       </div>
       {root.series.length >= 2 && <Sparkline n={root} />}
+      {/* ドメイン別バランス(常時表示の第二階層レーダー) */}
+      <DomainRadar children={root.children} />
       <div className="mt-1">
         {root.children.map((c) => (
           <DomainSection key={c.key} n={c} />

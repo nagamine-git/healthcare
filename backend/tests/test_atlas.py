@@ -46,6 +46,22 @@ def test_body_leaf_has_current_median_target(db_engine, monkeypatch):
     assert body_bmi["current"] is not None
 
 
+def test_domains_have_score_and_estimated_targets(db_engine):
+    with session_scope() as session:
+        session.add(WeightSample(ts=datetime(2026, 6, 17, 21, 0), weight_kg=53.9,
+                                 body_fat_pct=17.2, source="hae"))
+    with session_scope() as session:
+        tree = build_atlas(session)
+    domains = {c["key"]: c for c in tree["children"]}
+    # 体型ドメインは子の score 平均から総合点を持つ(閉時表示・レーダー軸に使う)
+    assert domains["body"]["score"] is not None
+    body = {c["key"]: c for c in domains["body"]["children"]}
+    assert body["bmi"]["target"] == 22.0           # 推定目標
+    assert body["bmi"]["current"] is not None
+    # 体脂肪は明示目標(config)があり score も付く
+    assert body["body_fat"]["target"] is not None and body["body_fat"]["score"] is not None
+
+
 def test_checkup_leaf_has_range(db_engine):
     with session_scope() as session:
         session.add(HealthCheckup(date=date(2026, 6, 1),
