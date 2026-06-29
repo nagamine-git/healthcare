@@ -1659,6 +1659,7 @@ export const api = {
     request<BodyCompResponse>(`/api/body-composition/${id}`, { method: "DELETE" }),
   journalExtract: (text: string, date?: string) =>
     request<{
+      date: string;
       proposals: {
         kind: string;
         evidence: string;

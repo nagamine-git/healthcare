@@ -249,9 +249,10 @@ function JournalArchive() {
 
   const extract = useMutation({
     mutationFn: (v: { text: string; date?: string }) => api.journalExtract(v.text, v.date),
-    onSuccess: (r, v) => {
+    onSuccess: (r) => {
       setProposals(r.proposals);
-      setProposalDate(v.date);
+      // バックエンドが解決した日付(本文の日付ヘッダ優先)で記録する。
+      setProposalDate(r.date);
       // 高確信かつ未記録のみ事前チェック。
       setSelected(
         new Set(

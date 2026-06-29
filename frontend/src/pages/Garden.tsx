@@ -232,7 +232,7 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
                       {kindLabel(log.kind)}
                       {log.note && <span className="text-ink-dim"> — {log.note}</span>}
                     </span>
-                    {log.source === "manual" && (
+                    {["manual", "journal", "book_tracker"].includes(log.source) && (
                       <button
                         disabled={delMut.isPending}
                         onClick={() => delMut.mutate(log.id)}

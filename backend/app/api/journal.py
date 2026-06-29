@@ -65,15 +65,22 @@ class ExtractIn(BaseModel):
 
 @router.post("/api/journal/extract")
 async def extract_entry(body: ExtractIn) -> dict[str, Any]:
-    """控えテキストから『やった良い行動』を保守的に抽出して提案(記録はしない)。"""
-    d = date_type.fromisoformat(body.date) if body.date else app_today()
+    """控えテキストから『やった良い行動』を保守的に抽出して提案(記録はしない)。
+
+    日付は 明示指定 > 本文の日付ヘッダ(書かれた日)> 今日。撮影日ではなく書かれた日に
+    実績を帰属させる。解決した日付を返し、commit も同じ日付で記録させる。
+    """
+    if body.date:
+        d = date_type.fromisoformat(body.date)
+    else:
+        d = _date_from_text(body.text) or app_today()
     catalog = [
         {"kind": c["kind"], "label": c.get("evidence", c["kind"])}
         for c in get_settings().garden_catalog
     ]
     actions = await extract_actions(body.text, catalog)
     if not actions:
-        return {"proposals": []}
+        return {"date": d.isoformat(), "proposals": []}
     with session_scope() as session:
         logged = _logged_kinds_on(session, d)
     proposals = [
@@ -85,7 +92,7 @@ async def extract_entry(body: ExtractIn) -> dict[str, Any]:
         }
         for a in actions
     ]
-    return {"proposals": proposals}
+    return {"date": d.isoformat(), "proposals": proposals}
 
 
 class ExtractCommitIn(BaseModel):
