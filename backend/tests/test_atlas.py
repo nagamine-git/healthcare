@@ -75,15 +75,38 @@ def test_srt_contributes_to_fitness_score(db_engine):
     assert fitness["score"] is not None
 
 
-def test_learning_leaf_has_progress_target(db_engine):
-    from app.scoring.learning import TOTAL_SECTIONS
-
+def test_learning_leaf_scored_against_today_quota(db_engine):
+    # 計画が無い(空DB)ときは全体進捗にフォールバックし、目標・スコアが入る。
     with session_scope() as session:
         tree = build_atlas(session)
     life = next(c for c in tree["children"] if c["key"] == "life")
-    learn = next(c for c in life["children"] if c["key"] == "learning_sections")
-    assert learn["target"] == float(TOTAL_SECTIONS)  # 全節読了が目標 → 進捗%でスコア化
+    learn = next(c for c in life["children"] if c["key"] == "learning")
+    assert learn["target"] is not None
     assert learn["score"] is not None
+
+
+def test_learning_uses_pace_quota_when_plan_exists(db_engine):
+    # 目標日のある計画があると、学習は「今日のノルマ達成度」で評価される(全80比の過酷さを回避)。
+    import app.scoring.atlas as atlas_mod
+
+    def fake_projection(target):
+        return {"done_units": 6, "total_units": 80, "needed_today_min": 2, "needed_today_safe": 4}
+
+    # projection は _learning_leaf 内で import される → モジュール属性を差し替え
+    from app.scoring import learning as learning_mod
+    orig = learning_mod.projection
+    learning_mod.projection = fake_projection
+    try:
+        with session_scope() as session:
+            tree = atlas_mod.build_atlas(session)
+    finally:
+        learning_mod.projection = orig
+    life = next(c for c in tree["children"] if c["key"] == "life")
+    learn = next(c for c in life["children"] if c["key"] == "learning")
+    assert learn["current"] == 6.0
+    assert learn["target"] == 8.0   # 今日のノルマ = done + needed_today_min
+    # 6/8 = 75点(全80比の 7.5点 ではない)
+    assert learn["score"] == 75.0
 
 
 def test_checkup_leaf_has_range(db_engine):

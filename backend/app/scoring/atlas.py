@@ -11,7 +11,7 @@ from datetime import date as date_type
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -22,7 +22,6 @@ from app.models.health import (
     DailySummary,
     FitnessTestResult,
     HealthCheckup,
-    LearningSectionProgress,
     WeightSample,
 )
 from app.scoring import population_norms as norms
@@ -261,11 +260,32 @@ def _headache_branch(session: Session, target: date_type) -> dict[str, Any]:
     return _branch("headache", "頭痛 (鎮痛薬)", [leaf], direction="down")
 
 
+def _learning_leaf(target: date_type) -> dict[str, Any]:
+    """学習: 全カリキュラム比ではなく「今日のノルマ達成度」で評価(過度に厳しくしない)。
+
+    目標 = 今日終わってるべきノルマ(最低ライン = done + needed_today_min)、
+    中央値相当 = 楽観ノルマ(stretch = done + needed_today_safe)。計画が無ければ全体進捗。
+    """
+    from app.scoring.learning import projection
+
+    try:
+        proj = projection(target)
+    except Exception:
+        proj = None
+    if proj and proj.get("needed_today_min") is not None:
+        done = float(proj["done_units"])
+        norm = done + float(proj["needed_today_min"])  # 今日のノルマ(目標)
+        safe = float(proj["needed_today_safe"] or proj["needed_today_min"])
+        stretch = done + safe  # 楽観ノルマ(中央値相当)
+        return _leaf("learning", "学習: 今日のノルマ達成", unit="", current=done,
+                     median=stretch, target=norm, direction="up")
+    done_total = float(proj["done_units"]) if proj else 0.0
+    total = float(proj["total_units"]) if proj else float(TOTAL_SECTIONS)
+    return _leaf("learning", "学習: 全体進捗", unit="", current=done_total,
+                 target=total, direction="up")
+
+
 def _learning_activity_branch(session: Session, target: date_type) -> dict[str, Any]:
-    sections_read = session.execute(
-        select(func.count()).select_from(LearningSectionProgress)
-        .where(LearningSectionProgress.read_at.is_not(None))
-    ).scalar_one()
     summary = session.execute(
         select(DailySummary).order_by(DailySummary.date.desc()).limit(1)
     ).scalars().first()
@@ -277,8 +297,7 @@ def _learning_activity_branch(session: Session, target: date_type) -> dict[str, 
     ).all()
     step_series = [{"date": d.isoformat(), "value": v} for d, v in srows if v is not None]
     return _branch("life", "学習・活動", [
-        _leaf("learning_sections", "学習: 読了した節", unit="節", current=float(sections_read),
-              target=float(TOTAL_SECTIONS), direction="up"),  # 目標=全節読了 → 進捗%
+        _learning_leaf(target),
         _leaf("steps", "歩数 (直近)", unit="歩", current=steps,
               target=float(get_settings().garden_steps_goal), direction="up", series=step_series),
     ], direction="up")
