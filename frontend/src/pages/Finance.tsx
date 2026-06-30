@@ -123,7 +123,9 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
       )}
 
       <div className="mt-3">
-        {r.holdings.map((h) => (
+        {[...r.holdings]
+          .sort((a, b) => (b.target_value ?? -1) - (a.target_value ?? -1))
+          .map((h) => (
           <HoldingRow key={h.id} h={h}
             onSave={(v) => save.mutate(v as never)} onDelete={(id) => del.mutate(id as never)} />
         ))}
