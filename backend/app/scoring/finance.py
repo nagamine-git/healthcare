@@ -29,6 +29,13 @@ def get_state(session: Session) -> FinanceState:
         st = FinanceState(id=1)
         session.add(st)
         session.flush()
+    # 旧 DB に後付けした列は既存行で NULL になりうるので補正。
+    if st.reserve_months is None:
+        st.reserve_months = 6
+    if st.reserve_jpy is None:
+        st.reserve_jpy = 0.0
+    if st.wage_jpy_per_h is None:
+        st.wage_jpy_per_h = 2000.0
     return st
 
 

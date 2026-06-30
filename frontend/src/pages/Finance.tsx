@@ -306,7 +306,9 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
       <p className="text-xs text-ink-faint">
         総資産から防衛資金を引いた余剰を目標配分へ(リバランス)。その余剰で、ROI上位の購入を検討。
       </p>
-      {!q.data ? (
+      {q.isError ? (
+        <p className="text-sm text-risk">読み込みに失敗しました。少し待って再読み込みしてください。</p>
+      ) : !q.data ? (
         <Skeleton className="h-64" />
       ) : (
         <>

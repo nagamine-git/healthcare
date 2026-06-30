@@ -56,6 +56,19 @@ def test_roi_ranking_and_verdict(db_engine):
     assert low["verdict"] == "cancel"  # 保有中×低スコア → 解約候補
 
 
+def test_get_state_tolerates_null_columns(db_engine):
+    # 旧DBで後付け列が NULL の行でも compute_finance が落ちない(get_state が補正)。
+    from app.models.health import FinanceState
+
+    with session_scope() as session:
+        session.add(FinanceState(id=1, reserve_jpy=None, reserve_months=None, wage_jpy_per_h=None))
+    with session_scope() as session:
+        st = get_state(session)
+        assert st.reserve_months == 6 and st.wage_jpy_per_h == 2000.0
+        f = compute_finance(session)  # 例外を出さない
+        assert "rebalance" in f
+
+
 def test_import_cashflow_sets_reserve_from_monthly_expense(app_client):
     # 計算対象=1 & 振替=0 の支出だけを集計。3ヶ月で各10万支出 → 月平均10万 → 防衛資金=10万×6。
     header = "計算対象,日付,内容,金額（円）,保有金融機関,大項目,中項目,メモ,振替,ID\n"
