@@ -1658,6 +1658,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
+  consult: (messages: ChatMsg[]) =>
+    request<{ reply: string }>("/api/consult", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
   bodyComposition: () => request<BodyCompResponse>("/api/body-composition"),
   bodyCompExtract: (image_base64: string, media_type: string) =>
     request<{ draft: BodyCompDraft }>("/api/body-composition/extract", {

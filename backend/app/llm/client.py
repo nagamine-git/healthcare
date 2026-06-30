@@ -1154,3 +1154,78 @@ async def morning_advice_job() -> dict[str, Any]:
     from app.scoring.timewindow import app_today
 
     return await generate_advice_for_date(app_today())
+
+
+def gather_consult_context(target: date_type) -> dict[str, Any]:
+    """AI 相談用に、全データソースを横断した文脈を組み立てる(助言フローとは独立)。
+
+    各 gather は失敗しても None を入れて続行(相談を止めない)。
+    """
+    s = get_settings()
+    from app.scoring.profile import resolve_profile
+
+    prof = resolve_profile()
+
+    def _safe(fn):
+        try:
+            return fn()
+        except Exception as exc:
+            logger.info("consult_gather_failed", error=str(exc))
+            return None
+
+    ctx: dict[str, Any] = {
+        "date": target.isoformat(),
+        "profile": {
+            "age": prof.age, "sex": prof.sex, "height_cm": prof.height_cm,
+            "target_weight_kg": s.target_weight_kg,
+            "target_body_fat_pct": s.target_body_fat_pct,
+            "target_protein_g_per_kg": s.target_protein_g_per_kg,
+            "target_water_ml_per_kg": s.target_water_ml_per_kg,
+            "caffeine_target_mg_per_kg": getattr(s, "caffeine_target_mg_per_kg", None),
+        },
+        "today": _safe(lambda: _gather_today_payload(target)),
+        "recent_trends": _safe(lambda: _gather_recent_trends(target)),
+        "caffeine": _safe(lambda: _gather_caffeine(target)),
+        "migraine": _safe(lambda: _gather_migraine_summary(target)),
+        "alerts": _safe(lambda: _gather_wellbeing_alerts(target)),
+        "life_domains": _safe(lambda: _gather_life_domains(target)),
+        "subjective": _safe(lambda: _gather_subjective(target)),
+        "physio": _safe(lambda: _gather_physio(target)),
+    }
+
+    def _nutrition():
+        from app.scoring.nutrition import aggregate_nutrition
+
+        with session_scope() as session:
+            return aggregate_nutrition(session, target)
+
+    ctx["nutrition"] = _safe(_nutrition)
+
+    def _body_comp():
+        from app.models.health import BodyCompositionSample, WeightSample
+
+        with session_scope() as session:
+            w = session.execute(
+                select(WeightSample).order_by(WeightSample.ts.desc()).limit(1)
+            ).scalars().first()
+            bc = session.execute(
+                select(BodyCompositionSample)
+                .order_by(BodyCompositionSample.date.desc()).limit(1)
+            ).scalars().first()
+            return {
+                "weight_kg": w.weight_kg if w else None,
+                "body_fat_pct": w.body_fat_pct if w else None,
+                "skeletal_muscle_kg": bc.skeletal_muscle_kg if bc else None,
+                "visceral_fat_level": bc.visceral_fat_level if bc else None,
+                "bmr_kcal": bc.bmr_kcal if bc else None,
+            }
+
+    ctx["body_composition"] = _safe(_body_comp)
+
+    def _learning():
+        from app.scoring.learning import llm_summary
+
+        return llm_summary(today=target)
+
+    ctx["learning"] = _safe(_learning)
+    return ctx
