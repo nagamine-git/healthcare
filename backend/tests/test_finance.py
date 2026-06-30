@@ -89,6 +89,26 @@ def test_import_cashflow_sets_reserve_from_monthly_expense(app_client):
     assert r2.json()["cashflow"]["tx_count"] == 4  # counted & not transfer のみ
 
 
+def test_auto_allocate_recursive_risk_split(app_client):
+    from app.scoring.finance import classify_risk_tier
+
+    assert classify_risk_tier("三菱UFJ銀行 普通") == 0
+    assert classify_risk_tier("SBI証券 eMAXIS Slim 全世界株式") == 2
+    assert classify_risk_tier("Coincheck ビットコイン残高") == 3
+    assert classify_risk_tier("bitFlyer ベーシックアテンショントークン残高") == 4
+
+    for n, v in [("UFJ 普通", 700000), ("NISA 全世界株式", 200000),
+                 ("Coincheck ビットコイン残高", 100000)]:
+        app_client.post("/api/finance/asset", json={"name": n, "value_jpy": v})
+    r = app_client.post("/api/finance/auto-allocate", json={"tolerance": 3})  # safe 0.70
+    assert r.status_code == 200
+    w = {h["name"]: h["target_weight"] for h in r.json()["rebalance"]["holdings"]}
+    assert round(w["UFJ 普通"]) == 70           # 現金 70%
+    assert round(w["NISA 全世界株式"]) == 21     # 残り30%の70%
+    assert round(w["Coincheck ビットコイン残高"]) == 9  # 残り
+    assert r.json()["rebalance"]["risk_tolerance"] == 3
+
+
 def test_import_assets_csv_upserts(app_client):
     csv = "現金,1500000\n仮想通貨,¥300,000\n"
     r = app_client.post("/api/finance/import-assets", json={"csv": csv})

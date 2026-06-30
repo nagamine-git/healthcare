@@ -116,7 +116,11 @@ def _apply_lightweight_migrations() -> None:
             ("quiz_points", "INTEGER"),
             ("free_word_passed_at", "DATETIME"),
         ],
-        "finance_state": [("reserve_months", "INTEGER DEFAULT 6")],
+        "finance_state": [
+            ("reserve_months", "INTEGER DEFAULT 6"),
+            ("risk_tolerance", "INTEGER DEFAULT 3"),
+        ],
+        "asset_holding": [("risk_tier", "INTEGER")],
         "user_profile": [
             ("birth_date", "DATE"),
             ("age", "INTEGER"),

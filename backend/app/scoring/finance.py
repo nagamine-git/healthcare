@@ -36,7 +36,66 @@ def get_state(session: Session) -> FinanceState:
         st.reserve_jpy = 0.0
     if st.wage_jpy_per_h is None:
         st.wage_jpy_per_h = 2000.0
+    if st.risk_tolerance is None:
+        st.risk_tolerance = 3
     return st
+
+
+RISK_TIERS = {
+    0: "現金・預金",
+    1: "債券・保守的積立",
+    2: "株式・投信(NISA等)",
+    3: "仮想通貨(主要)",
+    4: "仮想通貨(アルト)・高ボラ",
+}
+# 許容度 1(保守)〜7(積極)→ 各分岐で安全側に回す比率。
+SAFE_RATIO_BY_TOLERANCE = {1: 0.90, 2: 0.80, 3: 0.70, 4: 0.60, 5: 0.50, 6: 0.40, 7: 0.30}
+
+_TIER_KEYWORDS = [
+    (4, ["アテンション", "トークン", "token", "bat", "アルト", "xrp", "リップル",
+         "doge", "sol", "ソラナ", "ada", "shib", "meme"]),
+    (3, ["ビットコイン", "bitcoin", "btc", "イーサ", "ethereum", "eth", "仮想通貨", "暗号資産"]),
+    (2, ["nisa", "投信", "投資信託", "emaxis", "s&p", "sp500", "株", "etf", "インデックス",
+         "ファンド", "証券", "オルカン", "全世界"]),
+    (1, ["定期", "債券", "国債", "積立"]),
+]
+
+
+def classify_risk_tier(name: str) -> int:
+    """口座/銘柄名からリスク階層(0=現金 … 4=高ボラ)を自動判定。既定は現金(0)。"""
+    n = (name or "").lower()
+    for tier, kws in _TIER_KEYWORDS:
+        if any(k.lower() in n for k in kws):
+            return tier
+    return 0
+
+
+def _effective_tier(h: AssetHolding) -> int:
+    return h.risk_tier if h.risk_tier is not None else classify_risk_tier(h.name)
+
+
+def auto_allocate(holdings: list[AssetHolding], tolerance: int) -> dict[int, float]:
+    """リスク階層を安全側から再帰的に分割し、各資産の目標ウェイト(合計100)を返す。
+
+    例(安全比率0.7): 現金70% → 残り30%を 株:暗号=7:3 → 暗号内も主要:アルト=7:3 …
+    階層内は現在残高比で按分(残高0なら均等)。
+    """
+    safe = SAFE_RATIO_BY_TOLERANCE.get(tolerance, 0.70)
+    by_tier: dict[int, list[AssetHolding]] = {}
+    for h in holdings:
+        by_tier.setdefault(_effective_tier(h), []).append(h)
+    tiers = sorted(by_tier)
+    weights: dict[int, float] = {}
+    remaining = 1.0
+    for i, tier in enumerate(tiers):
+        alloc = remaining if i == len(tiers) - 1 else safe * remaining
+        remaining -= alloc
+        members = by_tier[tier]
+        tot = sum(max(0.0, m.value_jpy) for m in members)
+        for m in members:
+            share = (max(0.0, m.value_jpy) / tot) if tot > 0 else 1.0 / len(members)
+            weights[m.id] = round(alloc * share * 100, 3)
+    return weights
 
 
 def compute_rebalance(session: Session) -> dict[str, Any]:
@@ -62,6 +121,7 @@ def compute_rebalance(session: Session) -> dict[str, Any]:
             signal = "sell"     # 目標超過 → 利確/控える
         else:
             signal = "hold"
+        tier = _effective_tier(h)
         rows.append({
             "id": h.id, "name": h.name, "category": h.category,
             "value_jpy": _r(h.value_jpy), "target_weight": h.target_weight,
@@ -69,6 +129,8 @@ def compute_rebalance(session: Session) -> dict[str, Any]:
             "current_ratio": _r(h.value_jpy / total * 100, 1) if total else None,
             "target_ratio": _r(h.target_weight / sum_w * 100, 1) if h.target_weight > 0 else None,
             "signal": signal, "note": h.note,
+            "risk_tier": tier, "risk_label": RISK_TIERS.get(tier, ""),
+            "risk_overridden": h.risk_tier is not None,
         })
     rows.sort(key=lambda r: (r["room"] is None, -(r["room"] or 0)))
     return {
@@ -77,6 +139,8 @@ def compute_rebalance(session: Session) -> dict[str, Any]:
         "unallocated": _r(max(0.0, investable - invested_now)),  # 余剰のうち未配分=投資余地
         "holdings": rows,
         "wage_jpy_per_h": _r(st.wage_jpy_per_h),
+        "risk_tolerance": st.risk_tolerance,
+        "risk_tiers": RISK_TIERS,
     }
 
 

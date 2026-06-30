@@ -690,6 +690,7 @@ class AssetHolding(Base):
     category: Mapped[str] = mapped_column(String(32), default="other")
     value_jpy: Mapped[float] = mapped_column(Float, default=0.0)
     target_weight: Mapped[float] = mapped_column(Float, default=0.0)  # 0=配分対象外
+    risk_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 手動上書き(空=自動判定)
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -722,6 +723,7 @@ class FinanceState(Base):
     reserve_jpy: Mapped[float] = mapped_column(Float, default=0.0)  # 生活防衛資金(確保額)
     reserve_months: Mapped[int] = mapped_column(Integer, default=6)  # 防衛資金=月支出×この月数
     wage_jpy_per_h: Mapped[float] = mapped_column(Float, default=2000.0)  # 時間削減の換算時給
+    risk_tolerance: Mapped[int] = mapped_column(Integer, default=3)  # 1(保守)〜7(積極)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

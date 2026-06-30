@@ -42,28 +42,35 @@ function useFinanceMut(qc: ReturnType<typeof useQueryClient>) {
 
 function HoldingRow({ h, onSave, onDelete }: {
   h: RebalanceHolding;
-  onSave: (v: { id: number; name: string; category: string; value_jpy: number; target_weight: number }) => void;
+  onSave: (v: { id: number; name: string; category: string; value_jpy: number; target_weight: number; risk_tier: number }) => void;
   onDelete: (id: number) => void;
 }) {
   const [val, setVal] = useState(String(h.value_jpy ?? 0));
   const [w, setW] = useState(String(h.target_weight));
   const sig = REB_SIGNAL[h.signal];
+  const saveAll = (tier: number) =>
+    onSave({ id: h.id, name: h.name, category: h.category, value_jpy: Number(val) || 0, target_weight: Number(w) || 0, risk_tier: tier });
   return (
     <div className="border-t border-hairline py-1.5 text-xs first:border-t-0">
       <div className="flex items-center gap-2">
         <span className="flex-1 truncate text-ink">{h.name}</span>
         <Pill tone={sig.tone}>{sig.label}</Pill>
+        <select value={h.risk_tier} onChange={(e) => saveAll(Number(e.target.value))}
+          title="リスク階層(自動判定。手で上書き可)"
+          className="rounded bg-panel px-1 py-0.5 text-[10px] text-ink-dim">
+          {[0, 1, 2, 3, 4].map((t) => <option key={t} value={t}>{["現金", "債券", "株/投信", "暗号(主)", "暗号(アルト)"][t]}</option>)}
+        </select>
         <button onClick={() => onDelete(h.id)} className="text-ink-faint hover:text-risk">×</button>
       </div>
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         <label className="text-ink-faint">残高
           <input value={val} onChange={(e) => setVal(e.target.value)}
-            onBlur={() => onSave({ id: h.id, name: h.name, category: h.category, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
+            onBlur={() => saveAll(h.risk_tier)}
             inputMode="numeric" className="ml-1 w-24 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>
         <label className="text-ink-faint">目標ウェイト
           <input value={w} onChange={(e) => setW(e.target.value)}
-            onBlur={() => onSave({ id: h.id, name: h.name, category: h.category, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
+            onBlur={() => saveAll(h.risk_tier)}
             inputMode="decimal" className="ml-1 w-12 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>
       </div>
@@ -86,6 +93,7 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
   const del = mut((v) => api.financeAssetDelete(v as number));
   const cfg = mut((v) => api.financeConfig(v as never));
   const imp = mut((v) => api.financeImportAssets(v as never));
+  const alloc = mut((v) => api.financeAutoAllocate(v as number | undefined));
   const r = data.rebalance;
   const [newName, setNewName] = useState("");
   const [csv, setCsv] = useState("");
@@ -119,6 +127,24 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
           <HoldingRow key={h.id} h={h}
             onSave={(v) => save.mutate(v as never)} onDelete={(id) => del.mutate(id as never)} />
         ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-act-700/40 bg-act/10 p-2">
+        <span className="telemetry-label text-act-300">自動配分</span>
+        <span className="text-[11px] text-ink-faint">リスク許容度</span>
+        <select value={r.risk_tolerance}
+          onChange={(e) => alloc.mutate(Number(e.target.value) as never)}
+          className="rounded bg-panel px-1.5 py-0.5 text-xs text-ink">
+          {[1, 2, 3, 4, 5, 6, 7].map((l) => (
+            <option key={l} value={l}>{l} {l === 1 ? "(最も保守)" : l === 4 ? "(中庸)" : l === 7 ? "(最も積極)" : ""}</option>
+          ))}
+        </select>
+        <Button variant="primary" disabled={alloc.isPending} onClick={() => alloc.mutate(undefined as never)}>
+          {alloc.isPending ? "配分中…" : "リスク階層で自動配分"}
+        </Button>
+        <span className="w-full text-[10px] text-ink-faint">
+          安全側から再帰分割(現金→株/投信→暗号(主)→暗号(アルト))。許容度が高いほどリスク資産へ多く回す。各行のリスク階層は手で上書き可。
+        </span>
       </div>
 
       <div className="mt-2 flex items-center gap-2 border-t border-hairline pt-2">

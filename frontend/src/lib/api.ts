@@ -1237,6 +1237,9 @@ export type RebalanceHolding = {
   target_ratio: number | null;
   signal: "buy" | "sell" | "hold" | "reserve";
   note: string | null;
+  risk_tier: number;
+  risk_label: string;
+  risk_overridden: boolean;
 };
 export type RoiRow = {
   id: number;
@@ -1276,6 +1279,8 @@ export type FinanceResponse = {
     unallocated: number | null;
     holdings: RebalanceHolding[];
     wage_jpy_per_h: number | null;
+    risk_tolerance: number;
+    risk_tiers: Record<string, string>;
   };
   roi: { candidates: RoiRow[]; budget: number | null; earmarked: number | null };
   cashflow: CashflowSummary;
@@ -1286,6 +1291,7 @@ export type AssetInput = {
   category?: string;
   value_jpy?: number;
   target_weight?: number;
+  risk_tier?: number | null;
   note?: string | null;
 };
 export type RoiInput = {
@@ -1769,6 +1775,11 @@ export const api = {
     apply_suggested_reserve?: boolean;
   }) =>
     request<FinanceResponse>("/api/finance/config", { method: "PUT", body: JSON.stringify(body) }),
+  financeAutoAllocate: (tolerance?: number) =>
+    request<FinanceResponse>("/api/finance/auto-allocate", {
+      method: "POST",
+      body: JSON.stringify({ tolerance }),
+    }),
   financeImportCashflow: (csv: string) =>
     request<FinanceResponse>("/api/finance/import-cashflow", {
       method: "POST",

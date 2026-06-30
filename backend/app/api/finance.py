@@ -33,6 +33,7 @@ class AssetIn(BaseModel):
     category: str = "other"
     value_jpy: float = 0.0
     target_weight: float = 0.0
+    risk_tier: int | None = None
     note: str | None = None
 
 
@@ -47,6 +48,7 @@ async def put_asset(body: AssetIn) -> dict[str, Any]:
         row.category = body.category
         row.value_jpy = body.value_jpy
         row.target_weight = body.target_weight
+        row.risk_tier = body.risk_tier
         row.note = body.note
         session.flush()
         return compute_finance(session)
@@ -108,6 +110,7 @@ class ConfigIn(BaseModel):
     reserve_jpy: float | None = None
     wage_jpy_per_h: float | None = None
     reserve_months: int | None = None
+    risk_tolerance: int | None = None
     apply_suggested_reserve: bool = False  # True: 月支出×月数 を防衛資金に再設定
 
 
@@ -121,11 +124,34 @@ async def put_config(body: ConfigIn) -> dict[str, Any]:
             st.wage_jpy_per_h = body.wage_jpy_per_h
         if body.reserve_months is not None:
             st.reserve_months = max(0, body.reserve_months)
+        if body.risk_tolerance is not None:
+            st.risk_tolerance = max(1, min(7, body.risk_tolerance))
         if body.apply_suggested_reserve:
             reb = compute_rebalance(session)
             cf = compute_cashflow(session, reb["total"] or 0.0)
             if cf.get("_avg_exp"):
                 st.reserve_jpy = round(cf["_avg_exp"] * st.reserve_months)
+        session.flush()
+        return compute_finance(session)
+
+
+class AutoAllocIn(BaseModel):
+    tolerance: int | None = None
+
+
+@router.post("/api/finance/auto-allocate")
+async def auto_allocate_endpoint(body: AutoAllocIn) -> dict[str, Any]:
+    """リスク許容度に基づき、全資産の目標ウェイトをリスク階層の再帰分割で自動設定。"""
+    from app.scoring.finance import auto_allocate
+
+    with session_scope() as session:
+        st = get_state(session)
+        if body.tolerance is not None:
+            st.risk_tolerance = max(1, min(7, body.tolerance))
+        holdings = list(session.execute(select(AssetHolding)).scalars())
+        weights = auto_allocate(holdings, st.risk_tolerance)
+        for h in holdings:
+            h.target_weight = weights.get(h.id, 0.0)
         session.flush()
         return compute_finance(session)
 
