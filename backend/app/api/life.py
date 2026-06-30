@@ -97,6 +97,15 @@ async def get_life_tree() -> dict[str, Any]:
         return compute_life_tree(session, app_today())
 
 
+@router.get("/api/life/portfolio")
+async def get_life_portfolio() -> dict[str, Any]:
+    """人生ポートフォリオ: 目標配分×現在配分×ROI でリバランス先(次の投資先)を出す。"""
+    from app.scoring.life.portfolio import compute_portfolio
+
+    with session_scope() as session:
+        return compute_portfolio(session, app_today())
+
+
 class GoalIn(BaseModel):
     title: str
     horizon: str | None = None

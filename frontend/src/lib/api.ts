@@ -1363,6 +1363,27 @@ export type BecomingOneMove = {
 };
 
 export type LifeLeaf = { label: string; achievement: number | null };
+export type PortfolioHolding = {
+  key: string;
+  label: string;
+  weight: number;
+  target_alloc: number | null;
+  current_alloc: number | null;
+  level: number | null;
+  gap: number | null;
+  roi: number;
+  roi_rel: number;
+  signal: "buy" | "hold" | "funded" | "trim";
+  breach: boolean;
+  kinds: string[];
+};
+export type LifePortfolio = {
+  holdings: PortfolioHolding[];
+  top_pick: PortfolioHolding | null;
+  total_effort: number;
+  window_days: number;
+  goal: { title?: string; horizon?: string | null } | null;
+};
 export type LifeCapital = {
   key: string;
   label: string;
@@ -1638,6 +1659,7 @@ export const api = {
     }),
   becoming: () => request<BecomingResponse>("/api/becoming"),
   lifeTree: () => request<LifeTreeResponse>("/api/life/tree"),
+  lifePortfolio: () => request<LifePortfolio>("/api/life/portfolio"),
   journalCalendar: () =>
     request<{ events: { hour: number; minute: number; summary: string; busy: boolean }[] }>(
       "/api/journal/calendar",
