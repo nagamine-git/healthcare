@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { LifeTreePanel } from "../components/LifeTreePanel";
-import { LifePortfolioPanel } from "../components/LifePortfolioPanel";
 import { Button, Panel } from "../components/ui/cockpit";
 
 function GoalEditor() {
@@ -105,7 +104,6 @@ export function LifePage({ onBack }: { onBack: () => void }) {
       <p className="text-xs text-ink-faint">
         目的 → 目標 → ドメイン → 行動。重点に寄せつつ、最低ラインは守る。
       </p>
-      <LifePortfolioPanel />
       <LifeTreePanel />
       <GoalEditor />
       <button
