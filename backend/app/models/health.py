@@ -677,6 +677,53 @@ class BodyCompositionSample(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class AssetHolding(Base):
+    """資産バケット(MoneyForward から転記)。目標配分に対する売買リバランスに使う。
+
+    target_weight>0 のものが配分対象(定期/仮想通貨/積立 等)。reserve/現金は 0。
+    """
+
+    __tablename__ = "asset_holding"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(32), default="other")
+    value_jpy: Mapped[float] = mapped_column(Float, default=0.0)
+    target_weight: Mapped[float] = mapped_column(Float, default=0.0)  # 0=配分対象外
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RoiCandidate(Base):
+    """購入/サブスク/支出の ROI 候補。儲かるか(価値/コスト)を概算しランキングする。"""
+
+    __tablename__ = "roi_candidate"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cost_jpy: Mapped[float] = mapped_column(Float, default=0.0)  # 価格(サブスクは1期間額)
+    period: Mapped[str] = mapped_column(String(12), default="onetime")  # month|year|onetime
+    monthly_use_days: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_time_saved_h: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_revenue_jpy: Mapped[float] = mapped_column(Float, default=0.0)
+    resale_jpy: Mapped[float] = mapped_column(Float, default=0.0)  # 資産性(売る時いくら)
+    status: Mapped[str] = mapped_column(String(16), default="considering")  # considering|owning|canceled
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class FinanceState(Base):
+    """資産/ROI 計算のグローバル設定(単一行 id=1)。"""
+
+    __tablename__ = "finance_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    reserve_jpy: Mapped[float] = mapped_column(Float, default=0.0)  # 生活防衛資金(確保額)
+    wage_jpy_per_h: Mapped[float] = mapped_column(Float, default=2000.0)  # 時間削減の換算時給
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Goal(Base):
     """中期目標(Layer 1)。capital_weights でドメインの重点ウェイトを駆動する。"""
 

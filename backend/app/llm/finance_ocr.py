@@ -1,0 +1,77 @@
+"""MoneyForward 等の資産画面スクショ/CSV から、資産バケット(名前・金額)を抽出する。
+
+保存前に確認する運用(誤読しうる前提)。api_key 未設定/失敗時は None。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.config import get_settings
+from app.logging import get_logger
+
+logger = get_logger(__name__)
+
+_SYSTEM = """\
+あなたは資産管理アプリ(MoneyForward 等)のスクリーンショットを読み取る専門家です。
+画面に出ている**資産の種別ごとの残高**を抽出します。
+
+# 指示
+- 各資産(預金/現金/株式/投資信託/暗号資産/年金/ポイント/不動産 等)の name と value(円)を返す。
+- 合計・前日比・グラフ凡例など、種別残高でないものは出さない。
+- value は円の整数(カンマ・¥は除く)。読めない項目は出さない。
+必ず submit_assets ツールで返すこと。
+"""
+
+_TOOL: dict[str, Any] = {
+    "name": "submit_assets",
+    "description": "資産種別ごとの残高(name, value)を返す。",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "assets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}, "value": {"type": "number"}},
+                    "required": ["name", "value"],
+                },
+            }
+        },
+        "required": ["assets"],
+    },
+}
+
+
+async def extract_assets(*, image_b64: str, media_type: str = "image/png") -> list[dict] | None:
+    settings = get_settings()
+    api_key = settings.anthropic_api_key
+    if not api_key:
+        return None
+    try:
+        from anthropic import AsyncAnthropic
+
+        client = AsyncAnthropic(api_key=api_key)
+        resp = await client.messages.create(
+            model=settings.llm_model,
+            max_tokens=800,
+            system=_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
+                    {"type": "text", "text": "この資産画面から種別ごとの残高を抽出してください。"},
+                ],
+            }],
+            tools=[_TOOL],
+            tool_choice={"type": "tool", "name": "submit_assets"},
+        )
+    except Exception as exc:
+        logger.warning("finance_ocr_failed", error=str(exc))
+        return None
+    for block in resp.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_assets":
+            inp = block.input
+            if isinstance(inp, dict):
+                return [a for a in inp.get("assets", []) if a.get("name") and a.get("value") is not None]
+    return None

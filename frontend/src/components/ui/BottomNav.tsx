@@ -4,6 +4,7 @@ const ITEMS: { key: string; label: string; hash: string }[] = [
   { key: "garden", label: "庭", hash: "#garden" },
   { key: "identity", label: "羅針盤", hash: "#identity" },
   { key: "becoming", label: "歩み", hash: "#becoming" },
+  { key: "finance", label: "資産", hash: "#finance" },
 ];
 
 /** 全画面に常設のナビ。どこからでも 1 タップで主要機能へ。 */

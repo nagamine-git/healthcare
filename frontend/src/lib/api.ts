@@ -1225,6 +1225,69 @@ export type IdentityIntention = {
   rating: number;
   seen_at: string | null;
 };
+export type RebalanceHolding = {
+  id: number;
+  name: string;
+  category: string;
+  value_jpy: number | null;
+  target_weight: number;
+  target_value: number | null;
+  room: number | null;
+  current_ratio: number | null;
+  target_ratio: number | null;
+  signal: "buy" | "sell" | "hold" | "reserve";
+  note: string | null;
+};
+export type RoiRow = {
+  id: number;
+  name: string;
+  url: string | null;
+  status: string;
+  monthly_cost: number | null;
+  roi: number;
+  utilization: number;
+  score: number;
+  verdict: "buy" | "watch" | "skip" | "continue" | "cancel";
+  monthly_time_saved_h: number;
+  monthly_revenue_jpy: number | null;
+  resale_jpy: number | null;
+  period: string;
+  cost_jpy: number | null;
+  within_budget: boolean;
+};
+export type FinanceResponse = {
+  rebalance: {
+    total: number | null;
+    reserve: number | null;
+    investable: number | null;
+    invested_now: number | null;
+    unallocated: number | null;
+    holdings: RebalanceHolding[];
+    wage_jpy_per_h: number | null;
+  };
+  roi: { candidates: RoiRow[]; budget: number | null; earmarked: number | null };
+};
+export type AssetInput = {
+  id?: number;
+  name: string;
+  category?: string;
+  value_jpy?: number;
+  target_weight?: number;
+  note?: string | null;
+};
+export type RoiInput = {
+  id?: number;
+  name: string;
+  url?: string | null;
+  cost_jpy?: number;
+  period?: string;
+  monthly_use_days?: number;
+  monthly_time_saved_h?: number;
+  monthly_revenue_jpy?: number;
+  resale_jpy?: number;
+  status?: string;
+  note?: string | null;
+};
 export type AtlasNode = {
   key: string;
   label: string;
@@ -1658,6 +1721,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
+  finance: () => request<FinanceResponse>("/api/finance"),
+  financeAsset: (body: AssetInput) =>
+    request<FinanceResponse>("/api/finance/asset", { method: "POST", body: JSON.stringify(body) }),
+  financeAssetDelete: (id: number) =>
+    request<FinanceResponse>(`/api/finance/asset/${id}`, { method: "DELETE" }),
+  financeRoi: (body: RoiInput) =>
+    request<FinanceResponse>("/api/finance/roi", { method: "POST", body: JSON.stringify(body) }),
+  financeRoiDelete: (id: number) =>
+    request<FinanceResponse>(`/api/finance/roi/${id}`, { method: "DELETE" }),
+  financeConfig: (body: { reserve_jpy?: number; wage_jpy_per_h?: number }) =>
+    request<FinanceResponse>("/api/finance/config", { method: "PUT", body: JSON.stringify(body) }),
+  financeImportAssets: (body: { csv?: string; image_base64?: string; media_type?: string }) =>
+    request<FinanceResponse>("/api/finance/import-assets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   consult: (messages: ChatMsg[]) =>
     request<{ reply: string }>("/api/consult", {
       method: "POST",
