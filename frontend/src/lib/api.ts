@@ -1380,10 +1380,6 @@ export type PortfolioHolding = {
 export type LifePortfolio = {
   holdings: PortfolioHolding[];
   top_pick: PortfolioHolding | null;
-  directive: string;
-  mode: "offense" | "neutral" | "defense";
-  capacity: number | null;
-  mode_reasons: string[];
   total_effort: number;
   window_days: number;
   goal: { title?: string; horizon?: string | null } | null;
