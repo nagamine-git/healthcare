@@ -25,7 +25,7 @@ const REB_SIGNAL: Record<RebalanceHolding["signal"], { label: string; tone: "pro
   buy: { label: "買い増し", tone: "prog" },
   sell: { label: "利確/控え", tone: "risk" },
   hold: { label: "維持", tone: "neutral" },
-  reserve: { label: "対象外", tone: "neutral" },
+  reserve: { label: "配分外", tone: "neutral" },
 };
 const ROI_VERDICT: Record<RoiRow["verdict"], { label: string; tone: "prog" | "act" | "risk" | "neutral" }> = {
   buy: { label: "投資価値あり", tone: "prog" },
@@ -42,7 +42,7 @@ function useFinanceMut(qc: ReturnType<typeof useQueryClient>) {
 
 function HoldingRow({ h, onSave, onDelete }: {
   h: RebalanceHolding;
-  onSave: (v: { id: number; value_jpy: number; target_weight: number }) => void;
+  onSave: (v: { id: number; name: string; category: string; value_jpy: number; target_weight: number }) => void;
   onDelete: (id: number) => void;
 }) {
   const [val, setVal] = useState(String(h.value_jpy ?? 0));
@@ -58,12 +58,12 @@ function HoldingRow({ h, onSave, onDelete }: {
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         <label className="text-ink-faint">残高
           <input value={val} onChange={(e) => setVal(e.target.value)}
-            onBlur={() => onSave({ id: h.id, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
+            onBlur={() => onSave({ id: h.id, name: h.name, category: h.category, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
             inputMode="numeric" className="ml-1 w-24 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>
         <label className="text-ink-faint">目標ウェイト
           <input value={w} onChange={(e) => setW(e.target.value)}
-            onBlur={() => onSave({ id: h.id, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
+            onBlur={() => onSave({ id: h.id, name: h.name, category: h.category, value_jpy: Number(val) || 0, target_weight: Number(w) || 0 })}
             inputMode="decimal" className="ml-1 w-12 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>
       </div>
@@ -92,6 +92,10 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
 
   return (
     <Panel title="資産リバランス — MoneyForward 転記 → 目標配分へ">
+      <p className="mb-2 text-[11px] text-ink-faint">
+        目標ウェイト(1以上)を入れた資産だけが配分対象。空欄/0は「配分外」(現金・予備として保持)。
+        余剰=総資産−防衛資金 を、ウェイト比で各資産へ割り当て、過不足を出す。
+      </p>
       <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <div><div className="telemetry-label">総資産</div><div className="telemetry-num text-ink">{yen(r.total)}</div></div>
         <div>
@@ -232,6 +236,67 @@ function RoiSection({ data }: { data: FinanceResponse }) {
   );
 }
 
+const yenK = (n: number | null | undefined) => (n == null ? "—" : `¥${Math.round(n).toLocaleString()}`);
+
+function CashflowSection({ data }: { data: FinanceResponse }) {
+  const qc = useQueryClient();
+  const mut = useFinanceMut(qc);
+  const imp = mut((v) => api.financeImportCashflow(v as string));
+  const cfg = mut((v) => api.financeConfig(v as never));
+  const cf = data.cashflow;
+  return (
+    <Panel title="入出金 — 月支出から防衛資金を自動算出">
+      {cf.has_data ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div><div className="telemetry-label">月平均支出</div><div className="telemetry-num text-risk">{yenK(cf.avg_monthly_expense)}</div></div>
+            <div><div className="telemetry-label">月平均収入</div><div className="telemetry-num text-prog-300">{yenK(cf.avg_monthly_income)}</div></div>
+            <div><div className="telemetry-label">月収支</div><div className={`telemetry-num ${(cf.avg_monthly_net ?? 0) >= 0 ? "text-prog-300" : "text-risk"}`}>{yenK(cf.avg_monthly_net)}</div></div>
+            <div><div className="telemetry-label">ランウェイ</div><div className="telemetry-num text-ink">{cf.runway_months == null ? "—" : `${cf.runway_months}ヶ月`}</div></div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-ink-faint">防衛資金 = 月支出 ×</span>
+            <select defaultValue={String(cf.reserve_months)}
+              onChange={(e) => cfg.mutate({ reserve_months: Number(e.target.value), apply_suggested_reserve: true } as never)}
+              className="rounded bg-panel px-1.5 py-0.5 text-ink">
+              {[3, 6, 9, 12].map((m) => <option key={m} value={m}>{m}ヶ月</option>)}
+            </select>
+            <span className="text-ink-dim">推奨 {yenK(cf.suggested_reserve)}</span>
+            <Button variant="subtle" onClick={() => cfg.mutate({ apply_suggested_reserve: true } as never)}>防衛資金に適用</Button>
+          </div>
+          {(cf.categories?.length ?? 0) > 0 && (
+            <div className="mt-2 border-t border-hairline pt-2">
+              <p className="telemetry-label">支出カテゴリ(直近6ヶ月)</p>
+              <div className="mt-1 space-y-0.5">
+                {cf.categories!.map((c) => (
+                  <div key={c.name} className="flex justify-between text-[11px]">
+                    <span className="text-ink-dim">{c.name}</span>
+                    <span className="telemetry-num text-ink-faint">{yenK(c.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-ink-dim">入出金CSV(MoneyForward)を取り込むと、月平均支出から防衛資金を自動算出します。</p>
+      )}
+      <div className="mt-3">
+        <label className="inline-block cursor-pointer rounded bg-prog-700 px-2.5 py-1 text-xs hover:bg-prog-500">
+          入出金CSVを取り込む
+          <input type="file" accept=".csv,text/csv" className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]; e.target.value = "";
+              if (f) imp.mutate(await f.text() as never);
+            }} />
+        </label>
+        {imp.isPending && <span className="ml-2 text-[11px] text-ink-faint">取込中…</span>}
+        {imp.isError && <span className="ml-2 text-[11px] text-risk">取込失敗</span>}
+      </div>
+    </Panel>
+  );
+}
+
 export function FinancePage({ onBack }: { onBack: () => void }) {
   const q = useQuery({ queryKey: ["finance"], queryFn: api.finance, retry: false });
   return (
@@ -245,6 +310,7 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
         <Skeleton className="h-64" />
       ) : (
         <>
+          <CashflowSection data={q.data} />
           <RebalanceSection data={q.data} />
           <RoiSection data={q.data} />
         </>

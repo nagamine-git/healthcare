@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from datetime import date as date_type
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -13,8 +14,8 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.llm.finance_ocr import extract_assets
-from app.models.health import AssetHolding, RoiCandidate
-from app.scoring.finance import compute_finance, get_state
+from app.models.health import AssetHolding, CashflowTx, RoiCandidate
+from app.scoring.finance import compute_cashflow, compute_finance, compute_rebalance, get_state
 
 router = APIRouter()
 
@@ -106,6 +107,8 @@ async def delete_roi(roi_id: int) -> dict[str, Any]:
 class ConfigIn(BaseModel):
     reserve_jpy: float | None = None
     wage_jpy_per_h: float | None = None
+    reserve_months: int | None = None
+    apply_suggested_reserve: bool = False  # True: 月支出×月数 を防衛資金に再設定
 
 
 @router.put("/api/finance/config")
@@ -116,6 +119,13 @@ async def put_config(body: ConfigIn) -> dict[str, Any]:
             st.reserve_jpy = body.reserve_jpy
         if body.wage_jpy_per_h is not None:
             st.wage_jpy_per_h = body.wage_jpy_per_h
+        if body.reserve_months is not None:
+            st.reserve_months = max(0, body.reserve_months)
+        if body.apply_suggested_reserve:
+            reb = compute_rebalance(session)
+            cf = compute_cashflow(session, reb["total"] or 0.0)
+            if cf.get("_avg_exp"):
+                st.reserve_jpy = round(cf["_avg_exp"] * st.reserve_months)
         session.flush()
         return compute_finance(session)
 
@@ -178,5 +188,62 @@ async def import_assets(body: AssetImportIn) -> dict[str, Any]:
                 session.add(row)
                 existing[it["name"]] = row
             row.value_jpy = float(it["value"])
+        session.flush()
+        return compute_finance(session)
+
+
+def _parse_cashflow_csv(text: str) -> list[dict]:
+    """MoneyForward 入出金 CSV(計算対象/日付/内容/金額/保有金融機関/大項目/中項目/メモ/振替/ID)。"""
+    out: list[dict] = []
+    reader = csv.DictReader(io.StringIO(text.lstrip("﻿")))
+    for row in reader:
+        rid = (row.get("ID") or "").strip()
+        ds = (row.get("日付") or "").strip()
+        amt = (row.get("金額（円）") or row.get("金額(円)") or "").strip().replace(",", "")
+        if not rid or not ds or not amt:
+            continue
+        try:
+            d = date_type.fromisoformat(ds.replace("/", "-"))
+            amount = float(amt)
+        except ValueError:
+            continue
+        out.append({
+            "id": rid[:64], "date": d, "amount_jpy": amount,
+            "major_category": (row.get("大項目") or "").strip()[:64] or None,
+            "minor_category": (row.get("中項目") or "").strip()[:64] or None,
+            "account": (row.get("保有金融機関") or "").strip()[:120] or None,
+            "content": (row.get("内容") or "").strip()[:300] or None,
+            "counted": (row.get("計算対象") or "").strip() == "1",
+            "is_transfer": (row.get("振替") or "").strip() == "1",
+        })
+    return out
+
+
+class CashflowImportIn(BaseModel):
+    csv: str
+
+
+@router.post("/api/finance/import-cashflow")
+async def import_cashflow(body: CashflowImportIn) -> dict[str, Any]:
+    """入出金 CSV を取り込み(ID で重複排除)、月支出から防衛資金を自動設定。"""
+    rows = _parse_cashflow_csv(body.csv)
+    if not rows:
+        raise HTTPException(status_code=422, detail="取り込める入出金がありませんでした(CSV を確認)")
+    with session_scope() as session:
+        for r in rows:
+            tx = session.get(CashflowTx, r["id"])
+            if tx is None:
+                tx = CashflowTx(id=r["id"])
+                session.add(tx)
+            for k, v in r.items():
+                if k != "id":
+                    setattr(tx, k, v)
+        session.flush()
+        # 月平均支出 × 防衛月数 を防衛資金に自動設定。
+        st = get_state(session)
+        reb = compute_rebalance(session)
+        cf = compute_cashflow(session, reb["total"] or 0.0)
+        if cf.get("_avg_exp"):
+            st.reserve_jpy = round(cf["_avg_exp"] * st.reserve_months)
         session.flush()
         return compute_finance(session)

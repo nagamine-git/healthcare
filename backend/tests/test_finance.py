@@ -56,6 +56,26 @@ def test_roi_ranking_and_verdict(db_engine):
     assert low["verdict"] == "cancel"  # 保有中×低スコア → 解約候補
 
 
+def test_import_cashflow_sets_reserve_from_monthly_expense(app_client):
+    # 計算対象=1 & 振替=0 の支出だけを集計。3ヶ月で各10万支出 → 月平均10万 → 防衛資金=10万×6。
+    header = "計算対象,日付,内容,金額（円）,保有金融機関,大項目,中項目,メモ,振替,ID\n"
+    rows = [
+        "1,2026/03/15,家賃,-100000,UFJ,住宅,家賃,,0,t1",
+        "1,2026/04/15,家賃,-100000,UFJ,住宅,家賃,,0,t2",
+        "1,2026/05/15,家賃,-100000,UFJ,住宅,家賃,,0,t3",
+        "1,2026/04/25,給与,300000,UFJ,収入,給与,,0,i1",
+        "0,2026/04/01,振替,-50000,UFJ,未分類,未分類,,1,x1",  # 振替/対象外は除外
+    ]
+    r = app_client.post("/api/finance/import-cashflow", json={"csv": header + "\n".join(rows)})
+    assert r.status_code == 200
+    cf = r.json()["cashflow"]
+    assert cf["has_data"] and cf["avg_monthly_expense"] == 100000
+    assert r.json()["rebalance"]["reserve"] == 600000  # 月10万 × 6ヶ月(自動設定)
+    # 再アップロードで重複しない
+    r2 = app_client.post("/api/finance/import-cashflow", json={"csv": header + "\n".join(rows)})
+    assert r2.json()["cashflow"]["tx_count"] == 4  # counted & not transfer のみ
+
+
 def test_import_assets_csv_upserts(app_client):
     csv = "現金,1500000\n仮想通貨,¥300,000\n"
     r = app_client.post("/api/finance/import-assets", json={"csv": csv})

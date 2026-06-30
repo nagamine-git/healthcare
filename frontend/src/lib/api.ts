@@ -1255,6 +1255,18 @@ export type RoiRow = {
   cost_jpy: number | null;
   within_budget: boolean;
 };
+export type CashflowSummary = {
+  has_data: boolean;
+  avg_monthly_expense?: number | null;
+  avg_monthly_income?: number | null;
+  avg_monthly_net?: number | null;
+  reserve_months: number;
+  suggested_reserve?: number | null;
+  runway_months?: number | null;
+  months?: { ym: string; expense: number | null; income: number | null; net: number | null }[];
+  categories?: { name: string; amount: number | null }[];
+  tx_count?: number;
+};
 export type FinanceResponse = {
   rebalance: {
     total: number | null;
@@ -1266,6 +1278,7 @@ export type FinanceResponse = {
     wage_jpy_per_h: number | null;
   };
   roi: { candidates: RoiRow[]; budget: number | null; earmarked: number | null };
+  cashflow: CashflowSummary;
 };
 export type AssetInput = {
   id?: number;
@@ -1730,8 +1743,18 @@ export const api = {
     request<FinanceResponse>("/api/finance/roi", { method: "POST", body: JSON.stringify(body) }),
   financeRoiDelete: (id: number) =>
     request<FinanceResponse>(`/api/finance/roi/${id}`, { method: "DELETE" }),
-  financeConfig: (body: { reserve_jpy?: number; wage_jpy_per_h?: number }) =>
+  financeConfig: (body: {
+    reserve_jpy?: number;
+    wage_jpy_per_h?: number;
+    reserve_months?: number;
+    apply_suggested_reserve?: boolean;
+  }) =>
     request<FinanceResponse>("/api/finance/config", { method: "PUT", body: JSON.stringify(body) }),
+  financeImportCashflow: (csv: string) =>
+    request<FinanceResponse>("/api/finance/import-cashflow", {
+      method: "POST",
+      body: JSON.stringify({ csv }),
+    }),
   financeImportAssets: (body: {
     csv?: string;
     images?: { image_base64: string; media_type: string }[];

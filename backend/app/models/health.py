@@ -720,8 +720,28 @@ class FinanceState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     reserve_jpy: Mapped[float] = mapped_column(Float, default=0.0)  # 生活防衛資金(確保額)
+    reserve_months: Mapped[int] = mapped_column(Integer, default=6)  # 防衛資金=月支出×この月数
     wage_jpy_per_h: Mapped[float] = mapped_column(Float, default=2000.0)  # 時間削減の換算時給
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CashflowTx(Base):
+    """入出金履歴(MoneyForward CSV)。月支出の算出・防衛資金・ランウェイに使う。
+
+    id は MF の取引 ID(再アップロードで重複しない)。counted=計算対象, is_transfer=振替。
+    """
+
+    __tablename__ = "cashflow_tx"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    amount_jpy: Mapped[float] = mapped_column(Float)  # +収入 / -支出
+    major_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    minor_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    account: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    content: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    counted: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Goal(Base):

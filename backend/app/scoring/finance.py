@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.health import AssetHolding, FinanceState, RoiCandidate
+from app.models.health import AssetHolding, CashflowTx, FinanceState, RoiCandidate
+from app.scoring.timewindow import app_today
 
 
 def _r(v: float | None, n: int = 0) -> float | None:
@@ -127,7 +129,68 @@ def compute_roi_ranking(session: Session, investable: float, wage: float) -> dic
     return {"candidates": rows, "budget": _r(budget), "earmarked": _r(spent)}
 
 
+def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, Any]:
+    """入出金履歴から月支出/収入・カテゴリ別・推奨防衛資金・ランウェイを算出。"""
+    st = get_state(session)
+    txs = list(
+        session.execute(
+            select(CashflowTx).where(CashflowTx.counted.is_(True), CashflowTx.is_transfer.is_(False))
+        ).scalars()
+    )
+    if not txs:
+        return {"has_data": False, "reserve_months": st.reserve_months}
+
+    by_month_exp: dict[str, float] = defaultdict(float)
+    by_month_inc: dict[str, float] = defaultdict(float)
+    by_cat: dict[str, float] = defaultdict(float)
+    today = app_today()
+    cur_ym = f"{today.year:04d}-{today.month:02d}"
+    # 直近6ヶ月のカテゴリ集計用の下限(おおよそ)
+    cat_lo = today.year * 12 + today.month - 6
+    for t in txs:
+        ym = f"{t.date.year:04d}-{t.date.month:02d}"
+        if t.amount_jpy < 0:
+            by_month_exp[ym] += -t.amount_jpy
+            if (t.date.year * 12 + t.date.month) >= cat_lo:
+                by_cat[t.major_category or "未分類"] += -t.amount_jpy
+        else:
+            by_month_inc[ym] += t.amount_jpy
+
+    all_months = sorted(set(by_month_exp) | set(by_month_inc))
+    months = [
+        {"ym": ym, "expense": _r(by_month_exp.get(ym, 0)), "income": _r(by_month_inc.get(ym, 0)),
+         "net": _r(by_month_inc.get(ym, 0) - by_month_exp.get(ym, 0))}
+        for ym in all_months[-12:]
+    ]
+    # 平均は当月(部分月)を除く直近6ヶ月。無ければ全体。
+    full = [m for m in all_months if m != cur_ym]
+    sample = full[-6:] if full else all_months
+    avg_exp = sum(by_month_exp.get(m, 0) for m in sample) / len(sample) if sample else 0.0
+    avg_inc = sum(by_month_inc.get(m, 0) for m in sample) / len(sample) if sample else 0.0
+
+    suggested_reserve = avg_exp * st.reserve_months
+    runway = (total_assets / avg_exp) if avg_exp > 0 else None
+    categories = sorted(
+        ({"name": k, "amount": _r(v)} for k, v in by_cat.items()), key=lambda c: -(c["amount"] or 0)
+    )[:8]
+    return {
+        "has_data": True,
+        "avg_monthly_expense": _r(avg_exp),
+        "avg_monthly_income": _r(avg_inc),
+        "avg_monthly_net": _r(avg_inc - avg_exp),
+        "reserve_months": st.reserve_months,
+        "suggested_reserve": _r(suggested_reserve),
+        "runway_months": _r(runway, 1) if runway is not None else None,
+        "months": months,
+        "categories": categories,
+        "tx_count": len(txs),
+        "_avg_exp": avg_exp,  # 内部用(防衛資金自動設定)
+    }
+
+
 def compute_finance(session: Session) -> dict[str, Any]:
     reb = compute_rebalance(session)
     roi = compute_roi_ranking(session, reb["investable"] or 0.0, reb["wage_jpy_per_h"] or 2000.0)
-    return {"rebalance": reb, "roi": roi}
+    cf = compute_cashflow(session, reb["total"] or 0.0)
+    cf.pop("_avg_exp", None)
+    return {"rebalance": reb, "roi": roi, "cashflow": cf}
