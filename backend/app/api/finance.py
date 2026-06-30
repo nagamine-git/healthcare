@@ -141,24 +141,34 @@ def _parse_csv_assets(text: str) -> list[dict]:
     return out
 
 
+class ImageItem(BaseModel):
+    image_base64: str
+    media_type: str = "image/png"
+
+
 class AssetImportIn(BaseModel):
     csv: str | None = None
-    image_base64: str | None = None
+    image_base64: str | None = None  # 後方互換(単一画像)
     media_type: str = "image/png"
+    images: list[ImageItem] | None = None  # 複数スクショ(MoneyForwardは1画面に収まらない)
 
 
 @router.post("/api/finance/import-assets")
 async def import_assets(body: AssetImportIn) -> dict[str, Any]:
-    """資産を CSV か スクショ(OCR)から取り込み、name 一致で upsert。"""
-    items: list[dict] | None = None
+    """資産を CSV か スクショ(複数可・OCR)から取り込み、name 一致で upsert(全画面を合算)。"""
+    images = list(body.images or [])
     if body.image_base64:
-        items = await extract_assets(image_b64=body.image_base64, media_type=body.media_type)
-        if items is None:
-            raise HTTPException(status_code=502, detail="読取に失敗(LLM 未設定または読取不可)")
-    elif body.csv:
-        items = _parse_csv_assets(body.csv)
+        images.append(ImageItem(image_base64=body.image_base64, media_type=body.media_type))
+
+    items: list[dict] = []
+    for im in images:
+        got = await extract_assets(image_b64=im.image_base64, media_type=im.media_type)
+        if got:
+            items.extend(got)
+    if body.csv:
+        items.extend(_parse_csv_assets(body.csv))
     if not items:
-        raise HTTPException(status_code=422, detail="取り込める資産がありませんでした")
+        raise HTTPException(status_code=422, detail="取り込める資産がありませんでした(LLM 未設定/読取不可の可能性)")
     with session_scope() as session:
         existing = {h.name: h for h in session.execute(select(AssetHolding)).scalars()}
         for it in items:

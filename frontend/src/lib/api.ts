@@ -1732,7 +1732,10 @@ export const api = {
     request<FinanceResponse>(`/api/finance/roi/${id}`, { method: "DELETE" }),
   financeConfig: (body: { reserve_jpy?: number; wage_jpy_per_h?: number }) =>
     request<FinanceResponse>("/api/finance/config", { method: "PUT", body: JSON.stringify(body) }),
-  financeImportAssets: (body: { csv?: string; image_base64?: string; media_type?: string }) =>
+  financeImportAssets: (body: {
+    csv?: string;
+    images?: { image_base64: string; media_type: string }[];
+  }) =>
     request<FinanceResponse>("/api/finance/import-assets", {
       method: "POST",
       body: JSON.stringify(body),

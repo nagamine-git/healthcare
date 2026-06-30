@@ -123,17 +123,21 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
       <div className="mt-3 rounded-lg border border-hairline bg-hull/40 p-2">
         <p className="telemetry-label">取込(MoneyForward)</p>
         <label className="mt-1 inline-block cursor-pointer rounded bg-prog-700 px-2.5 py-1 text-xs hover:bg-prog-500">
-          スクショから取込
-          <input type="file" accept="image/*" className="hidden"
+          スクショから取込(複数可)
+          <input type="file" accept="image/*" multiple className="hidden"
             onChange={async (e) => {
-              const f = e.target.files?.[0]; e.target.value = "";
-              if (f) imp.mutate({ image_base64: await fileToB64(f), media_type: f.type || "image/png" } as never);
+              const files = Array.from(e.target.files ?? []); e.target.value = "";
+              if (!files.length) return;
+              const images = await Promise.all(
+                files.map(async (f) => ({ image_base64: await fileToB64(f), media_type: f.type || "image/png" })),
+              );
+              imp.mutate({ images } as never);
             }} />
         </label>
         {imp.isPending && <span className="ml-2 text-[11px] text-ink-faint">読取中…</span>}
         {imp.isError && <span className="ml-2 text-[11px] text-risk">読取失敗</span>}
         <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={2}
-          placeholder="または CSV を貼付(名前,金額 の各行)"
+          placeholder="または CSV を貼付(名前,金額 の各行)。複数スクショは全画面を合算"
           className="mt-1 w-full rounded bg-panel px-2 py-1 font-mono text-[11px] text-ink" />
         {csv.trim() && (
           <Button variant="subtle" onClick={() => { imp.mutate({ csv } as never); setCsv(""); }}>CSV取込</Button>
