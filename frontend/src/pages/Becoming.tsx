@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { DIAGNOSIS, etaLabel, pct } from "../lib/becomingDisplay";
 import { Button, Panel, Pill, Stat } from "../components/ui/cockpit";
 
-export function BecomingPage({ onBack }: { onBack: () => void }) {
+export function BecomingPage({ onBack, embedded }: { onBack: () => void; embedded?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["becoming"], queryFn: api.becoming });
   const moveMut = useMutation({ mutationFn: () => api.becomingOneMove() });
@@ -17,11 +17,15 @@ export function BecomingPage({ onBack }: { onBack: () => void }) {
   const diag = loop ? DIAGNOSIS[loop.diagnosis] : null;
 
   return (
-    <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
-      <button onClick={onBack} className="telemetry-label hover:text-ink">
-        ← 戻る
-      </button>
-      <h1 className="text-xl font-bold text-ink">歩み — 前に進めてる?</h1>
+    <div
+      className={embedded ? "space-y-4" : "safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4"}
+    >
+      {!embedded && (
+        <button onClick={onBack} className="telemetry-label hover:text-ink">
+          ← 戻る
+        </button>
+      )}
+      {!embedded && <h1 className="text-xl font-bold text-ink">歩み — 前に進めてる?</h1>}
       <p className="text-xs text-ink-faint">
         最近ちゃんと前進できているか、今のペースで理想にいつ届くかを見る画面です。
       </p>

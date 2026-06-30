@@ -20,7 +20,7 @@ import {
 } from "../lib/api";
 import { mediaLink } from "../lib/links";
 
-type Props = { onBack: () => void };
+type Props = { onBack: () => void; embedded?: boolean };
 
 function alignColor(v: number | null): string {
   if (v == null) return "#94a3b8";
@@ -29,24 +29,32 @@ function alignColor(v: number | null): string {
   return `hsl(${Math.round(hue)} 70% 55%)`;
 }
 
-export function IdentityPage({ onBack }: Props) {
+export function IdentityPage({ onBack, embedded }: Props) {
   const q = useQuery({ queryKey: ["identity"], queryFn: api.identity });
   const [reflectTarget, setReflectTarget] = useState<IdentityRecommendation | null>(null);
 
   return (
-    <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4 text-ink">
-      <header className="flex items-center justify-between pb-1">
-        <button
-          onClick={onBack}
-          className="rounded-lg px-2 py-1 text-sm text-ink-dim hover:text-ink"
-        >
-          ← 戻る
-        </button>
-        <h1 className="text-sm tracking-wider text-ink-dim">
-          Compass <span className="text-[10px] text-ink-faint">価値観 × マインドセット</span>
-        </h1>
-        <span className="w-12" />
-      </header>
+    <div
+      className={
+        embedded
+          ? "space-y-4 text-ink"
+          : "safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4 text-ink"
+      }
+    >
+      {!embedded && (
+        <header className="flex items-center justify-between pb-1">
+          <button
+            onClick={onBack}
+            className="rounded-lg px-2 py-1 text-sm text-ink-dim hover:text-ink"
+          >
+            ← 戻る
+          </button>
+          <h1 className="text-sm tracking-wider text-ink-dim">
+            Compass <span className="text-[10px] text-ink-faint">価値観 × マインドセット</span>
+          </h1>
+          <span className="w-12" />
+        </header>
+      )}
 
       {q.isLoading && <p className="text-sm text-ink-faint">読み込み中…</p>}
       {q.isError && <p className="text-sm text-risk">取得に失敗しました</p>}
