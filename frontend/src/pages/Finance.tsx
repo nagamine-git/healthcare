@@ -100,13 +100,19 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
         <div><div className="telemetry-label">総資産</div><div className="telemetry-num text-ink">{yen(r.total)}</div></div>
         <div>
           <div className="telemetry-label">防衛資金</div>
-          <input defaultValue={String(r.reserve ?? 0)} inputMode="numeric"
+          <input key={`rsv-${r.reserve ?? 0}`} defaultValue={String(r.reserve ?? 0)} inputMode="numeric"
             onBlur={(e) => cfg.mutate({ reserve_jpy: Number(e.target.value) || 0 } as never)}
             className="w-full rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </div>
         <div><div className="telemetry-label">余剰(投資可)</div><div className="telemetry-num text-prog-300">{yen(r.investable)}</div></div>
         <div><div className="telemetry-label">未配分(投資余地)</div><div className="telemetry-num text-act-300">{yen(r.unallocated)}</div></div>
       </div>
+      {(r.reserve ?? 0) > (r.total ?? 0) && (
+        <p className="mt-1 text-[11px] text-act-300">
+          防衛資金(¥{Math.round(r.reserve ?? 0).toLocaleString()})が総資産を上回るため余剰=0。
+          月支出が大きく目標月数を満たせていません(ランウェイを参照)。防衛資金を手で下げるか月数を減らせます。
+        </p>
+      )}
 
       <div className="mt-3">
         {r.holdings.map((h) => (
@@ -256,7 +262,7 @@ function CashflowSection({ data }: { data: FinanceResponse }) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-ink-faint">防衛資金 = 月支出 ×</span>
-            <select defaultValue={String(cf.reserve_months)}
+            <select key={`rm-${cf.reserve_months}`} defaultValue={String(cf.reserve_months)}
               onChange={(e) => cfg.mutate({ reserve_months: Number(e.target.value), apply_suggested_reserve: true } as never)}
               className="rounded bg-panel px-1.5 py-0.5 text-ink">
               {[3, 6, 9, 12].map((m) => <option key={m} value={m}>{m}ヶ月</option>)}
