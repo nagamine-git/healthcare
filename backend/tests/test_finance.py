@@ -31,12 +31,12 @@ def test_rebalance_reserve_and_room(db_engine):
     with session_scope() as session:
         f = compute_finance(session)
     reb = f["rebalance"]
-    # 総資産200万、防衛資金100万 → 余剰100万
+    # 総資産200万、防衛資金100万 → 余剰100万(情報)。目標額は総資産ベース。
     assert reb["total"] == 2_000_000 and reb["reserve"] == 1_000_000 and reb["investable"] == 1_000_000
     crypto = next(h for h in reb["holdings"] if h["name"] == "仮想通貨")
-    # 目標 = 余剰100万 × (1/2) = 50万 → あと20万買える
-    assert crypto["target_value"] == 500_000
-    assert crypto["room"] == 200_000 and crypto["signal"] == "buy"
+    # 目標 = 総資産200万 × (1/2) = 100万 → あと70万買える
+    assert crypto["target_value"] == 1_000_000
+    assert crypto["room"] == 700_000 and crypto["signal"] == "buy"
 
 
 def test_roi_ranking_and_verdict(db_engine):

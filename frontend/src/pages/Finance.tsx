@@ -64,12 +64,12 @@ function HoldingRow({ h, onSave, onDelete }: {
       </div>
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         <label className="text-ink-faint">残高
-          <input value={val} onChange={(e) => setVal(e.target.value)}
+          <input key={`v-${h.id}-${h.value_jpy}`} value={val} onChange={(e) => setVal(e.target.value)}
             onBlur={() => saveAll(h.risk_tier)}
             inputMode="numeric" className="ml-1 w-24 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>
         <label className="text-ink-faint">目標ウェイト
-          <input value={w} onChange={(e) => setW(e.target.value)}
+          <input key={`w-${h.id}-${h.target_weight}`} value={w} onChange={(e) => setW(e.target.value)}
             onBlur={() => saveAll(h.risk_tier)}
             inputMode="decimal" className="ml-1 w-12 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
         </label>

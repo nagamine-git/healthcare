@@ -108,16 +108,19 @@ def compute_rebalance(session: Session) -> dict[str, Any]:
     targeted = [h for h in holdings if h.target_weight > 0]
     sum_w = sum(h.target_weight for h in targeted) or 1.0
     invested_now = sum(h.value_jpy for h in targeted)
+    # リスクラダーは「全資産に対する配分」なので、目標額は総資産ベース。
+    base = total
+    band = max(base * 0.02, 1000.0)
 
     rows: list[dict[str, Any]] = []
     for h in holdings:
-        target_value = investable * (h.target_weight / sum_w) if h.target_weight > 0 else None
+        target_value = base * (h.target_weight / sum_w) if h.target_weight > 0 else None
         room = (target_value - h.value_jpy) if target_value is not None else None
         if room is None:
             signal = "reserve"  # 配分対象外(現金/防衛資金)
-        elif room > investable * 0.02:
+        elif room > band:
             signal = "buy"      # 目標まで余地 → 買い増し
-        elif room < -investable * 0.02:
+        elif room < -band:
             signal = "sell"     # 目標超過 → 利確/控える
         else:
             signal = "hold"
