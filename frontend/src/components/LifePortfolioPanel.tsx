@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, type PortfolioHolding } from "../lib/api";
+import { api, type LifePortfolio, type PortfolioHolding } from "../lib/api";
 import { kindLabel } from "../lib/labels";
 import { Panel, Pill, Skeleton } from "../components/ui/cockpit";
 
@@ -53,13 +53,33 @@ function Holding({ h, rank }: { h: PortfolioHolding; rank: number }) {
   );
 }
 
-/** 人生ポートフォリオ: 時間/エネルギーを資本とみなし、ROI で「次の投資先」を出す。 */
+const MODE: Record<LifePortfolio["mode"], { label: string; cls: string }> = {
+  offense: { label: "攻め", cls: "border-prog-700/50 bg-prog-900/15 text-prog-300" },
+  neutral: { label: "中立", cls: "border-hairline bg-hull text-ink-dim" },
+  defense: { label: "守り", cls: "border-risk/40 bg-risk/10 text-risk" },
+};
+
+/** 人生ポートフォリオ: 時間/エネルギーを資本とみなし、投資モード(攻め/守り)× ROI で次の一手を出す。 */
 export function LifePortfolioPanel() {
   const q = useQuery({ queryKey: ["life-portfolio"], queryFn: api.lifePortfolio, retry: false });
   if (!q.data) return <Skeleton className="h-48" />;
-  const { holdings, top_pick, total_effort, window_days } = q.data;
+  const { holdings, top_pick, total_effort, window_days, mode, capacity, directive, mode_reasons } = q.data;
+  const m = MODE[mode];
   return (
-    <Panel title="人生ポートフォリオ — どこに投資する?" glow="act">
+    <Panel title="人生ポートフォリオ — いま攻める? 守る?" glow="act">
+      {/* 投資モード(資本余力ゲート): 余力が乏しい時は投資を控え回復へ */}
+      <div className={`rounded-lg border p-2.5 ${m.cls}`}>
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm font-bold">投資モード: {m.label}</span>
+          <span className="telemetry-num text-xs text-ink-faint">
+            資本余力 {capacity == null ? "—" : Math.round(capacity)}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-ink-dim">{directive}</p>
+        {mode_reasons.length > 0 && (
+          <p className="mt-0.5 text-[10px] text-ink-faint">理由: {mode_reasons.join(" / ")}</p>
+        )}
+      </div>
       {top_pick && (
         <div className="rounded-lg border border-act-700/50 bg-act/10 p-2.5">
           <span className="telemetry-label text-act-300">次の投資先</span>

@@ -23,6 +23,27 @@ def test_portfolio_builds_and_ranks_by_roi(db_engine):
     assert p["top_pick"] is not None
 
 
+def test_portfolio_exposes_investment_mode(db_engine):
+    with session_scope() as session:
+        p = compute_portfolio(session, date(2026, 6, 30))
+    assert p["mode"] in ("offense", "neutral", "defense")
+    assert "directive" in p and "capacity" in p and "mode_reasons" in p
+
+
+def test_low_capacity_triggers_defense_mode(db_engine):
+    from app.models.health import DailyScore
+
+    with session_scope() as session:
+        session.add(DailyScore(
+            date=date(2026, 6, 30), total=30.0, sleep_sub=35.0, hrv_sub=30.0,
+            bb_sub=30.0, version="t", computed_at=datetime(2026, 6, 30, 8, 0),
+        ))
+    with session_scope() as session:
+        p = compute_portfolio(session, date(2026, 6, 30))
+    assert p["mode"] == "defense"   # 余力が乏しい → 守り(投資を控える)
+    assert "守り" in p["directive"]
+
+
 def test_recent_actions_shift_current_allocation(db_engine):
     # creation 系の行動(coding)を直近に積むと creation の現在配分が上がる
     now = datetime(2026, 6, 30, 12, 0)
