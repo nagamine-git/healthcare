@@ -6,25 +6,32 @@ html, body, #root {
   min-height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #06080c; /* void */
+  color: #eef2f8;      /* ink */
+  letter-spacing: -0.01em; /* SF 風のわずかな詰め */
   /* PWA: ダブルタップズーム抑止 / フォーム遷移時のジャンプ防止 */
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overscroll-behavior-y: none;
 }
 
 /* iOS の safe-area (notch / Dynamic Island / status bar) を確保。
    注意: これらは Tailwind ユーティリティ (px-5 等) より後に出力されるため
    同居させると上書きしてしまう。safe-area と通常余白を「合成」した値を
-   ここで完結させ、利用側では px-* / pb-* / pt-* を併用しないこと。
-   (実害例: safe-area-x が env()=0 で px-5 を潰し、外側余白ゼロになった) */
+   ここで完結させ、利用側では px-* / pb-* / pt-* を併用しないこと。 */
 .safe-area-top {
-  /* status bar の下に 12px の空き */
-  padding-top: calc(env(safe-area-inset-top) + 12px);
+  /* status bar の下に 8px の空き(大タイトルが続く前提で控えめ) */
+  padding-top: calc(env(safe-area-inset-top) + 8px);
 }
 .safe-area-bottom {
-  /* ホームインジケータの上に 32px の空き */
   padding-bottom: calc(env(safe-area-inset-bottom) + 32px);
 }
 .safe-area-x {
@@ -38,6 +45,7 @@ body {
     padding-right: max(env(safe-area-inset-right), 32px);
   }
 }
+
 /* スクロール時にコンテンツがステータスバーの時計等と重ならないよう、
    safe-area 上端を背景色で覆う固定スクリム (viewport-fit=cover 対策) */
 .status-bar-scrim {
@@ -46,115 +54,135 @@ body {
   left: 0;
   right: 0;
   height: env(safe-area-inset-top);
-  background: rgba(2, 6, 23, 0.85); /* slate-950 */
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(6, 8, 12, 0.72); /* void */
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
   z-index: 50;
   pointer-events: none;
 }
 
-/* ===== 計器盤ランプ (StatusLamps) ===== */
-/* イグニッションチェック: 起動時に全ランプが白く一閃 → 実状態へ */
-@keyframes lamp-ignite {
-  0% {
-    opacity: 1;
-  }
-  55% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-.lamp-ignite-overlay {
-  animation: lamp-ignite 0.7s ease-out backwards;
-  opacity: 0;
-}
-/* 赤ランプの鼓動 (車の警告灯) */
-@keyframes lamp-throb {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-.lamp-throb {
-  animation: lamp-throb 1.6s ease-in-out infinite;
-}
-
-/* 動きを減らす設定 / 片頭痛・前庭への配慮: 点滅と一閃を止める。
-   bad 状態はリングで静的に強調する (StatusLamps 側でフォールバック)。 */
-@media (prefers-reduced-motion: reduce) {
-  .lamp-throb,
-  .lamp-ignite-overlay {
-    animation: none !important;
-  }
-  .lamp-ignite-overlay {
-    display: none !important;
-  }
-}
-
-/* ===== Cockpit デザイン言語(Block A)===== */
-.status-bar-scrim {
-  background: rgba(10, 14, 20, 0.85); /* void */
-}
-
-/* 固定ボトムナビ(高さ約56px)+ ホームインジケータを必ずクリアする下余白。
+/* 固定ボトムナビ + ホームインジケータを必ずクリアする下余白。
    全ページ共通で使い、ページ側の pb-* / safe-area-bottom とは併用しない。 */
 .pb-nav {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 72px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
 }
 
+/* ===== タイポグラフィ階層(iOS 準拠)===== */
+/* 画面の大タイトル(Large Title) */
+.app-title {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #eef2f8;
+}
+/* セクション見出し(グループの上の小見出し) */
+.section-title {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #9fabbd; /* ink-dim */
+}
 /* 計器ラベル: 小さく・トラッキングを効かせた大文字キャプション */
 .telemetry-label {
-  font-size: 10px;
-  line-height: 1.2;
-  letter-spacing: 0.14em;
+  font-size: 10.5px;
+  line-height: 1.25;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #5b6675; /* ink-faint */
+  color: #69748a; /* ink-faint */
+  font-weight: 600;
 }
-
 /* 数値テレメトリ: Space Grotesk + tabular */
 .telemetry-num {
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   font-feature-settings: "tnum" 1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
-/* 計器パネルの上辺ハイライト(微かな立体感) */
+/* ===== 質感ユーティリティ ===== */
+/* カード上辺の微かなハイライト(立体感) */
 .panel-edge {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 36%);
+}
+/* タップ時の心地よい沈み込み(iOS の押下感) */
+.press {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.press:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+/* 横スクロールのスクロールバーを隠す(セグメント/ピル用) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-/* signature: フライホイールの回転インジケータ(回っている時だけ静かに回る) */
-@keyframes flywheel-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.flywheel-turning {
-  animation: flywheel-spin 9s linear infinite;
-}
-
-/* 数値の起動フェード */
+/* ===== モーション ===== */
 @keyframes telemetry-rise {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .telemetry-rise {
-  animation: telemetry-rise 0.3s ease-out backwards;
+  animation: telemetry-rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.25s ease-out backwards;
+}
+/* スケルトンのシマー */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.07) 37%, rgba(255,255,255,0.02) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/* signature: フライホイールの回転(回っている時だけ静かに回る) */
+@keyframes flywheel-spin { to { transform: rotate(360deg); } }
+.flywheel-turning { animation: flywheel-spin 9s linear infinite; }
+
+/* ===== 計器盤ランプ (StatusLamps) ===== */
+@keyframes lamp-ignite {
+  0% { opacity: 1; }
+  55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.lamp-ignite-overlay {
+  animation: lamp-ignite 0.7s ease-out backwards;
+  opacity: 0;
+}
+@keyframes lamp-throb {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.lamp-throb {
+  animation: lamp-throb 1.6s ease-in-out infinite;
+}
+
+/* 動きを減らす設定 / 片頭痛・前庭への配慮 */
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .lamp-throb,
+  .lamp-ignite-overlay,
   .flywheel-turning,
-  .telemetry-rise {
+  .telemetry-rise,
+  .fade-in,
+  .shimmer,
+  .press {
     animation: none !important;
+    transition: none !important;
   }
+  .lamp-ignite-overlay { display: none !important; }
 }

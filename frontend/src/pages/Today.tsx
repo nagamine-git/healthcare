@@ -201,10 +201,10 @@ export function TodayPage({ onOpenDebug }: Props) {
   const weight = data.metrics.weight;
 
   return (
-    <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-3">
-      <header className="safe-area-top flex items-center justify-between gap-2 pb-1">
+    <main className="safe-area-x pb-nav mx-auto max-w-5xl space-y-4">
+      <header className="safe-area-top flex items-center justify-between gap-2 pb-0.5">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold tracking-wider text-ink">Ascend</span>
+          <span className="text-lg font-bold tracking-tight text-ink">Ascend</span>
           {dataRefresh.isPending && <span className="text-[10px] text-prog-300">更新中…</span>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -278,13 +278,13 @@ export function TodayPage({ onOpenDebug }: Props) {
       {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
       <MigraineRiskBanner />
 
-      {/* ===== メニュー: セクション切替を最上部に固定(常時表示の要点は「総合」タブへ集約)===== */}
-      <div className="sticky top-0 z-20 -mx-1 bg-void/80 py-1 backdrop-blur">
-        <div className="flex gap-1 rounded-xl bg-hull p-1">
+      {/* ===== メニュー: セクション切替を最上部に固定(横スクロールのセグメント)===== */}
+      <div className="sticky top-0 z-20 -mx-5 bg-void/75 px-5 py-2 backdrop-blur-xl">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {TABS.map((t) => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={`flex-1 rounded-lg py-1.5 text-[12px] font-medium transition-colors ${
-                tab === t.key ? "bg-panel text-ink" : "text-ink-dim hover:text-ink"}`}>
+              className={`press shrink-0 rounded-full px-4 py-1.5 text-[13px] font-medium transition-colors ${
+                tab === t.key ? "bg-ink text-void" : "bg-hull text-ink-dim hover:text-ink"}`}>
               {t.label}
             </button>
           ))}
