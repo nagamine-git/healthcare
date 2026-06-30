@@ -135,7 +135,8 @@ def compute_rebalance(session: Session) -> dict[str, Any]:
             "risk_tier": tier, "risk_label": RISK_TIERS.get(tier, ""),
             "risk_overridden": h.risk_tier is not None,
         })
-    rows.sort(key=lambda r: (r["room"] is None, -(r["room"] or 0)))
+    # 目標額の多い順(配分対象が上、配分外は下)。
+    rows.sort(key=lambda r: (r["target_value"] is None, -(r["target_value"] or 0)))
     return {
         "total": _r(total), "reserve": _r(reserve), "investable": _r(investable),
         "invested_now": _r(invested_now),
