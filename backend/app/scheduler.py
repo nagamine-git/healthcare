@@ -118,6 +118,16 @@ def setup_scheduler() -> AsyncIOScheduler:
         max_instances=1,
         misfire_grace_time=600,
     )
+    from app.perf import perf_tick_job
+
+    scheduler.add_job(
+        perf_tick_job,
+        _parse_cron(settings.scheduler_perf_tick_cron),
+        id="perf_tick",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
 
     scheduler.start()
     _scheduler = scheduler

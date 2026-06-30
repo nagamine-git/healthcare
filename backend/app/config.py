@@ -465,6 +465,7 @@ class Settings(BaseSettings):
     scheduler_identity_monthly_cron: str = "0 8 1 * *"
     # Garden: GitHub コミット取込(毎時20分)→ 草の再計算(毎時25分)。
     scheduler_github_sync_cron: str = "20 * * * *"
+    scheduler_perf_tick_cron: str = "*/10 * * * *"  # 監視: 10分毎に問題をflush
     scheduler_garden_recompute_cron: str = "25 * * * *"
 
     # --- Web Push 通知 ---

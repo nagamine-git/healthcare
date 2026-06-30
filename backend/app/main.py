@@ -30,6 +30,7 @@ from app.api import journal as journal_api
 from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
+from app.api import perf as perf_api
 from app.api import profile as profile_api
 from app.api import push as push_api
 from app.api import sleep_drivers as sleep_drivers_api
@@ -68,6 +69,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 常駐パフォーマンス監視: 全リクエストの応答時間を計測・記録。
+    from app.perf import perf_middleware
+
+    app.middleware("http")(perf_middleware)
+
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
@@ -99,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(atlas_api.router)
     app.include_router(consult_api.router)
     app.include_router(finance_api.router)
+    app.include_router(perf_api.router)
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)
     app.include_router(timeline_api.router)

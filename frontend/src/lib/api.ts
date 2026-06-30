@@ -1301,6 +1301,24 @@ export type RoiInput = {
   status?: string;
   note?: string | null;
 };
+export type PerfIssueRow = {
+  id: number;
+  kind: "error" | "slow_request" | "slow_query";
+  label: string;
+  count: number;
+  max_duration_ms: number;
+  detail: string | null;
+  resolved: boolean;
+  last_ts: string;
+};
+export type PerfEndpoint = {
+  label: string; count: number; avg_ms: number; p95_ms: number; max_ms: number;
+  slow: number; errors: number;
+};
+export type PerfResponse = {
+  live: { endpoints: PerfEndpoint[]; thresholds: { slow_request_ms: number; slow_query_ms: number } };
+  issues: PerfIssueRow[];
+};
 export type AtlasNode = {
   key: string;
   label: string;
@@ -1734,6 +1752,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
+  adminPerf: () => request<PerfResponse>("/api/admin/perf"),
   finance: () => request<FinanceResponse>("/api/finance"),
   financeAsset: (body: AssetInput) =>
     request<FinanceResponse>("/api/finance/asset", { method: "POST", body: JSON.stringify(body) }),

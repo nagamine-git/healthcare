@@ -41,6 +41,8 @@ export function DebugPage({ onBack }: Props) {
 
       <h2 className="text-base text-ink">Debug — ソース別ローデータ</h2>
 
+      <PerfPanel />
+
       {q.isLoading && <p className="text-ink-dim">読み込み中...</p>}
       {q.isError && <p className="text-risk">取得失敗</p>}
 
@@ -166,4 +168,51 @@ function formatCell(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
+}
+
+
+function PerfPanel() {
+  const q = useQuery({ queryKey: ["admin-perf"], queryFn: api.adminPerf, retry: false, refetchInterval: 30000 });
+  if (!q.data) return null;
+  const { live, issues } = q.data;
+  const KIND: Record<string, string> = { error: "エラー", slow_request: "遅い応答", slow_query: "遅いクエリ" };
+  const unresolved = issues.filter((i) => !i.resolved);
+  return (
+    <section className="rounded-xl bg-hull/70 p-3 sm:p-4">
+      <h3 className="mb-2 text-sm text-ink">
+        パフォーマンス監視{" "}
+        <span className="text-xs text-ink-faint">
+          (遅延 &gt;{live.thresholds.slow_request_ms}ms / クエリ &gt;{live.thresholds.slow_query_ms}ms を記録 → PRで修正)
+        </span>
+      </h3>
+      {unresolved.length === 0 ? (
+        <p className="text-xs text-prog-300">未対応の問題はありません</p>
+      ) : (
+        <div className="space-y-1">
+          {unresolved.slice(0, 30).map((i) => (
+            <div key={i.id} className="flex items-center gap-2 text-[11px]">
+              <span className={`rounded px-1.5 ${i.kind === "error" ? "bg-risk/20 text-risk" : "bg-act/15 text-act-300"}`}>
+                {KIND[i.kind] ?? i.kind}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-mono text-ink-dim" title={i.detail ?? i.label}>{i.label}</span>
+              <span className="telemetry-num text-ink-faint">×{i.count}</span>
+              <span className="telemetry-num text-ink-faint">{Math.round(i.max_duration_ms)}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {live.endpoints.length > 0 && (
+        <div className="mt-2 border-t border-hairline pt-2">
+          <p className="text-[10px] text-ink-faint">エンドポイント(p95降順)</p>
+          {live.endpoints.slice(0, 8).map((e) => (
+            <div key={e.label} className="flex items-center gap-2 text-[11px]">
+              <span className="min-w-0 flex-1 truncate font-mono text-ink-dim">{e.label}</span>
+              <span className="telemetry-num text-ink-faint">{e.count}回</span>
+              <span className="telemetry-num text-ink-dim">p95 {e.p95_ms}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }

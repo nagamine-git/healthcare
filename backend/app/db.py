@@ -40,6 +40,13 @@ def init_engine(db_path: Path | str) -> Engine:
 
     _engine = engine
     _SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    # 低速クエリ計測リスナーを付ける(常駐パフォーマンス監視)。
+    try:
+        from app.perf import attach_query_timing
+
+        attach_query_timing(engine)
+    except Exception:  # 監視は失敗してもアプリを止めない
+        pass
     return engine
 
 

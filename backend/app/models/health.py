@@ -744,6 +744,26 @@ class CashflowTx(Base):
     is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class PerfIssue(Base):
+    """パフォーマンス問題の記録(エラー / 低速レスポンス / 低速クエリ)。
+
+    (kind, label) で集約。count を加算、max_duration_ms を更新。修正PRの起票元。
+    """
+
+    __tablename__ = "perf_issue"
+    __table_args__ = (UniqueConstraint("kind", "label", name="uq_perf_kind_label"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16))  # error | slow_request | slow_query
+    label: Mapped[str] = mapped_column(String(255))  # endpoint or 正規化SQL
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    max_duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    detail: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)  # 修正PRで対応済み
+    first_ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Goal(Base):
     """中期目標(Layer 1)。capital_weights でドメインの重点ウェイトを駆動する。"""
 
