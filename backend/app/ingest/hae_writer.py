@@ -104,8 +104,9 @@ def _write_sleeps(session: Session, sleeps: list[NormalizedSleep]) -> int:
     written = 0
     for sleep in sleeps:
         existing = session.get(SleepSession, sleep.date)
-        # Garmin wins over HAE if both present.
-        if existing and existing.source == "garmin":
+        # Garmin はその夜の睡眠を実際に持つ時だけ優先する。Garmin 行が空
+        # (total_min が None = その夜 Garmin を着けず未計測)なら Apple Watch(HAE)で補完する。
+        if existing and existing.source == "garmin" and existing.total_min is not None:
             continue
         if existing:
             existing.source = sleep.source

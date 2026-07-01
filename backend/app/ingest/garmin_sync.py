@@ -173,6 +173,11 @@ def _upsert_sleep(session: Session, target: date_type, sleep: dict[str, Any]) ->
     from app.ingest.sleep_extras import store_sleep_extras
 
     existing = session.get(SleepSession, target)
+    # Garmin が空データ(その夜未計測 = total_min None)を返した場合、既に別ソース
+    # (Apple Watch/HAE 等)で実データが入っている行を空で上書きしない。
+    if sleep.get("total_min") is None and existing is not None and existing.total_min is not None:
+        store_sleep_extras(session, target, sleep.get("raw_json"))
+        return
     fields = {
         "source": "garmin",
         "total_min": sleep.get("total_min"),
