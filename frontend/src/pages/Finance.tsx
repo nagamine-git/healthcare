@@ -185,8 +185,8 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
   );
 }
 
-const EMPTY_ROI: RoiInput = { name: "", cost_jpy: 0, period: "onetime", monthly_use_days: 0,
-  monthly_time_saved_h: 0, monthly_revenue_jpy: 0, resale_jpy: 0, status: "considering" };
+const EMPTY_ROI: RoiInput = { name: "", url: "", cost_jpy: 0, period: "onetime", monthly_use_days: 0,
+  monthly_time_saved_h: 0, monthly_revenue_jpy: 0, resale_jpy: 0, status: "considering", note: "" };
 
 function RoiSection({ data }: { data: FinanceResponse }) {
   const qc = useQueryClient();
@@ -194,6 +194,9 @@ function RoiSection({ data }: { data: FinanceResponse }) {
   const save = mut((v) => api.financeRoi(v as never));
   const del = mut((v) => api.financeRoiDelete(v as number));
   const [form, setForm] = useState<RoiInput | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState(false);
   const roi = data.roi;
 
   const num = (k: keyof RoiInput) => (
@@ -201,6 +204,33 @@ function RoiSection({ data }: { data: FinanceResponse }) {
       onChange={(e) => setForm({ ...(form as RoiInput), [k]: e.target.value === "" ? 0 : Number(e.target.value) })}
       className="w-16 rounded bg-panel px-1.5 py-0.5 telemetry-num text-ink" />
   );
+  const reason = (k: string) =>
+    reasons[k] ? <span className="ml-0.5 cursor-help text-[10px] text-act-300" title={reasons[k]}>💡</span> : null;
+
+  const startEdit = (c: RoiRow) => {
+    setForm({ id: c.id, name: c.name, url: c.url ?? "", cost_jpy: c.cost_jpy ?? 0, period: c.period,
+      monthly_use_days: c.monthly_use_days, monthly_time_saved_h: c.monthly_time_saved_h,
+      monthly_revenue_jpy: c.monthly_revenue_jpy ?? 0, resale_jpy: c.resale_jpy ?? 0, status: c.status });
+    setReasons({});
+  };
+
+  async function runSuggest(extra: { image_base64?: string; media_type?: string } = {}) {
+    if (!form) return;
+    setAiBusy(true); setAiErr(false);
+    try {
+      const res = await api.financeRoiSuggest({
+        name: form.name || undefined, url: form.url || undefined, ...extra,
+      });
+      if (res.fields) {
+        setForm({ ...form, ...res.fields, name: form.name });
+        setReasons(res.reasons || {});
+      } else setAiErr(true);
+    } catch {
+      setAiErr(true);
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   return (
     <Panel title="購入ROIランキング — 余剰資金で上位から検討" glow="act">
@@ -216,10 +246,7 @@ function RoiSection({ data }: { data: FinanceResponse }) {
                 {c.within_budget && <span className="text-act-300">★</span>}
                 <span className="flex-1 truncate text-ink">{c.name}</span>
                 <Pill tone={v.tone}>{v.label}</Pill>
-                <button onClick={() => setForm({ id: c.id, name: c.name, cost_jpy: c.cost_jpy ?? 0, period: c.period,
-                  monthly_use_days: 0, monthly_time_saved_h: c.monthly_time_saved_h,
-                  monthly_revenue_jpy: c.monthly_revenue_jpy ?? 0, resale_jpy: c.resale_jpy ?? 0, status: c.status })}
-                  className="text-ink-faint hover:text-ink">編集</button>
+                <button onClick={() => startEdit(c)} className="text-ink-faint hover:text-ink">編集</button>
                 <button onClick={() => del.mutate(c.id as never)} className="text-ink-faint hover:text-risk">×</button>
               </div>
               <div className="mt-0.5 text-[11px] text-ink-faint">
@@ -233,24 +260,44 @@ function RoiSection({ data }: { data: FinanceResponse }) {
       </div>
 
       {form === null ? (
-        <Button variant="subtle" onClick={() => setForm({ ...EMPTY_ROI })}>＋候補を追加</Button>
+        <Button variant="subtle" onClick={() => { setForm({ ...EMPTY_ROI }); setReasons({}); }}>＋候補を追加</Button>
       ) : (
         <div className="mt-2 rounded-lg border border-hairline bg-hull/40 p-2 text-xs">
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="候補名(例: Notion / 新PC)" className="w-full rounded bg-panel px-2 py-1 text-ink" />
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded border border-act-700/40 bg-act/10 p-1.5">
+            <input value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })}
+              placeholder="商品URL(任意)" className="min-w-[7rem] flex-1 rounded bg-panel px-2 py-1 text-[11px] text-ink" />
+            <Button variant="primary" disabled={aiBusy || (!form.name.trim() && !form.url)}
+              onClick={() => runSuggest()}>{aiBusy ? "推定中…" : "AIで補完"}</Button>
+            <label className="cursor-pointer rounded bg-prog-700 px-2 py-1 text-[11px] hover:bg-prog-500">
+              画像から
+              <input type="file" accept="image/*" className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]; e.target.value = "";
+                  if (f) runSuggest({ image_base64: await fileToB64(f), media_type: f.type || "image/png" });
+                }} />
+            </label>
+            {aiErr && <span className="text-[11px] text-risk">推定失敗</span>}
+            <span className="w-full text-[10px] text-ink-faint">
+              名前かURLを入れて「AIで補完」、または商品画像から。💡=推定根拠(ホバー)。値は必ず確認・補正を。
+            </span>
+          </div>
+
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-ink-faint">
-            <label>価格 {num("cost_jpy")}</label>
+            <label>価格 {num("cost_jpy")}{reason("cost_jpy")}</label>
             <label>
               区分{" "}
               <select value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })}
                 className="rounded bg-panel px-1 py-0.5 text-ink">
                 <option value="onetime">買い切り</option><option value="month">月額</option><option value="year">年額</option>
-              </select>
+              </select>{reason("period")}
             </label>
-            <label>月活用日 {num("monthly_use_days")}</label>
-            <label>月削減h {num("monthly_time_saved_h")}</label>
-            <label>月収益 {num("monthly_revenue_jpy")}</label>
-            <label>売却額 {num("resale_jpy")}</label>
+            <label>月活用日 {num("monthly_use_days")}{reason("monthly_use_days")}</label>
+            <label>月削減h {num("monthly_time_saved_h")}{reason("monthly_time_saved_h")}</label>
+            <label>月収益 {num("monthly_revenue_jpy")}{reason("monthly_revenue_jpy")}</label>
+            <label>売却額 {num("resale_jpy")}{reason("resale_jpy")}</label>
             <label>
               状態{" "}
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -259,6 +306,9 @@ function RoiSection({ data }: { data: FinanceResponse }) {
               </select>
             </label>
           </div>
+          <input value={form.note ?? ""} onChange={(e) => setForm({ ...form, note: e.target.value })}
+            placeholder="メモ(任意)" className="mt-1.5 w-full rounded bg-panel px-2 py-1 text-[11px] text-ink" />
+
           <div className="mt-2 flex gap-2">
             <Button variant="primary" disabled={!form.name.trim()}
               onClick={() => { save.mutate(form as never); setForm(null); }}>保存</Button>

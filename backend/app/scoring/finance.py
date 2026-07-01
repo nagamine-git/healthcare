@@ -193,7 +193,7 @@ def compute_roi_ranking(session: Session, investable: float, wage: float) -> dic
             "id": c.id, "name": c.name, "url": c.url, "status": c.status,
             "monthly_cost": _r(mcost), "roi": round(roi, 2), "utilization": util,
             "score": score, "verdict": verdict,
-            "monthly_time_saved_h": c.monthly_time_saved_h,
+            "monthly_time_saved_h": c.monthly_time_saved_h, "monthly_use_days": c.monthly_use_days,
             "monthly_revenue_jpy": _r(c.monthly_revenue_jpy), "resale_jpy": _r(c.resale_jpy),
             "period": c.period, "cost_jpy": _r(c.cost_jpy),
         })

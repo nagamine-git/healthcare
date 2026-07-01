@@ -1255,6 +1255,7 @@ export type RoiRow = {
   score: number;
   verdict: "buy" | "watch" | "skip" | "continue" | "cancel";
   monthly_time_saved_h: number;
+  monthly_use_days: number;
   monthly_revenue_jpy: number | null;
   resale_jpy: number | null;
   period: string;
@@ -1309,6 +1310,25 @@ export type RoiInput = {
   resale_jpy?: number;
   status?: string;
   note?: string | null;
+};
+export type RoiSuggestInput = {
+  name?: string;
+  url?: string | null;
+  image_base64?: string;
+  media_type?: string;
+};
+export type RoiSuggestResult = {
+  fields: {
+    cost_jpy: number;
+    period: string;
+    monthly_use_days: number;
+    monthly_time_saved_h: number;
+    monthly_revenue_jpy: number;
+    resale_jpy: number;
+    url: string | null;
+    note: string | null;
+  } | null;
+  reasons: Record<string, string>;
 };
 export type PerfIssueRow = {
   id: number;
@@ -1771,6 +1791,8 @@ export const api = {
     request<FinanceResponse>("/api/finance/roi", { method: "POST", body: JSON.stringify(body) }),
   financeRoiDelete: (id: number) =>
     request<FinanceResponse>(`/api/finance/roi/${id}`, { method: "DELETE" }),
+  financeRoiSuggest: (body: RoiSuggestInput) =>
+    request<RoiSuggestResult>("/api/finance/roi-suggest", { method: "POST", body: JSON.stringify(body) }),
   financeConfig: (body: {
     reserve_jpy?: number;
     wage_jpy_per_h?: number;

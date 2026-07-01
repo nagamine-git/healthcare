@@ -52,6 +52,7 @@ def test_roi_ranking_and_verdict(db_engine):
         f = compute_finance(session)
     roi = f["roi"]["candidates"]
     assert roi[0]["name"] == "高ROIツール" and roi[0]["score"] > roi[1]["score"]
+    assert roi[0]["monthly_use_days"] == 30  # 編集フォーム復元用に活用日も返す
     low = next(r for r in roi if r["name"] == "低ROIサブスク")
     assert low["verdict"] == "cancel"  # 保有中×低スコア → 解約候補
 
@@ -143,3 +144,75 @@ def test_auto_allocate_no_alt_windfall(app_client):
     r = app_client.post("/api/finance/auto-allocate", json={"tolerance": 3})
     w = {h["name"]: h["target_weight"] for h in r.json()["rebalance"]["holdings"]}
     assert 0 < w["bitFlyer リップル残高"] < w["Coincheck ビットコイン残高"]
+
+
+# --- ROI候補 AI自動補完 (Phase 1) ---
+
+async def test_suggest_roi_normalizes_enum_and_types(monkeypatch):
+    # LLM(_suggest)が返す生値を型/enum正規化する。
+    from app.llm import finance_roi_ai
+
+    async def fake(**kwargs):
+        return {
+            "cost_jpy": "441800",     # 文字列 → float
+            "period": "サブスク",      # enum外 → onetime(安全側)
+            "monthly_use_days": 8,
+            "monthly_time_saved_h": 5,
+            "monthly_revenue_jpy": 1000,
+            "resale_jpy": 100000,
+            "url": "https://example.com/mac",
+            "note": "高性能WS",
+            "reasons": {"cost_jpy": "Apple公式価格", "period": "本体購入"},
+        }
+
+    monkeypatch.setattr(finance_roi_ai, "_suggest", fake)
+    out = await finance_roi_ai.suggest_roi(name="mac mini Pro")
+    assert out is not None
+    f = out["fields"]
+    assert f["cost_jpy"] == 441800.0
+    assert f["period"] == "onetime"
+    assert f["monthly_time_saved_h"] == 5.0
+    assert f["resale_jpy"] == 100000.0
+    assert f["url"] == "https://example.com/mac"
+    assert out["reasons"]["cost_jpy"] == "Apple公式価格"
+
+
+async def test_suggest_roi_none_without_api_key(monkeypatch):
+    from app.llm import finance_roi_ai
+
+    monkeypatch.setattr(
+        finance_roi_ai, "get_settings",
+        lambda: type("S", (), {"anthropic_api_key": None, "llm_model": "x"})(),
+    )
+    assert await finance_roi_ai.suggest_roi(name="x") is None
+
+
+def test_roi_suggest_endpoint_mocked(app_client, monkeypatch):
+    # エンドポイントは suggest_roi の結果をそのまま返し、DBには保存しない。
+    async def fake_suggest(**kwargs):
+        return {
+            "fields": {"cost_jpy": 441800.0, "period": "onetime", "monthly_use_days": 8.0,
+                       "monthly_time_saved_h": 5.0, "monthly_revenue_jpy": 1000.0,
+                       "resale_jpy": 100000.0, "url": None, "note": "WS"},
+            "reasons": {"cost_jpy": "公式価格"},
+        }
+
+    monkeypatch.setattr("app.api.finance.suggest_roi", fake_suggest)
+    r = app_client.post("/api/finance/roi-suggest", json={"name": "mac mini Pro"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["fields"]["cost_jpy"] == 441800.0
+    assert body["reasons"]["cost_jpy"] == "公式価格"
+    # DBには保存されない(候補は増えない)
+    assert len(app_client.get("/api/finance").json()["roi"]["candidates"]) == 0
+
+
+def test_roi_suggest_endpoint_returns_null_without_api_key(app_client, monkeypatch):
+    # suggest_roi が None(APIキー無/失敗)なら fields=null で返す(500にしない)。
+    async def none_suggest(**kwargs):
+        return None
+
+    monkeypatch.setattr("app.api.finance.suggest_roi", none_suggest)
+    r = app_client.post("/api/finance/roi-suggest", json={"name": "x"})
+    assert r.status_code == 200
+    assert r.json()["fields"] is None

@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.llm.finance_ocr import extract_assets
+from app.llm.finance_roi_ai import suggest_roi
 from app.models.health import AssetHolding, CashflowTx, RoiCandidate
 from app.scoring.finance import compute_cashflow, compute_finance, compute_rebalance, get_state
 
@@ -103,6 +104,29 @@ async def delete_roi(roi_id: int) -> dict[str, Any]:
         session.delete(row)
         session.flush()
         return compute_finance(session)
+
+
+class RoiSuggestIn(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    image_base64: str | None = None
+    media_type: str = "image/png"
+
+
+@router.post("/api/finance/roi-suggest")
+async def roi_suggest(body: RoiSuggestIn) -> dict[str, Any]:
+    """品目名/URL/画像からAIでROI項目を推定して返す(DB保存しない。フォーム prefill 用)。"""
+    with session_scope() as session:
+        cands = list(session.execute(select(RoiCandidate)).scalars())
+    # 既存候補を相場観コンテキストに(名前/価格/区分)。
+    context = "\n".join(f"- {c.name}: {int(c.cost_jpy)}円/{c.period}" for c in cands[:20])
+    out = await suggest_roi(
+        name=body.name, url=body.url,
+        image_b64=body.image_base64, media_type=body.media_type, context=context,
+    )
+    if out is None:
+        return {"fields": None, "reasons": {}}
+    return out
 
 
 # ---------------- 設定(防衛資金・時給) ----------------
