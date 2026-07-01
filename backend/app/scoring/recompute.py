@@ -158,6 +158,11 @@ def _training_load(session: Session, target: date_type) -> tuple[float | None, f
 
 def recompute_for_date(target: date_type) -> dict[str, Any]:
     with session_scope() as session:
+        # Garmin 欠測の夜を Apple Watch(HAE)由来で補完(SpO2 はアラートへ、HRV は参照値)。
+        from app.ingest.apple_fallback import apply_apple_sleep_fallback
+
+        apply_apple_sleep_fallback(session, target)
+
         sleep = session.get(SleepSession, target)
         hrv = session.get(HrvDaily, target)
         bb = session.get(BodyBatteryDaily, target)

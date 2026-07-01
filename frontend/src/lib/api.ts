@@ -22,8 +22,11 @@ export type SleepMetric = {
 
 export type HrvMetric = {
   last_night_avg: number | null;
+  current?: number | null;
   weekly_avg: number | null;
   status: string | null;
+  // Garmin(RMSSD)欠測時の参照値: Apple Watch overnight HRV(SDNN, ms)。スコア非関与。
+  reference_apple_sdnn?: number | null;
 };
 
 export type BodyBatteryMetric = {

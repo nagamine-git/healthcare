@@ -29,6 +29,15 @@ def write_parse_result(session: Session, result: ParseResult) -> dict[str, int]:
         "workouts": _write_workouts(session, result.workouts),
     }
     _bump_source_sync(session, "hae")
+    # Apple 由来の補完(SpO2 はアラートへ / HRV は参照値)を昨夜・今夜分について即材料化する。
+    from datetime import timedelta
+
+    from app.ingest.apple_fallback import apply_apple_sleep_fallback
+    from app.scoring.timewindow import app_today
+
+    today = app_today()
+    for d in (today, today - timedelta(days=1)):
+        apply_apple_sleep_fallback(session, d)
     session.commit()
     return counts
 

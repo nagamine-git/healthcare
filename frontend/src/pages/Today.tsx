@@ -168,7 +168,12 @@ export function TodayPage({ onOpenDebug }: Props) {
   const fmtSleep = ctx.sleep && ctx.sleep.current != null
     ? `${formatMinutes(ctx.sleep.current)} (推奨 ${formatMinutes(ctx.sleep.target.min ?? 420)}–${formatMinutes(ctx.sleep.target.max ?? 540)})`
     : undefined;
-  const fmtHrv = ctx.hrv?.current != null ? `${Math.round(ctx.hrv.current)} ms` : undefined;
+  const hrvRefApple = data.metrics.hrv?.reference_apple_sdnn ?? null;
+  const fmtHrv = ctx.hrv?.current != null
+    ? `${Math.round(ctx.hrv.current)} ms`
+    : hrvRefApple != null
+      ? `参考 ${Math.round(hrvRefApple)} ms (Apple/SDNN)`
+      : undefined;
   const fmtBb =
     ctx.body_battery && (ctx.body_battery.current != null || ctx.body_battery.morning != null)
       ? `現在 ${fmtNum(ctx.body_battery.current)} (朝 ${fmtNum(ctx.body_battery.morning)})`

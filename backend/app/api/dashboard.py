@@ -41,6 +41,23 @@ def _today() -> date:
     return app_today()
 
 
+def _apple_hrv_reference(session: Any, d: date) -> float | None:
+    """Garmin HRV 欠測時の参照値: Apple Watch overnight HRV(SDNN, ms)。スコア非関与。"""
+    from datetime import time
+
+    from app.ingest.apple_fallback import APPLE_HRV_KEY
+
+    ts = datetime.combine(d, time(7, 0))
+    row = session.execute(
+        select(MetricSample.value).where(
+            MetricSample.source == "hae",
+            MetricSample.metric_key == APPLE_HRV_KEY,
+            MetricSample.ts == ts,
+        )
+    ).first()
+    return round(float(row[0]), 1) if row and row[0] is not None else None
+
+
 @router.get("/api/today")
 async def today(
     lat: float | None = Query(default=None, description="気圧取得用の緯度 (省略時 config)"),
@@ -115,6 +132,11 @@ async def today(
             "hrv": {
                 "current": hrv.last_night_avg if hrv else None,
                 "weekly_avg": hrv.weekly_avg if hrv else None,
+                # Garmin(RMSSD)が欠測の夜の参照値: Apple Watch overnight HRV(SDNN)。
+                # 指標が違うのでスコア/ベースラインには使わず、参照として表示のみ。
+                "reference_apple_sdnn": (
+                    _apple_hrv_reference(session, d) if (hrv is None or hrv.last_night_avg is None) else None
+                ),
                 # HRV は個人差大、絶対値の目標は設定せずベースライン比で判断
                 "target": {"min": None, "ideal": None, "max": None, "unit": "ms", "kind": "baseline_relative"},
             },
