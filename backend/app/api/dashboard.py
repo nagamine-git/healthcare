@@ -132,11 +132,6 @@ async def today(
             "hrv": {
                 "current": hrv.last_night_avg if hrv else None,
                 "weekly_avg": hrv.weekly_avg if hrv else None,
-                # Garmin(RMSSD)が欠測の夜の参照値: Apple Watch overnight HRV(SDNN)。
-                # 指標が違うのでスコア/ベースラインには使わず、参照として表示のみ。
-                "reference_apple_sdnn": (
-                    _apple_hrv_reference(session, d) if (hrv is None or hrv.last_night_avg is None) else None
-                ),
                 # HRV は個人差大、絶対値の目標は設定せずベースライン比で判断
                 "target": {"min": None, "ideal": None, "max": None, "unit": "ms", "kind": "baseline_relative"},
             },
@@ -291,7 +286,7 @@ async def today(
             "alerts": alerts,
             "metrics": {
                 "sleep": _sleep_to_dict(sleep),
-                "hrv": _hrv_to_dict(hrv),
+                "hrv": _hrv_to_dict(hrv, session, d),
                 "body_battery": _bb_to_dict(
                     bb,
                     current=bb_latest.value if bb_latest else None,
@@ -934,13 +929,18 @@ def _sleep_to_dict(s: SleepSession | None) -> dict[str, Any] | None:
     }
 
 
-def _hrv_to_dict(h: HrvDaily | None) -> dict[str, Any] | None:
-    if h is None:
+def _hrv_to_dict(h: HrvDaily | None, session: Any = None, d: date | None = None) -> dict[str, Any] | None:
+    # Garmin(RMSSD)欠測時のみ Apple Watch overnight HRV(SDNN)を参照値として付す。
+    ref = None
+    if (h is None or h.last_night_avg is None) and session is not None and d is not None:
+        ref = _apple_hrv_reference(session, d)
+    if h is None and ref is None:
         return None
     return {
-        "last_night_avg": h.last_night_avg,
-        "weekly_avg": h.weekly_avg,
-        "status": h.status,
+        "last_night_avg": h.last_night_avg if h else None,
+        "weekly_avg": h.weekly_avg if h else None,
+        "status": h.status if h else None,
+        "reference_apple_sdnn": ref,
     }
 
 
