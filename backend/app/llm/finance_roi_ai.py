@@ -141,3 +141,93 @@ async def suggest_roi(
     }
     reasons = raw.get("reasons") if isinstance(raw.get("reasons"), dict) else {}
     return {"fields": fields, "reasons": reasons}
+
+
+# ---------------- 欲しいものリスト(wishlist)一括抽出 ----------------
+WISHLIST_TOOL: dict[str, Any] = {
+    "name": "submit_wishlist",
+    "description": "欲しいものリスト(HTML/スクショ)から各商品の名前・価格(円)・URLを抽出する。",
+    "input_schema": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                        "name": {"type": "string", "description": "商品名"},
+                        "price_jpy": {"type": "number", "description": "価格(円)。分かれば"},
+                        "url": {"type": "string", "description": "商品URL。分かれば"},
+                    },
+                },
+            },
+        },
+    },
+}
+
+_WISHLIST_SYSTEM = (
+    "あなたはECの欲しいものリストから購入候補を抜き出すアシスタントです。与えられた"
+    "HTMLまたはスクリーンショットから、各商品の名前・価格(円)・URLを抽出し submit_wishlist を"
+    "必ず1回呼びます。ナビ/広告/おすすめ/関連商品など、リスト本体でないものは除外します。"
+)
+
+
+async def _anthropic_extract_wishlist(
+    *, content: str | None, image_b64: str | None, media_type: str, model: str, api_key: str,
+) -> dict[str, Any]:
+    from anthropic import AsyncAnthropic
+
+    client = AsyncAnthropic(api_key=api_key)
+    parts: list[dict[str, Any]] = []
+    if image_b64:
+        parts.append({"type": "image", "source": {
+            "type": "base64", "media_type": media_type, "data": image_b64}})
+    if content:
+        parts.append({"type": "text", "text": content[:60000]})  # HTML が巨大なので上限
+    parts.append({"type": "text", "text": "この欲しいものリストから商品を抽出してください。"})
+    resp = await client.messages.create(
+        model=model, max_tokens=2000, system=_WISHLIST_SYSTEM,
+        messages=[{"role": "user", "content": parts}],
+        tools=[WISHLIST_TOOL], tool_choice={"type": "tool", "name": "submit_wishlist"},
+    )
+    for block in resp.content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == "submit_wishlist":
+            if isinstance(block.input, dict):
+                return block.input
+    return {}
+
+
+_extract_wishlist = _anthropic_extract_wishlist
+
+
+async def extract_wishlist_items(
+    *, html: str | None = None, image_b64: str | None = None, media_type: str = "image/png",
+) -> list[dict[str, Any]]:
+    """欲しいものリスト(HTML/画像)から候補[{name, cost_jpy, period, url}]を抽出。失敗時 []。"""
+    s = get_settings()
+    api_key = getattr(s, "anthropic_api_key", None)
+    if not api_key or not (html or image_b64):
+        return []
+    try:
+        raw = await _extract_wishlist(
+            content=html, image_b64=image_b64, media_type=media_type,
+            model=s.llm_model, api_key=api_key,
+        )
+    except Exception as exc:
+        logger.warning("wishlist_extract_failed", error=str(exc))
+        return []
+    src = raw.get("items", []) if isinstance(raw, dict) else []
+    items: list[dict[str, Any]] = []
+    for it in src:
+        name = str(it.get("name") or "").strip()
+        if not name:
+            continue
+        items.append({
+            "name": name,
+            "cost_jpy": _num(it.get("price_jpy")),
+            "period": "onetime",
+            "url": (it.get("url") or None),
+        })
+    return items

@@ -216,3 +216,60 @@ def test_roi_suggest_endpoint_returns_null_without_api_key(app_client, monkeypat
     r = app_client.post("/api/finance/roi-suggest", json={"name": "x"})
     assert r.status_code == 200
     assert r.json()["fields"] is None
+
+
+# --- Amazon wishlist 一括取込 (Phase 2) ---
+
+async def test_extract_wishlist_normalizes(monkeypatch):
+    from app.llm import finance_roi_ai
+
+    async def fake(**kwargs):
+        return {"items": [
+            {"name": "Mac mini", "price_jpy": "88000", "url": "https://amazon.co.jp/x"},
+            {"name": "  ", "price_jpy": 0},  # 空名 → 除外
+        ]}
+
+    monkeypatch.setattr(finance_roi_ai, "_extract_wishlist", fake)
+    out = await finance_roi_ai.extract_wishlist_items(html="<html>wishlist</html>")
+    assert len(out) == 1
+    assert out[0]["name"] == "Mac mini"
+    assert out[0]["cost_jpy"] == 88000.0
+    assert out[0]["period"] == "onetime"
+    assert out[0]["url"] == "https://amazon.co.jp/x"
+
+
+def test_wishlist_import_endpoint_url(app_client, monkeypatch):
+    async def fake_fetch(url):
+        return "<html>wishlist html</html>"
+
+    async def fake_extract(**kwargs):
+        return [{"name": "Mac mini", "cost_jpy": 88000.0, "period": "onetime", "url": "https://x"}]
+
+    monkeypatch.setattr("app.api.finance._fetch_url", fake_fetch)
+    monkeypatch.setattr("app.api.finance.extract_wishlist_items", fake_extract)
+    r = app_client.post("/api/finance/roi-import-wishlist", json={"url": "https://amazon.co.jp/hz/wishlist/ls/X"})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items[0]["name"] == "Mac mini" and items[0]["cost_jpy"] == 88000.0
+    # 取込は候補を返すだけ(DB保存しない)
+    assert len(app_client.get("/api/finance").json()["roi"]["candidates"]) == 0
+
+
+def test_wishlist_import_falls_back_to_image(app_client, monkeypatch):
+    # url fetch 失敗(None)時は画像OCRにフォールバック。
+    async def fail_fetch(url):
+        return None
+
+    seen = {}
+
+    async def fake_extract(**kwargs):
+        seen.update(kwargs)
+        return [{"name": "From image", "cost_jpy": 1000.0, "period": "onetime", "url": None}]
+
+    monkeypatch.setattr("app.api.finance._fetch_url", fail_fetch)
+    monkeypatch.setattr("app.api.finance.extract_wishlist_items", fake_extract)
+    r = app_client.post("/api/finance/roi-import-wishlist",
+                        json={"url": "https://amazon.co.jp/x", "image_base64": "abc", "media_type": "image/png"})
+    assert r.status_code == 200
+    assert r.json()["items"][0]["name"] == "From image"
+    assert seen.get("image_b64") == "abc"  # 画像経路が使われた

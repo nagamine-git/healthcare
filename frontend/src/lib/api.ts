@@ -1330,6 +1330,16 @@ export type RoiSuggestResult = {
   } | null;
   reasons: Record<string, string>;
 };
+export type WishlistItem = {
+  name: string;
+  cost_jpy: number;
+  period: string;
+  url: string | null;
+};
+export type WishlistImportResult = {
+  items: WishlistItem[];
+  fetched: boolean;
+};
 export type PerfIssueRow = {
   id: number;
   kind: "error" | "slow_request" | "slow_query";
@@ -1793,6 +1803,8 @@ export const api = {
     request<FinanceResponse>(`/api/finance/roi/${id}`, { method: "DELETE" }),
   financeRoiSuggest: (body: RoiSuggestInput) =>
     request<RoiSuggestResult>("/api/finance/roi-suggest", { method: "POST", body: JSON.stringify(body) }),
+  financeRoiImportWishlist: (body: { url?: string; image_base64?: string; media_type?: string }) =>
+    request<WishlistImportResult>("/api/finance/roi-import-wishlist", { method: "POST", body: JSON.stringify(body) }),
   financeConfig: (body: {
     reserve_jpy?: number;
     wage_jpy_per_h?: number;

@@ -6,6 +6,7 @@ import {
   type RebalanceHolding,
   type RoiInput,
   type RoiRow,
+  type WishlistItem,
 } from "../lib/api";
 import { Button, Panel, Pill, Skeleton } from "../components/ui/cockpit";
 
@@ -188,6 +189,83 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
 const EMPTY_ROI: RoiInput = { name: "", url: "", cost_jpy: 0, period: "onetime", monthly_use_days: 0,
   monthly_time_saved_h: 0, monthly_revenue_jpy: 0, resale_jpy: 0, status: "considering", note: "" };
 
+function WishlistImport({ onAdded }: { onAdded: () => void }) {
+  const [url, setUrl] = useState("");
+  const [items, setItems] = useState<WishlistItem[] | null>(null);
+  const [checked, setChecked] = useState<Record<number, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function run(extra: { image_base64?: string; media_type?: string } = {}) {
+    setBusy(true); setMsg("");
+    try {
+      const res = await api.financeRoiImportWishlist({ url: url || undefined, ...extra });
+      setItems(res.items);
+      setChecked(Object.fromEntries(res.items.map((_, i) => [i, true])));
+      if (!res.items.length)
+        setMsg(res.fetched ? "商品を抽出できませんでした" : "URL取得に失敗。スクショ画像で試してください");
+    } catch {
+      setMsg("取込に失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addChecked() {
+    if (!items) return;
+    const chosen = items.filter((_, i) => checked[i]);
+    setBusy(true);
+    try {
+      for (const it of chosen)
+        await api.financeRoi({ name: it.name, cost_jpy: it.cost_jpy, period: it.period, url: it.url,
+          monthly_use_days: 0, monthly_time_saved_h: 0, monthly_revenue_jpy: 0, resale_jpy: 0, status: "considering" });
+      setItems(null); setUrl(""); setMsg(`${chosen.length}件を追加しました。各候補の「AIで補完」で詳細を埋められます。`);
+      onAdded();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nChecked = Object.values(checked).filter(Boolean).length;
+
+  return (
+    <div className="mt-3 rounded-lg border border-hairline bg-hull/40 p-2">
+      <p className="telemetry-label">Amazon欲しいものリストから一括取込</p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="公開wishlistのURL"
+          className="min-w-[8rem] flex-1 rounded bg-panel px-2 py-1 text-[11px] text-ink" />
+        <Button variant="primary" disabled={busy || !url.trim()} onClick={() => run()}>
+          {busy ? "取込中…" : "取込"}
+        </Button>
+        <label className="cursor-pointer rounded bg-prog-700 px-2 py-1 text-[11px] hover:bg-prog-500">
+          スクショから
+          <input type="file" accept="image/*" className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]; e.target.value = "";
+              if (f) run({ image_base64: await fileToB64(f), media_type: f.type || "image/png" });
+            }} />
+        </label>
+      </div>
+      {msg && <p className="mt-1 text-[11px] text-ink-faint">{msg}</p>}
+      {items && items.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {items.map((it, i) => (
+            <label key={i} className="flex items-center gap-2 text-[11px] text-ink">
+              <input type="checkbox" checked={checked[i] ?? false}
+                onChange={(e) => setChecked({ ...checked, [i]: e.target.checked })} />
+              <span className="flex-1 truncate">{it.name}</span>
+              <span className="telemetry-num text-ink-faint">{it.cost_jpy ? `¥${Math.round(it.cost_jpy).toLocaleString()}` : "—"}</span>
+            </label>
+          ))}
+          <Button variant="primary" disabled={busy || nChecked === 0} onClick={addChecked}>
+            選択した{nChecked}件を追加
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoiSection({ data }: { data: FinanceResponse }) {
   const qc = useQueryClient();
   const mut = useFinanceMut(qc);
@@ -316,6 +394,7 @@ function RoiSection({ data }: { data: FinanceResponse }) {
           </div>
         </div>
       )}
+      <WishlistImport onAdded={() => qc.invalidateQueries({ queryKey: ["finance"] })} />
     </Panel>
   );
 }

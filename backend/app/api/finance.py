@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.llm.finance_ocr import extract_assets
-from app.llm.finance_roi_ai import suggest_roi
+from app.llm.finance_roi_ai import extract_wishlist_items, suggest_roi
 from app.models.health import AssetHolding, CashflowTx, RoiCandidate
 from app.scoring.finance import compute_cashflow, compute_finance, compute_rebalance, get_state
 
@@ -127,6 +127,50 @@ async def roi_suggest(body: RoiSuggestIn) -> dict[str, Any]:
     if out is None:
         return {"fields": None, "reasons": {}}
     return out
+
+
+_WISHLIST_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+)
+
+
+async def _fetch_url(url: str) -> str | None:
+    """URL を取得して HTML を返す。bot対策/エラー/空応答時は None(→呼び出し側でフォールバック)。"""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
+            "User-Agent": _WISHLIST_UA, "Accept-Language": "ja,en;q=0.8",
+        }) as client:
+            r = await client.get(url)
+        if r.status_code == 200 and len(r.text) > 500:
+            return r.text
+    except Exception:
+        return None
+    return None
+
+
+class WishlistImportIn(BaseModel):
+    url: str | None = None
+    image_base64: str | None = None
+    media_type: str = "image/png"
+
+
+@router.post("/api/finance/roi-import-wishlist")
+async def roi_import_wishlist(body: WishlistImportIn) -> dict[str, Any]:
+    """欲しいものリスト(URL主/画像フォールバック)から候補を抽出して返す(DB保存しない)。"""
+    items: list[dict[str, Any]] = []
+    fetched = False
+    if body.url:
+        html = await _fetch_url(body.url)
+        if html:
+            fetched = True
+            items = await extract_wishlist_items(html=html)
+    # URL取得失敗 or 抽出0件で、画像があればスクショOCRにフォールバック。
+    if not items and body.image_base64:
+        items = await extract_wishlist_items(image_b64=body.image_base64, media_type=body.media_type)
+    return {"items": items, "fetched": fetched}
 
 
 # ---------------- 設定(防衛資金・時給) ----------------
