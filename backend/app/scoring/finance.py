@@ -50,6 +50,8 @@ RISK_TIERS = {
 }
 # 許容度 1(保守)〜7(積極)→ 各分岐で安全側に回す比率。
 SAFE_RATIO_BY_TOLERANCE = {1: 0.90, 2: 0.80, 3: 0.70, 4: 0.60, 5: 0.50, 6: 0.40, 7: 0.30}
+# 総資産のこの割合未満の残高は端数(投資対象外)。ゴミ残高が配分枠を食う倒錯を防ぐ。
+MIN_ALLOC_RATIO = 0.01
 
 _TIER_KEYWORDS = [
     (4, ["アテンション", "トークン", "token", "bat", "アルト", "xrp", "リップル",
@@ -75,21 +77,30 @@ def _effective_tier(h: AssetHolding) -> int:
 
 
 def auto_allocate(holdings: list[AssetHolding], tolerance: int) -> dict[int, float]:
-    """リスク階層を安全側から再帰的に分割し、各資産の目標ウェイト(合計100)を返す。
+    """リスク階層を安全側から配分し、各資産の目標ウェイト(合計100)を返す。
 
-    例(安全比率0.7): 現金70% → 残り30%を 株:暗号=7:3 → 暗号内も主要:アルト=7:3 …
-    階層内は現在残高比で按分(残高0なら均等)。
+    - 階層間: safe·(1-safe)^i を保有階層で正規化。安全側ほど厚く、最下層(高ボラ)が
+      残余を丸取りしない(1銘柄しかない端数アルトが不相応な枠を得るのを防ぐ)。
+    - 階層内: 現在残高比で按分(残高0なら均等)。
+    - 総資産の MIN_ALLOC_RATIO 未満の端数残高は配分対象外(weight 0)。
+    例(安全比率0.7, 現金/株/暗号): 生比率 0.7 : 0.21 : 0.063 → 正規化で約72% : 22% : 6%。
     """
     safe = SAFE_RATIO_BY_TOLERANCE.get(tolerance, 0.70)
+    total = sum(max(0.0, h.value_jpy) for h in holdings)
+    floor = total * MIN_ALLOC_RATIO
+    weights: dict[int, float] = {h.id: 0.0 for h in holdings}
+    eligible = [h for h in holdings if max(0.0, h.value_jpy) >= floor]
+    if not eligible:
+        return weights
     by_tier: dict[int, list[AssetHolding]] = {}
-    for h in holdings:
+    for h in eligible:
         by_tier.setdefault(_effective_tier(h), []).append(h)
     tiers = sorted(by_tier)
-    weights: dict[int, float] = {}
-    remaining = 1.0
-    for i, tier in enumerate(tiers):
-        alloc = remaining if i == len(tiers) - 1 else safe * remaining
-        remaining -= alloc
+    # 階層の生比率(安全側から): safe, safe·(1-safe), safe·(1-safe)^2, … を正規化。
+    raw = {tier: safe * ((1.0 - safe) ** i) for i, tier in enumerate(tiers)}
+    s = sum(raw.values()) or 1.0
+    for tier in tiers:
+        alloc = raw[tier] / s
         members = by_tier[tier]
         tot = sum(max(0.0, m.value_jpy) for m in members)
         for m in members:

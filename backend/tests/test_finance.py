@@ -103,9 +103,10 @@ def test_auto_allocate_recursive_risk_split(app_client):
     r = app_client.post("/api/finance/auto-allocate", json={"tolerance": 3})  # safe 0.70
     assert r.status_code == 200
     w = {h["name"]: h["target_weight"] for h in r.json()["rebalance"]["holdings"]}
-    assert round(w["UFJ 普通"]) == 70           # 現金 70%
-    assert round(w["NISA 全世界株式"]) == 21     # 残り30%の70%
-    assert round(w["Coincheck ビットコイン残高"]) == 9  # 残り
+    # 生比率 現金0.7 : 株0.21 : 暗号0.063 を正規化(合計100)。
+    assert round(w["UFJ 普通"]) == 72           # 現金
+    assert round(w["NISA 全世界株式"]) == 22     # 株
+    assert round(w["Coincheck ビットコイン残高"]) == 6   # 主要暗号(残余を丸取りしない)
     assert r.json()["rebalance"]["risk_tolerance"] == 3
 
 
@@ -115,3 +116,30 @@ def test_import_assets_csv_upserts(app_client):
     assert r.status_code == 200
     names = {h["name"] for h in r.json()["rebalance"]["holdings"]}
     assert {"現金", "仮想通貨"} <= names
+
+
+def test_auto_allocate_excludes_dust(app_client):
+    # 総資産の1%未満の極小残高は投資対象外(target_weight=0)。実データのBAT(916円)相当。
+    for n, v in [("UFJ 普通", 700000),
+                 ("Coincheck ビットコイン残高", 118758),
+                 ("bitFlyer ベーシックアテンショントークン残高", 916)]:
+        app_client.post("/api/finance/asset", json={"name": n, "value_jpy": v})
+    r = app_client.post("/api/finance/auto-allocate", json={"tolerance": 3})
+    holds = {h["name"]: h for h in r.json()["rebalance"]["holdings"]}
+    bat = holds["bitFlyer ベーシックアテンショントークン残高"]
+    assert bat["target_weight"] == 0.0          # 端数 → 配分対象外
+    assert bat["signal"] == "reserve"           # 「買え」倒錯が消える
+    assert holds["Coincheck ビットコイン残高"]["target_weight"] > 0  # 主力は配分対象
+
+
+def test_auto_allocate_no_alt_windfall(app_client):
+    # 主要暗号(tier3)が複数銘柄で希薄化しても、単独の高ボラアルト(tier4)が上回らない。
+    # 旧ロジックは最下層tierが残余を丸取りし BTC<アルト に逆転していた。
+    for n, v in [("UFJ 普通", 700000),
+                 ("Coincheck ビットコイン残高", 100000),
+                 ("Coincheck イーサリアム残高", 200000),
+                 ("bitFlyer リップル残高", 100000)]:  # XRP=tier4, 端数閾値超
+        app_client.post("/api/finance/asset", json={"name": n, "value_jpy": v})
+    r = app_client.post("/api/finance/auto-allocate", json={"tolerance": 3})
+    w = {h["name"]: h["target_weight"] for h in r.json()["rebalance"]["holdings"]}
+    assert 0 < w["bitFlyer リップル残高"] < w["Coincheck ビットコイン残高"]
