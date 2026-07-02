@@ -1228,4 +1228,39 @@ def gather_consult_context(target: date_type) -> dict[str, Any]:
         return llm_summary(today=target)
 
     ctx["learning"] = _safe(_learning)
+
+    def _finance():
+        # 資産・投資も相談対象。14000字予算を圧迫しないよう要点だけに絞る
+        # (12ヶ月履歴・ROI詳細・risk_tiers 辞書は落とす)。
+        from app.scoring.finance import compute_finance
+
+        with session_scope() as session:
+            f = compute_finance(session)
+        reb = f.get("rebalance") or {}
+        cf = f.get("cashflow") or {}
+        holdings = [
+            {
+                "name": h.get("name"), "category": h.get("category"),
+                "value_jpy": h.get("value_jpy"), "target_weight": h.get("target_weight"),
+                "current_ratio": h.get("current_ratio"), "target_ratio": h.get("target_ratio"),
+                "signal": h.get("signal"), "risk_label": h.get("risk_label"),
+            }
+            for h in (reb.get("holdings") or [])
+        ]
+        return {
+            "total_assets_jpy": reb.get("total"),
+            "reserve_jpy": reb.get("reserve"),
+            "investable_jpy": reb.get("investable"),
+            "unallocated_jpy": reb.get("unallocated"),
+            "risk_tolerance": reb.get("risk_tolerance"),
+            "avg_monthly_expense": cf.get("avg_monthly_expense"),
+            "avg_monthly_income": cf.get("avg_monthly_income"),
+            "avg_monthly_net": cf.get("avg_monthly_net"),
+            "runway_months": cf.get("runway_months"),
+            "reserve_months": cf.get("reserve_months"),
+            "expense_categories": cf.get("categories"),
+            "holdings": holdings,
+        }
+
+    ctx["finance"] = _safe(_finance)
     return ctx

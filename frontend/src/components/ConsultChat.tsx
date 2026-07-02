@@ -44,8 +44,8 @@ export function ConsultChat() {
       {messages.length === 0 && (
         <div className="space-y-2">
           <p className="text-sm text-ink-dim">
-            プロフィール・目標・体組成・睡眠・栄養・トレンドなどを文脈に、科学的レンジで答えます
-            (診断・処方ではありません)。
+            健康・体づくり／お金・資産／仕事・学習まで、あなたの全データを文脈に、実データの数字で
+            具体的に答えます(健康面は診断・処方ではありません)。
           </p>
           <div className="space-y-1.5">
             {EXAMPLES.map((ex) => (

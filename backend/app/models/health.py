@@ -335,6 +335,25 @@ class SubjectiveCheckin(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class SleepInterventionLog(Base):
+    """就寝前の介入 (耳栓/アイマスク/鼻ストリップ/口テープ) の夜次ログ。
+
+    date = その夜 (起床日基準、SleepSession.date と一致)。値は
+    True=着けた / False=外した / None=未記録。効果分析は「着けた夜 vs 外した夜」を
+    並べ替え検定で比較するため、未記録(None)と「外した(False)」を明確に区別する。
+    """
+
+    __tablename__ = "sleep_intervention_log"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    earplugs: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    eyemask: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    nose_strip: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    mouth_tape: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class SpeechSession(Base):
     """speech-coach から取り込む日次の発話練習サマリ (JST 日付ごと)。"""
 

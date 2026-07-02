@@ -35,6 +35,9 @@ import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
+import { SleepInterventionCard } from "../components/SleepInterventionCard";
+import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
+import { SleepInterventionPanel } from "../components/SleepInterventionPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { CockpitHero } from "../components/CockpitHero";
@@ -441,6 +444,10 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div className="space-y-3">
         <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
         <TonightPlanPanel plan={data.tonight_plan} />
+        <SectionHeader label="就寝前の介入 × 睡眠の質" hint="耳栓・アイマスク・鼻呼吸・口テープの効果をn-of-1検証" />
+        <SleepInterventionCard />
+        <SleepInterventionHistory />
+        <SleepInterventionPanel />
         <SectionHeader label="睡眠ドライバー" hint="睡眠の質 × 翌日パフォーマンスの個人分析" />
         <SleepDriverPanel />
       </div>

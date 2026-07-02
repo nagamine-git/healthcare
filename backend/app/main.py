@@ -34,6 +34,7 @@ from app.api import perf as perf_api
 from app.api import profile as profile_api
 from app.api import push as push_api
 from app.api import sleep_drivers as sleep_drivers_api
+from app.api import sleep_intervention as sleep_intervention_api
 from app.api import speech as speech_api
 from app.api import timeline as timeline_api
 from app.api import weather as weather_api
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(caffeine_api.router)
     app.include_router(bodyload_api.router)
     app.include_router(sleep_drivers_api.router)
+    app.include_router(sleep_intervention_api.router)
     app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)
     app.include_router(advice_feedback_api.router)

@@ -740,6 +740,62 @@ export type SleepDriverState = {
   recommendations?: SleepRecommendation[];
 };
 
+// 就寝前の介入 (耳栓/アイマスク/ノーズブリーズ/口テープ) の記録と効果分析
+export type SleepInterventionFlags = {
+  earplugs: boolean | null;
+  eyemask: boolean | null;
+  nose_strip: boolean | null;
+  mouth_tape: boolean | null;
+};
+export type SleepInterventionNight = SleepInterventionFlags & {
+  date: string;
+  display_label: string;
+  note: string | null;
+  updated_at: string | null;
+};
+export type SleepInterventionRecord = {
+  tonight: SleepInterventionNight;
+  items: SleepInterventionNight[];
+};
+export type SleepInterventionSet = Partial<SleepInterventionFlags> & {
+  reset?: boolean;
+  clear?: string[];
+  date?: string;
+  note?: string;
+};
+export type SleepInterventionHistoryNight = SleepInterventionFlags & {
+  date: string;
+  display_label: string;
+  sleep_score: number | null;
+};
+export type SleepInterventionHistoryResp = { nights: SleepInterventionHistoryNight[] };
+export type SleepInterventionOutcome = {
+  outcome: string;
+  outcome_label: string;
+  diff: number;
+  p: number;
+  q: number;
+  tier: "strong" | "suggestive" | "trend" | "weak";
+  direction: "改善" | "悪化";
+};
+export type SleepInterventionResult = {
+  key: string;
+  label: string;
+  n_did: number;
+  n_didnt: number;
+  verdict: "improves" | "worsens" | "no_effect" | "insufficient";
+  primary: SleepInterventionOutcome | null;
+  outcomes: SleepInterventionOutcome[];
+};
+export type SleepInterventionAnalysis = {
+  status: "analyzed" | "accumulating";
+  n_nights: number;
+  remaining?: number;
+  reliability?: "high" | "medium" | "low";
+  interventions: SleepInterventionResult[];
+  suggestion: { text: string; reason: string } | null;
+};
+
 export type HabitPaceItem = {
   key: string;
   label: string;
@@ -1693,6 +1749,17 @@ export const api = {
   forecast: () => request<ForecastState>("/api/forecast"),
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
+  sleepInterventionGet: () =>
+    request<SleepInterventionRecord>("/api/sleep-intervention"),
+  sleepInterventionSet: (body: SleepInterventionSet) =>
+    request<SleepInterventionRecord>("/api/sleep-intervention", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  sleepInterventions: () =>
+    request<SleepInterventionAnalysis>("/api/sleep/interventions"),
+  sleepInterventionHistory: () =>
+    request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,
