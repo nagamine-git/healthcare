@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import session_scope
-from app.models import SleepInterventionLog
+from app.models import SleepInterventionLog, SleepSession
 from app.scoring import sleep_interventions
 
 router = APIRouter()
@@ -57,6 +57,7 @@ class InterventionIn(BaseModel):
     nose_strip: bool | None = None
     mouth_tape: bool | None = None
     note: str | None = Field(default=None, max_length=500)
+    clear: list[str] = Field(default_factory=list)  # None に戻すフィールド名 (3状態トグル用)
     reset: bool = False  # その夜の記録を未記録 (全 None) に戻す
     date: str | None = None
 
@@ -66,22 +67,30 @@ async def post_intervention(body: InterventionIn) -> dict[str, Any]:
     target = date_type.fromisoformat(body.date) if body.date else _target_date()
     with session_scope() as session:
         row = session.get(SleepInterventionLog, target)
+        if body.reset:
+            # その夜を「未記録」に戻す = 行ごと削除 (空行を残すと n_nights を水増しする)
+            if row is not None:
+                session.delete(row)
+            return await get_intervention()
         if row is None:
             row = SleepInterventionLog(date=target)
             session.add(row)
-        if body.reset:
-            for f in _FLAGS:
+        # None = 据え置き (部分更新)。今夜カードは 4 フラグ全部を明示 bool で送る。
+        for f in _FLAGS:
+            val = getattr(body, f)
+            if val is not None:
+                setattr(row, f, val)
+        # clear 指定は None に戻す (3状態トグルの「未記録」へ)
+        for f in body.clear:
+            if f in _FLAGS:
                 setattr(row, f, None)
-            row.note = None
+        if body.note is not None:
+            row.note = body.note
+        # 全項目 未記録になったら空行を残さない (n_nights 水増し防止)
+        if all(getattr(row, f) is None for f in _FLAGS) and not row.note:
+            session.delete(row)
         else:
-            # None = 据え置き。フロントは通常 4 フラグ全部を明示 bool で送る。
-            for f in _FLAGS:
-                val = getattr(body, f)
-                if val is not None:
-                    setattr(row, f, val)
-            if body.note is not None:
-                row.note = body.note
-        row.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     return await get_intervention()
 
 
@@ -96,8 +105,46 @@ async def get_intervention(days: int = 30) -> dict[str, Any]:
             .order_by(SleepInterventionLog.date.desc())
         ).scalars().all()
         tonight_row = next((r for r in rows if r.date == target), None)
+        # セッション内で dict 化する (外に出すと DetachedInstanceError)
+        tonight = _to_dict(tonight_row, target)
         items = [_to_dict(r, r.date) for r in rows]
-    return {"tonight": _to_dict(tonight_row, target), "items": items}
+    return {"tonight": tonight, "items": items}
+
+
+@router.get("/api/sleep-intervention/history")
+async def get_history(days: int = 14) -> dict[str, Any]:
+    """過去の記録用: 睡眠データがある夜を新しい順に、介入の記録状態つきで返す。
+
+    今夜の pending 日はカードが扱うので除外 (date < target)。分析に使える夜だけ出す。
+    """
+    target = _target_date()
+    since = target - timedelta(days=days)
+    with session_scope() as session:
+        sleeps = session.execute(
+            select(SleepSession.date, SleepSession.sleep_score)
+            .where(SleepSession.date >= since, SleepSession.date < target)
+            .order_by(SleepSession.date.desc())
+        ).all()
+        logs = {
+            r.date: r
+            for r in session.execute(
+                select(SleepInterventionLog).where(SleepInterventionLog.date >= since)
+            ).scalars()
+        }
+        nights: list[dict[str, Any]] = []
+        for d, score in sleeps:
+            log = logs.get(d)
+            eve = d - timedelta(days=1)
+            nights.append({
+                "date": d.isoformat(),
+                "display_label": f"{eve.month}/{eve.day}の夜",
+                "sleep_score": score,
+                "earplugs": log.earplugs if log else None,
+                "eyemask": log.eyemask if log else None,
+                "nose_strip": log.nose_strip if log else None,
+                "mouth_tape": log.mouth_tape if log else None,
+            })
+    return {"nights": nights}
 
 
 @router.get("/api/sleep/interventions")

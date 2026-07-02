@@ -70,6 +70,11 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
             sl = sleeps.get(d)
             if sl is None:
                 continue  # その夜の睡眠データがまだ無い → アウトカム不明
+            if all(
+                getattr(log, f) is None
+                for f in ("earplugs", "eyemask", "nose_strip", "mouth_tape")
+            ):
+                continue  # 全項目 未記録の空行は夜数に数えない
             total, awake = sl.total_min, sl.awake_min
             eff = (
                 total / (total + awake) * 100
