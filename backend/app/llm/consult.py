@@ -39,6 +39,9 @@ _SYSTEM = """\
 - コンディション連動は軽く。**まず質問に答えた上で**、大きく不可逆な意思決定 × 今日の
   コンディションが実際に悪い場合に限り、最後に1行だけ「今日決めるより整えてからが有利」と添える程度。
   健康データを全面に広げた説教テーブルは作らない。
+- **記録を頼まれたら・記録すべき事実を伝えられたら、ツールで実際に記録する**
+  (例:「昨日耳栓つけてた」→ record_sleep_intervention)。記録したら何をどう記録したか1行で確認を返す。
+  曖昧な場合 (どの日か不明等) は推測せず一度聞き返す。
 - 日本語。
 
 # DATA(利用者の実データ JSON)
@@ -65,15 +68,40 @@ async def consult(messages: list[dict[str, Any]]) -> str | None:
     try:
         from anthropic import AsyncAnthropic
 
+        from app.llm.consult_tools import TOOLS, execute_tool
+
         client = AsyncAnthropic(api_key=api_key)
-        resp = await client.messages.create(
-            model=settings.llm_model,
-            max_tokens=1500,
-            system=system,
-            messages=convo,
-        )
+        # tool use ループ: 記録系ツールを実行して結果を返し、最終テキストまで回す (最大3周)。
+        msgs: list[dict[str, Any]] = list(convo)
+        resp = None
+        for _ in range(3):
+            resp = await client.messages.create(
+                model=settings.llm_model,
+                max_tokens=1500,
+                system=system,
+                messages=msgs,
+                tools=TOOLS,
+            )
+            if resp.stop_reason != "tool_use":
+                break
+            tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+            if not tool_uses:
+                break
+            msgs.append({"role": "assistant", "content": resp.content})
+            results = []
+            for tu in tool_uses:
+                out = execute_tool(tu.name, dict(tu.input or {}))
+                logger.info("consult_tool", tool=tu.name, ok=out.get("ok"))
+                results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": json.dumps(out, ensure_ascii=False, default=str),
+                })
+            msgs.append({"role": "user", "content": results})
     except Exception as exc:
         logger.warning("consult_failed", error=str(exc))
+        return None
+    if resp is None:
         return None
     parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
     text = "".join(parts).strip()
