@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { IdentityPage } from "./Identity";
 import { LifePage } from "./Life";
 import { BecomingPage } from "./Becoming";
+import { GardenPage } from "./Garden";
 
 const SEGMENTS = [
   { key: "values", label: "価値観・マインド" },
   { key: "purpose", label: "目的・領域" },
   { key: "path", label: "歩み・到達予測" },
+  { key: "garden", label: "庭" },
 ] as const;
 export type CompassSegment = (typeof SEGMENTS)[number]["key"];
 
-/** 「自分の方向性」を1か所に統合した羅針盤。価値観/目的/歩み をセグメントで切替。 */
+/** 「自分の方向性」を1か所に統合した羅針盤。価値観/目的/歩み/庭 をセグメントで切替。 */
 export function CompassPage({ initialSegment = "values" }: { initialSegment?: CompassSegment }) {
   const [seg, setSeg] = useState<CompassSegment>(initialSegment);
   useEffect(() => setSeg(initialSegment), [initialSegment]);
@@ -18,9 +20,20 @@ export function CompassPage({ initialSegment = "values" }: { initialSegment?: Co
 
   return (
     <main className="safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
-      <header className="safe-area-top pb-0.5">
-        <h1 className="app-title">羅針盤</h1>
-        <p className="mt-0.5 text-xs text-ink-faint">自分の方向性 — 価値観・目的・歩み</p>
+      <header className="safe-area-top flex items-baseline pb-0.5">
+        <div>
+          <h1 className="app-title">羅針盤</h1>
+          <p className="mt-0.5 text-xs text-ink-faint">自分の方向性 — 価値観・目的・歩み・庭</p>
+        </div>
+        {/* 到達導線: 記録系の独立ページはここから (IA 再編 Phase 3) */}
+        <span className="ml-auto flex gap-3 text-[11px] text-ink-faint">
+          <button className="underline hover:text-ink-dim" onClick={() => (window.location.hash = "#journal")}>
+            ジャーナル
+          </button>
+          <button className="underline hover:text-ink-dim" onClick={() => (window.location.hash = "#checkup")}>
+            健診
+          </button>
+        </span>
       </header>
 
       <div className="sticky top-0 z-20 -mx-5 bg-void/75 px-5 py-2 backdrop-blur-xl">
@@ -43,6 +56,7 @@ export function CompassPage({ initialSegment = "values" }: { initialSegment?: Co
       {seg === "values" && <IdentityPage onBack={noop} embedded />}
       {seg === "purpose" && <LifePage onBack={noop} embedded />}
       {seg === "path" && <BecomingPage onBack={noop} embedded />}
+      {seg === "garden" && <GardenPage onBack={noop} embedded />}
     </main>
   );
 }

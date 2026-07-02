@@ -3,13 +3,14 @@
  * 解剖プロポーションに寄せた抽象シルエット — 筋群の「どこが」を直感的に示す。
  * 背面表示 (fills.upperBack あり) のときは胸/腹を出さず背中を出す。
  */
+import { P } from "../lib/palette";
 
 export type ShapeKey =
   | "head" | "shoulderL" | "shoulderR" | "chest" | "abs"
   | "armL" | "armR" | "legL" | "legR" | "upperBack";
 
-const FAINT = "#334155";
-const STRUCT = "#1e293b"; // 首・手・足など構造パーツ
+const FAINT = P.hairline;
+const STRUCT = P.panel; // 首・手・足など構造パーツ
 
 // viewBox 0 0 100 150 上の各部位パス (解剖プロポーションに補正)
 const D: Record<ShapeKey, string> = {
@@ -40,7 +41,7 @@ export function BodyFigure({
       key={k}
       d={D[k]}
       fill={fills[k] ?? FAINT}
-      stroke={suggested?.[k] ? "#fbbf24" : "#0f172a"}
+      stroke={suggested?.[k] ? P.act300 : P.hull}
       strokeWidth={suggested?.[k] ? 1.8 : 0.5}
     />
   );

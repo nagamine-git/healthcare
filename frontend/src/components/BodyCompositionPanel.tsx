@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { api, type BodyCompDraft } from "../lib/api";
 import { Panel, Stat } from "./ui/cockpit";
+import { P } from "../lib/palette";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -88,7 +89,7 @@ export function BodyCompositionPanel() {
                     labelStyle={{ color: "#9aa7b8" }}
                     formatter={(v: number) => [`${v}kg`, "骨格筋"]}
                   />
-                  <Line type="monotone" dataKey="v" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="v" stroke={P.prog} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
               <p className="telemetry-label">骨格筋量の推移(kg)</p>

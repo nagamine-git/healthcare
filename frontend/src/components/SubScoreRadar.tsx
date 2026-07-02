@@ -8,6 +8,7 @@ import {
   Tooltip,
 } from "recharts";
 import { useCollapse } from "../lib/collapse";
+import { P } from "../lib/palette";
 
 export type Sub = {
   label: string;
@@ -52,7 +53,7 @@ function gradientHsl(ratio: number): string {
 }
 
 function totalColor(score: number | null): string {
-  if (score == null) return "#94a3b8";
+  if (score == null) return P.inkDim;
   return gradientHsl(score / 100);
 }
 
@@ -116,7 +117,7 @@ export function SubScoreRadar({ subs, total }: Props) {
         {canDrawRadar ? (
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={data} outerRadius="78%">
-              <PolarGrid stroke="#1e293b" />
+              <PolarGrid stroke={P.panel} />
               <PolarAngleAxis
                 dataKey="axis"
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
@@ -125,13 +126,13 @@ export function SubScoreRadar({ subs, total }: Props) {
                 angle={90}
                 domain={[0, 100]}
                 tick={{ fill: "#475569", fontSize: 10 }}
-                stroke="#334155"
+                stroke={P.hairline}
                 tickCount={5}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e293b",
-                  border: "1px solid #334155",
+                  backgroundColor: P.panel,
+                  border: `1px solid ${P.hairline}`,
                   fontSize: 12,
                 }}
                 formatter={(v: number, name: string) => [
@@ -143,7 +144,7 @@ export function SubScoreRadar({ subs, total }: Props) {
               <Radar
                 name="target"
                 dataKey="target"
-                stroke="#64748b"
+                stroke={P.inkFaint}
                 fill="none"
                 strokeWidth={1}
                 strokeDasharray="3 3"
@@ -153,8 +154,8 @@ export function SubScoreRadar({ subs, total }: Props) {
               <Radar
                 name="score"
                 dataKey="score"
-                stroke="#34d399"
-                fill="#34d399"
+                stroke={P.prog300}
+                fill={P.prog300}
                 fillOpacity={0.25}
                 isAnimationActive={false}
               />

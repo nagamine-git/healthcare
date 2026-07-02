@@ -4,6 +4,7 @@ import { X, Send, GraduationCap, Check, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import type { LearningChapter, QuizFormat } from "../lib/api";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { P } from "../lib/palette";
 
 /**
  * 章の理解度テスト (得点制) チャットモーダル。
@@ -124,7 +125,7 @@ export function ChapterQuiz({ ch, onClose }: { ch: LearningChapter; onClose: () 
   }, [msgs, busy, choiceQ, answered]);
 
   const pct = target > 0 ? Math.min(100, (points / target) * 100) : 0;
-  const barColor = cleared ? "#34d399" : "#fbbf24";
+  const barColor = cleared ? P.prog300 : P.act300;
 
   const sendFree = () => {
     const text = input.trim();

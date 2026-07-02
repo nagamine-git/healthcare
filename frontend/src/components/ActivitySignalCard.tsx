@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Footprints, Home, HelpCircle, Sun } from "lucide-react";
 import { api, type ActivityDay } from "../lib/api";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 活動/外出シグナル。Garmin / iPhone を相互補完して日次の「動いた・外に出た」を推測。
@@ -10,6 +11,7 @@ import { api, type ActivityDay } from "../lib/api";
 export function ActivitySignalCard() {
   const q = useQuery({ queryKey: ["activity-signal"], queryFn: () => api.activitySignal(14) });
   const data = q.data;
+  if (q.isLoading) return <LoadingState height="h-40" />;
   if (!data) return null;
 
   return (

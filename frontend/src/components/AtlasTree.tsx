@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { api, type AtlasNode } from "../lib/api";
 import { Panel, Skeleton } from "./ui/cockpit";
+import { P } from "../lib/palette";
 
 function fmt(v: number | null, unit: string): string {
   if (v == null) return "—";
@@ -52,8 +53,8 @@ function Sparkline({ n }: { n: AtlasNode }) {
             labelStyle={{ color: "#9aa7b8" }}
             formatter={(v: number) => [`${v}${n.unit}`, n.label]}
           />
-          {n.target != null && <ReferenceLine y={n.target} stroke="#f59e0b" strokeDasharray="3 3" />}
-          <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={false} />
+          {n.target != null && <ReferenceLine y={n.target} stroke={P.act} strokeDasharray="3 3" />}
+          <Line type="monotone" dataKey="value" stroke={P.prog} strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -103,11 +104,11 @@ function DomainRadar({ children }: { children: AtlasNode[] }) {
         <RadarChart data={data} outerRadius="65%">
           <PolarGrid stroke="#243044" />
           <PolarAngleAxis dataKey="axis" tick={{ fill: "#9aa7b8", fontSize: 10 }} />
-          <Radar name="目標" dataKey="目標" stroke="#f59e0b" fill="none" strokeDasharray="3 3" />
+          <Radar name="目標" dataKey="目標" stroke={P.act} fill="none" strokeDasharray="3 3" />
           {hasPop && (
             <Radar name="中央値" dataKey="中央値" stroke="#9aa7b8" fill="#9aa7b8" fillOpacity={0.12} connectNulls />
           )}
-          <Radar name="現状" dataKey="現状" stroke="#10b981" fill="#10b981" fillOpacity={0.35} />
+          <Radar name="現状" dataKey="現状" stroke={P.prog} fill={P.prog} fillOpacity={0.35} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           <Tooltip
             contentStyle={{ background: "#1a2230", border: "1px solid #243044", borderRadius: 8, fontSize: 11 }}

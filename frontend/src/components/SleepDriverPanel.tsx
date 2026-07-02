@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Moon } from "lucide-react";
 import { api } from "../lib/api";
 import type { SleepDriverFactor } from "../lib/api";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 個人「睡眠ドライバー分析」。何が睡眠の質・翌日パフォーマンスを上げ下げするかを
@@ -29,7 +30,8 @@ function Factor({ f }: { f: SleepDriverFactor }) {
 
 export function SleepDriverPanel() {
   const q = useQuery({ queryKey: ["sleep-drivers"], queryFn: api.sleepDrivers });
-  if (q.isLoading || !q.data) return null;
+  if (q.isLoading) return <LoadingState height="h-40" />;
+  if (!q.data) return null;
   const s = q.data;
   if (s.status === "accumulating") {
     return (

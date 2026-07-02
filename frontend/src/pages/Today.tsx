@@ -42,7 +42,7 @@ import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { CockpitHero } from "../components/CockpitHero";
 import { StatusStrip } from "../components/StatusStrip";
-import { Skeleton } from "../components/ui/cockpit";
+import { SectionHeader, Skeleton } from "../components/ui/cockpit";
 import { LifeTreePanel } from "../components/LifeTreePanel";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
@@ -77,9 +77,24 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "learning", label: "学習" },
 ];
 
+// "#tab-health" のようなハッシュで Today 内のタブへ直接飛べる (QuickLogSheet の食事導線等)
+function tabFromHash(): Tab | null {
+  const m = window.location.hash.match(/^#tab-(\w+)$/);
+  const key = m?.[1] as Tab | undefined;
+  return key && TABS.some((t) => t.key === key) ? key : null;
+}
+
 export function TodayPage({ onOpenDebug }: Props) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("summary");
+  const [tab, setTab] = useState<Tab>(() => tabFromHash() ?? "summary");
+  useEffect(() => {
+    const handler = () => {
+      const t = tabFromHash();
+      if (t) setTab(t);
+    };
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, []);
   const geo = useGeolocation();
   const coords = geo.coords;
   const today = useQuery({
@@ -525,13 +540,4 @@ export function TodayPage({ onOpenDebug }: Props) {
   );
 }
 
-function SectionHeader({ label, hint }: { label: string; hint?: string }) {
-  return (
-    <div className="mb-3 mt-2 flex items-baseline gap-3 border-b border-hairline pb-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-dim">
-        {label}
-      </h2>
-      {hint && <span className="text-[10px] text-ink-faint">{hint}</span>}
-    </div>
-  );
-}
+// SectionHeader は ui/cockpit へ昇格 (全ページ共通)

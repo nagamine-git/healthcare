@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Clock3, Info } from "lucide-react";
 import { api } from "../lib/api";
 import type { MigraineOnsetProfile } from "../lib/api";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 頭痛要因分析パネル。
@@ -50,7 +51,8 @@ function OnsetProfile({ p }: { p: MigraineOnsetProfile }) {
 export function MigraineTriggerPanel() {
   const q = useQuery({ queryKey: ["migraine-triggers"], queryFn: api.migraineTriggers });
   const data = q.data;
-  if (q.isLoading || !data) return null;
+  if (q.isLoading) return <LoadingState height="h-40" />;
+  if (!data) return null;
   if (data.episode_count === 0) return null; // 記録ゼロなら出さない
 
   return (

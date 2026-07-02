@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import type { BodyMapMuscle, BodyHpGauge } from "../lib/api";
 import { BodyFigure } from "./BodyFigure";
 import type { ShapeKey } from "./BodyFigure";
+import { P } from "../lib/palette";
 
 /**
  * 部位別の筋負荷マップ + 統合ステータス (Tarkov 風 HP ゲージ)。
@@ -16,17 +17,17 @@ import type { ShapeKey } from "./BodyFigure";
 
 // 回復% → 色 (高=回復済み=緑 / 低=直近に負荷=赤)
 function recoveryColor(pct: number, conf: string): string {
-  if (conf === "none") return "#475569";
-  if (pct >= 90) return "#34d399";
-  if (pct >= 60) return "#fbbf24";
-  return "#f87171";
+  if (conf === "none") return P.hairline;
+  if (pct >= 90) return P.prog300;
+  if (pct >= 60) return P.act300;
+  return P.risk300;
 }
 // HP値 → 色 (高=良好=緑 / 低=要注意=赤)
 function hpColor(v: number | null): string {
-  if (v == null) return "#475569";
-  if (v >= 70) return "#34d399";
-  if (v >= 40) return "#fbbf24";
-  return "#f87171";
+  if (v == null) return P.hairline;
+  if (v >= 70) return P.prog300;
+  if (v >= 40) return P.act300;
+  return P.risk300;
 }
 
 const MUSCLE_FRONT: Record<string, ShapeKey[]> = {
@@ -122,7 +123,7 @@ export function BodyLoadCard() {
 
   const muscleColor = (key: string) => {
     const m = muscleByKey(key);
-    return m ? recoveryColor(m.recovery_pct, m.confidence) : "#475569";
+    return m ? recoveryColor(m.recovery_pct, m.confidence) : P.hairline;
   };
   const front = buildFills(MUSCLE_FRONT, muscleColor, suggestedKeys);
   const back = buildFills(MUSCLE_BACK, muscleColor, suggestedKeys);
@@ -164,9 +165,9 @@ export function BodyLoadCard() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-ink-faint">
-            <span><span style={{ color: "#34d399" }}>■</span> 回復済(やれる)</span>
-            <span><span style={{ color: "#fbbf24" }}>■</span> 回復途中</span>
-            <span><span style={{ color: "#f87171" }}>■</span> 直近に負荷</span>
+            <span><span style={{ color: P.prog300 }}>■</span> 回復済(やれる)</span>
+            <span><span style={{ color: P.act300 }}>■</span> 回復途中</span>
+            <span><span style={{ color: P.risk300 }}>■</span> 直近に負荷</span>
             <span><span className="text-act-300">▢</span> 今日のおすすめ</span>
           </div>
           {s.suggestion.length > 0 && (
@@ -195,9 +196,9 @@ export function BodyLoadCard() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] text-ink-faint">
-            <span><span style={{ color: "#34d399" }}>■</span> 良好</span>
-            <span><span style={{ color: "#fbbf24" }}>■</span> 注意</span>
-            <span><span style={{ color: "#f87171" }}>■</span> 要対処</span>
+            <span><span style={{ color: P.prog300 }}>■</span> 良好</span>
+            <span><span style={{ color: P.act300 }}>■</span> 注意</span>
+            <span><span style={{ color: P.risk300 }}>■</span> 要対処</span>
           </div>
           <div className="grid gap-0.5">
             {s.hp.map((g) => <HpRow key={g.region} g={g} />)}

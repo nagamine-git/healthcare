@@ -7,6 +7,7 @@ import {
 import { api } from "../lib/api";
 import type { TrendDirection, TrendMetric, TrendMetricKey } from "../lib/api";
 import { MetricTile } from "./MetricTile";
+import { P } from "../lib/palette";
 
 const ORDER: TrendMetricKey[] = [
   "sleep", "hrv", "energy", "readiness", "load",
@@ -20,11 +21,11 @@ const DIR_LABEL: Record<TrendDirection, string> = {
 const DIR_COLOR: Record<TrendDirection, string> = {
   improving: "text-prog-300", stable: "text-ink-dim", declining: "text-risk",
 };
-const LINE = "#34d399";
-const BAND = "#34d39922";
-const REG = "#f59e0b";
-const PRED = "#38bdf8";        // 予測 (実測欠損/未来) の線色 = sky
-const PRED_BAND = "#38bdf81f"; // 予測の範囲バンド
+const LINE = P.prog300;
+const BAND = `${P.prog300}22`;
+const REG = P.act;
+const PRED = P.info;        // 予測 (実測欠損/未来) の線色 = sky
+const PRED_BAND = `${P.info}1f`; // 予測の範囲バンド
 
 // トレンド指標 → 統一予測エンジンの指標キー (補完可能なものだけ)
 const PREDICT_KEY: Partial<Record<TrendMetricKey, string>> = {
@@ -32,7 +33,7 @@ const PREDICT_KEY: Partial<Record<TrendMetricKey, string>> = {
   hrv: "hrv",
   energy: "body_battery",
 };
-const TICK = { fontSize: 10, fill: "#64748b" } as const;
+const TICK = { fontSize: 10, fill: P.inkFaint } as const;
 
 /** 355 → "5時間55分" (睡眠の分表示を読みやすくする) */
 function fmtSleepMin(v: number): string {
@@ -142,7 +143,7 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
     ideal.type === "band" ? (
       <ReferenceArea y1={ideal.lo} y2={ideal.hi} fill={BAND} stroke="none" />
     ) : ideal.good_line != null ? (
-      <ReferenceLine y={ideal.good_line} stroke="#64748b" strokeDasharray="3 3" />
+      <ReferenceLine y={ideal.good_line} stroke={P.inkFaint} strokeDasharray="3 3" />
     ) : null;
 
   const regLine = reg ? (
@@ -151,8 +152,8 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
   ) : null;
 
   const tooltipStyle = {
-    backgroundColor: "#1e293b",
-    border: "1px solid #334155",
+    backgroundColor: P.panel,
+    border: `1px solid ${P.hairline}`,
     fontSize: 12,
   };
   const tooltipFormatter = (v: number | string) => {
@@ -216,8 +217,8 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
                     dot={false} connectNulls isAnimationActive={false} />
               {/* 「今」の境界 */}
               {pred && (
-                <ReferenceLine x={pred.today} stroke="#64748b" strokeDasharray="2 3"
-                  label={{ value: "今", fontSize: 9, fill: "#94a3b8", position: "insideTopRight" }} />
+                <ReferenceLine x={pred.today} stroke={P.inkFaint} strokeDasharray="2 3"
+                  label={{ value: "今", fontSize: 9, fill: P.inkDim, position: "insideTopRight" }} />
               )}
             </ComposedChart>
           ) : (
@@ -236,7 +237,7 @@ function TrendCard({ metricKey, metric, granularity, hint }: {
         <div className="mt-1 flex flex-wrap gap-x-3 text-[9px] text-ink-faint">
           <span><span style={{ color: LINE }}>━</span> 実測</span>
           <span><span style={{ color: PRED }}>┈</span> 予測(欠損/未来)</span>
-          <span><span style={{ color: "#38bdf8" }}>▓</span> 範囲</span>
+          <span><span style={{ color: P.info }}>▓</span> 範囲</span>
           <span>｜今 で過去/未来を区切り</span>
         </div>
       )}

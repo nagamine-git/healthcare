@@ -10,6 +10,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { api } from "../lib/api";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 理想体型と現在地のギャップを「結局何をすべきか」に翻訳して見せるカード。
@@ -19,6 +20,7 @@ import { api } from "../lib/api";
 export function PhysiqueGapPlan() {
   const q = useQuery({ queryKey: ["physique-plan"], queryFn: api.physiquePlan });
   const p = q.data;
+  if (q.isLoading) return <LoadingState height="h-40" />;
   if (!p) return null;
   if (!p.available) {
     return (

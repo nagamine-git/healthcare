@@ -2,33 +2,33 @@ import { useEffect, useState } from "react";
 import { TodayPage } from "./pages/Today";
 import { DebugPage } from "./pages/Debug";
 import { CompassPage, type CompassSegment } from "./pages/Compass";
-import { GardenPage } from "./pages/Garden";
 import { CheckupPage } from "./pages/Checkup";
 import { JournalPage } from "./pages/Journal";
 import { FinancePage } from "./pages/Finance";
 import { ConsultPage } from "./pages/Consult";
 import { BottomNav } from "./components/ui/BottomNav";
+import { QuickLogSheet } from "./components/QuickLogSheet";
 
-type View = "home" | "debug" | "compass" | "garden" | "checkup" | "journal" | "finance" | "consult";
+type View = "home" | "debug" | "compass" | "checkup" | "journal" | "finance" | "consult";
 
-// 旧ハッシュ(#identity/#life/#becoming)は統合された羅針盤の各セグメントへ着地させる。
+// 旧ハッシュ(#identity/#life/#becoming/#garden)は統合された羅針盤の各セグメントへ着地させる。
 const COMPASS_HASHES: Record<string, CompassSegment> = {
   "#compass": "values",
   "#identity": "values",
   "#life": "purpose",
   "#becoming": "path",
+  "#garden": "garden",
 };
 
 function viewFromHash(): View {
   const h = window.location.hash;
   if (h === "#debug") return "debug";
   if (h in COMPASS_HASHES) return "compass";
-  if (h === "#garden") return "garden";
   if (h === "#checkup") return "checkup";
   if (h === "#journal") return "journal";
   if (h === "#finance") return "finance";
-  if (h === "#consult") return "consult";
-  return "home";
+  if (h.startsWith("#consult")) return "consult"; // #consult?prefill=... も相談へ
+  return "home"; // #tab-xxx は Today 内タブ指定として Today が解釈する
 }
 
 export default function App() {
@@ -36,11 +36,13 @@ export default function App() {
   const [compassSeg, setCompassSeg] = useState<CompassSegment>(
     COMPASS_HASHES[window.location.hash] ?? "values",
   );
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
 
   useEffect(() => {
     const handler = () => {
       setView(viewFromHash());
       setCompassSeg(COMPASS_HASHES[window.location.hash] ?? "values");
+      setQuickLogOpen(false); // 画面遷移でシートは閉じる
     };
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
@@ -55,8 +57,6 @@ export default function App() {
         <DebugPage onBack={() => (window.location.hash = "")} />
       ) : view === "compass" ? (
         <CompassPage initialSegment={compassSeg} />
-      ) : view === "garden" ? (
-        <GardenPage onBack={() => (window.location.hash = "")} />
       ) : view === "checkup" ? (
         <CheckupPage onBack={() => (window.location.hash = "")} />
       ) : view === "journal" ? (
@@ -69,7 +69,8 @@ export default function App() {
         <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
       )}
       {/* 全画面に常設のナビ(各ページが .pb-nav で下余白を確保) */}
-      <BottomNav current={view} />
+      <BottomNav current={view} onQuickLog={() => setQuickLogOpen(true)} />
+      <QuickLogSheet open={quickLogOpen} onClose={() => setQuickLogOpen(false)} />
     </>
   );
 }

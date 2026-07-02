@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type FitnessComposite, type FitnessTestEntry } from "../lib/api";
 import { BellCurve } from "./BellCurve";
 import { MeasureModal } from "./measure/MeasureModal";
+import { LoadingState } from "./ui/cockpit";
 
 const TEST_LABEL: Record<string, string> = {
   grip: "握力",
@@ -64,6 +65,7 @@ export function FitnessTestPanel() {
   });
 
   const data = q.data;
+  if (q.isLoading) return <LoadingState height="h-40" />;
   if (!data) return null;
 
   return (

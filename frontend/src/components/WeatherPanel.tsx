@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type { LaundryAdvice, WeatherDaily, WeatherHourly, WeatherIcon } from "../lib/api";
+import { P } from "../lib/palette";
 
 const ICONS: Record<WeatherIcon, LucideIcon> = {
   sun: Sun,
@@ -151,10 +152,10 @@ export function WeatherPanel() {
 
 // UV指数 (WHO 区分) → 色とラベル。乾燥力(日射)の目安にもなる。
 function uvColor(uv: number): string {
-  if (uv < 3) return "#34d399"; // 弱い
-  if (uv < 6) return "#fbbf24"; // 中程度
+  if (uv < 3) return P.prog300; // 弱い
+  if (uv < 6) return P.act300; // 中程度
   if (uv < 8) return "#fb923c"; // 強い
-  if (uv < 11) return "#f87171"; // 非常に強い
+  if (uv < 11) return P.risk300; // 非常に強い
   return "#c084fc"; // 極端
 }
 function uvLabel(uv: number): string {

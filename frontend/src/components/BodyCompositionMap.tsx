@@ -1,5 +1,6 @@
 import { EVIDENCE_LABEL, weightAt, weightForBmi, zonesFor } from "../lib/bodyCompZones";
 import type { Zone } from "../lib/bodyCompZones";
+import { P } from "../lib/palette";
 
 /**
  * 体組成マップ: X=体重 / Y=体脂肪率 の平面に、目的別ゾーン (健康/体力/実用/魅力) を
@@ -64,14 +65,14 @@ export function BodyCompositionMap({
         {/* グリッド + 軸 */}
         {wTicks.map((w) => (
           <g key={`wx${w}`}>
-            <line x1={x(w)} y1={PAD.t} x2={x(w)} y2={H - PAD.b} stroke="#1e293b" strokeWidth={1} />
-            <text x={x(w)} y={H - PAD.b + 12} fontSize={8} fill="#64748b" textAnchor="middle">{w}</text>
+            <line x1={x(w)} y1={PAD.t} x2={x(w)} y2={H - PAD.b} stroke={P.panel} strokeWidth={1} />
+            <text x={x(w)} y={H - PAD.b + 12} fontSize={8} fill={P.inkFaint} textAnchor="middle">{w}</text>
           </g>
         ))}
         {bfTicks.map((bf) => (
           <g key={`by${bf}`}>
-            <line x1={PAD.l} y1={y(bf)} x2={W - PAD.r} y2={y(bf)} stroke="#1e293b" strokeWidth={1} />
-            <text x={PAD.l - 3} y={y(bf) + 3} fontSize={8} fill="#64748b" textAnchor="end">{bf}%</text>
+            <line x1={PAD.l} y1={y(bf)} x2={W - PAD.r} y2={y(bf)} stroke={P.panel} strokeWidth={1} />
+            <text x={PAD.l - 3} y={y(bf) + 3} fontSize={8} fill={P.inkFaint} textAnchor="end">{bf}%</text>
           </g>
         ))}
         <text x={W - PAD.r} y={H - PAD.b + 12} fontSize={8} fill="#475569" textAnchor="end">体重kg →</text>
@@ -85,15 +86,15 @@ export function BodyCompositionMap({
         {/* 現在地 */}
         {current && current.bf != null && current.weight != null && (
           <g>
-            <circle cx={x(current.weight)} cy={y(current.bf)} r={4} fill="#f8fafc" stroke="#0f172a" strokeWidth={1.5} />
-            <text x={x(current.weight) + 6} y={y(current.bf) - 5} fontSize={8} fill="#f8fafc">現在</text>
+            <circle cx={x(current.weight)} cy={y(current.bf)} r={4} fill={P.ink} stroke={P.hull} strokeWidth={1.5} />
+            <text x={x(current.weight) + 6} y={y(current.bf) - 5} fontSize={8} fill={P.ink}>現在</text>
           </g>
         )}
         {/* 目標地 */}
         {target && (
           <g>
-            <circle cx={x(target.weight)} cy={y(target.bf)} r={4.5} fill="#34d399" stroke="#022c22" strokeWidth={1.5} />
-            <text x={x(target.weight) + 6} y={y(target.bf) + 10} fontSize={8} fill="#6ee7b7">目標</text>
+            <circle cx={x(target.weight)} cy={y(target.bf)} r={4.5} fill={P.prog300} stroke="#022c22" strokeWidth={1.5} />
+            <text x={x(target.weight) + 6} y={y(target.bf) + 10} fontSize={8} fill={P.prog300}>目標</text>
           </g>
         )}
       </svg>

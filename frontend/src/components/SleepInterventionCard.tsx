@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ear, Eye, VolumeX, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { LoadingState } from "./ui/cockpit";
 import type {
   SleepInterventionFlags,
   SleepInterventionNight,
@@ -62,7 +63,8 @@ export function SleepInterventionCard() {
     },
   });
 
-  if (q.isLoading || !q.data) return null;
+  if (q.isLoading) return <LoadingState />;
+  if (!q.data) return null;
   const t = q.data.tonight;
   const recorded = !!t.updated_at;
 

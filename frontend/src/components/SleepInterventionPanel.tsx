@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { FlaskConical } from "lucide-react";
 import { api } from "../lib/api";
 import type { SleepInterventionOutcome, SleepInterventionResult } from "../lib/api";
+import { askAi } from "../lib/askAi";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 就寝前介入の n-of-1 効果分析。各介入が睡眠の質を有意に改善するかを
@@ -75,7 +77,8 @@ function Row({ iv }: { iv: SleepInterventionResult }) {
 
 export function SleepInterventionPanel() {
   const q = useQuery({ queryKey: ["sleep-interventions"], queryFn: api.sleepInterventions });
-  if (q.isLoading || !q.data) return null;
+  if (q.isLoading) return <LoadingState height="h-40" />;
+  if (!q.data) return null;
   const s = q.data;
 
   if (s.status === "accumulating") {
@@ -98,9 +101,23 @@ export function SleepInterventionPanel() {
       <div className="flex items-center gap-1.5">
         <FlaskConical size={14} className="text-indigo-300" />
         <span className="text-xs uppercase tracking-wider text-ink-dim">介入の効果検証</span>
-        <span className="ml-auto text-[10px] text-ink-faint">
-          n={s.n_nights}夜 · 確度
-          {s.reliability === "high" ? "高" : s.reliability === "medium" ? "中" : "低"}
+        <span className="ml-auto flex items-center gap-2 text-[10px] text-ink-faint">
+          <button
+            onClick={() =>
+              askAi(
+                `就寝前介入の検証結果: ${s.interventions
+                  .map((iv) => `${iv.label}=${iv.verdict}(着${iv.n_did}/外${iv.n_didnt}夜)`)
+                  .join(", ")}。この結果をどう解釈して、次に何を試すべき?`,
+              )
+            }
+            className="underline hover:text-ink-dim"
+          >
+            AIに聞く
+          </button>
+          <span>
+            n={s.n_nights}夜 · 確度
+            {s.reliability === "high" ? "高" : s.reliability === "medium" ? "中" : "低"}
+          </span>
         </span>
       </div>
 

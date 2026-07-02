@@ -3,6 +3,7 @@ import { ChevronDown, Users } from "lucide-react";
 import { useState } from "react";
 import { api, type PhysiqueDistributionMetric } from "../lib/api";
 import { BellCurve } from "./BellCurve";
+import { LoadingState } from "./ui/cockpit";
 
 /**
  * 体型の母集団分布。BMI / 体脂肪率 / FFMI について、日本人 同年代・同性の分布
@@ -13,6 +14,7 @@ import { BellCurve } from "./BellCurve";
 export function DistributionPanel() {
   const q = useQuery({ queryKey: ["physique-distribution"], queryFn: api.physiqueDistribution });
   const data = q.data;
+  if (q.isLoading) return <LoadingState height="h-40" />;
   if (!data) return null;
 
   return (

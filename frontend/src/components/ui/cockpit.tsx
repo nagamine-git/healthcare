@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { P } from "../../lib/palette";
 
 type Tone = "prog" | "act" | "risk" | "info" | "neutral";
 
@@ -10,11 +11,11 @@ const TONE_TEXT: Record<Tone, string> = {
   neutral: "text-ink",
 };
 const TONE_STROKE: Record<Tone, string> = {
-  prog: "#10b981",
-  act: "#f59e0b",
-  risk: "#fb5b73",
-  info: "#38bdf8",
-  neutral: "#9fabbd",
+  prog: P.prog,
+  act: P.act,
+  risk: P.risk,
+  info: P.info,
+  neutral: P.inkDim,
 };
 
 /** 計器ラベル(小さく・トラッキングの効いた大文字) */
@@ -25,6 +26,41 @@ export function Label({ children }: { children: ReactNode }) {
 /** ロード中のプレースホルダ(レイアウトを保つ)。 */
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`shimmer rounded-card ${className}`} />;
+}
+
+/** セクション見出し(ページ横断の共通体裁)。Today ローカルから昇格。 */
+export function SectionHeader({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-3 mt-2 flex items-baseline gap-3 border-b border-hairline pb-1.5">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-dim">{label}</h2>
+      {hint && <span className="text-[10px] text-ink-faint">{hint}</span>}
+    </div>
+  );
+}
+
+/** パネル形状のロード中表示。無言 return null の代わりに置き、レイアウトの揺れを防ぐ。 */
+export function LoadingState({ height = "h-24" }: { height?: string }) {
+  return <Skeleton className={`${height} w-full bg-hull/40`} />;
+}
+
+/** パネル内エラーの共通表現 (握り潰さず可視化する)。 */
+export function ErrorState({
+  message = "読み込みに失敗しました",
+  onRetry,
+}: {
+  message?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <section className="flex items-center gap-2 rounded-xl bg-hull/40 p-3 text-[11px] text-risk/90">
+      <span className="min-w-0 flex-1">⚠ {message}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="shrink-0 text-ink-faint underline hover:text-ink-dim">
+          再試行
+        </button>
+      )}
+    </section>
+  );
 }
 
 /** iOS グルーピングカード。glow で計器の微発光を足す。 */
@@ -154,7 +190,7 @@ export function RingGauge({
       <svg width={size} height={size} className="-rotate-[135deg]">
         <circle
           cx={size / 2} cy={size / 2} r={r}
-          fill="none" stroke="#222c3b" strokeWidth={9} strokeLinecap="round"
+          fill="none" stroke={P.hairline} strokeWidth={9} strokeLinecap="round"
           strokeDasharray={`${dash} ${c}`}
         />
         <circle

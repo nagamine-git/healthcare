@@ -5,6 +5,7 @@
  * - sex で骨格 (肩幅/腰幅の比) を変える
  * 写真ではなく抽象シルエットなので、体組成の "見た目の違い" だけを誠実に示す。
  */
+import { P } from "../lib/palette";
 export function Silhouette({
   bodyFat,
   ffmi,
@@ -31,7 +32,7 @@ export function Silhouette({
   const hip = (sex === "male" ? 9 : 11) + fat * 4;
 
   const cx = 32;
-  const color = active ? "#34d399" : "#64748b";
+  const color = active ? P.prog300 : P.inkFaint;
 
   // 体の輪郭 (頭→肩→ウエスト→腰→脚) を左右対称のパスで
   const body = [

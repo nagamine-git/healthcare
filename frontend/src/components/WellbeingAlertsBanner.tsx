@@ -1,4 +1,5 @@
 import type { WellbeingAlert } from "../lib/api";
+import { askAi } from "../lib/askAi";
 
 type Props = {
   alerts?: WellbeingAlert[];
@@ -36,6 +37,14 @@ export function WellbeingAlertsBanner({ alerts }: Props) {
           <p className="basis-full text-[12px] leading-relaxed">
             <span className="opacity-70">→ </span>
             <span className="font-medium">{a.action}</span>
+            <button
+              onClick={() =>
+                askAi(`「${a.title}」というアラートが出ています(${a.detail})。どう対処すべき?`)
+              }
+              className="ml-2 text-[11px] underline opacity-70 hover:opacity-100"
+            >
+              AIに聞く
+            </button>
           </p>
         </div>
       ))}

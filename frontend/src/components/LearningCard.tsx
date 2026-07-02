@@ -4,6 +4,7 @@ import { BookOpen, Check, ChevronDown, ChevronUp, Flame, GraduationCap } from "l
 import { api } from "../lib/api";
 import type { LearningCheckField, LearningChapter } from "../lib/api";
 import { ChapterQuiz } from "./ChapterQuiz";
+import { P } from "../lib/palette";
 
 /**
  * The Rust Book 完走プラン (週1章・約5ヶ月) の進捗カード。
@@ -207,29 +208,29 @@ function ProjectionGraph({ p }: { p: import("../lib/api").LearningProjection }) 
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="完走予測グラフ">
         {[0, 50, 100].map((g) => (
-          <line key={g} x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="#1e293b" strokeWidth={0.5} />
+          <line key={g} x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke={P.panel} strokeWidth={0.5} />
         ))}
         {/* 予測帯 (好調〜不調の幅) */}
-        {showProj && <polygon points={band} fill="#fbbf24" opacity={0.1} />}
+        {showProj && <polygon points={band} fill={P.act300} opacity={0.1} />}
         {/* 目標線 (開始0%→目標日100%、グレー直線) */}
         {targetTs && (
-          <line x1={x(start)} y1={y(0)} x2={x(targetTs)} y2={y(100)} stroke="#64748b" strokeWidth={1.3} />
+          <line x1={x(start)} y1={y(0)} x2={x(targetTs)} y2={y(100)} stroke={P.inkFaint} strokeWidth={1.3} />
         )}
         {/* best予想 (好調 1.43倍速) / N予想 (標準) / worst予想 (不調 0.7倍) */}
         {showProj && p.eta_best && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaBest)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaBest)} y2={y(100)} stroke={P.act300} strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
         )}
         {showProj && p.eta_worst && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaWorst)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaWorst)} y2={y(100)} stroke={P.act300} strokeWidth={1.1} strokeDasharray="2 2" opacity={0.7} />
         )}
         {showProj && p.eta_normal && (
-          <line x1={x(today)} y1={y(p.pct)} x2={x(etaN)} y2={y(100)} stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="5 3" opacity={0.9} />
+          <line x1={x(today)} y1={y(p.pct)} x2={x(etaN)} y2={y(100)} stroke={P.act300} strokeWidth={1.5} strokeDasharray="5 3" opacity={0.9} />
         )}
         {/* 実測 (オレンジ実線) */}
-        <polyline points={p.series.map((s) => `${x(new Date(s.date).getTime())},${y(s.pct)}`).join(" ")} fill="none" stroke="#f59e0b" strokeWidth={1.8} strokeLinejoin="round" />
-        <circle cx={x(today)} cy={y(p.pct)} r={2.5} fill="#f59e0b" />
-        <text x={x(start)} y={H - 4} fontSize={9} fill="#64748b" textAnchor="start">{fmt(p.series[0].date)}開始</text>
-        {showProj && <text x={W - padR} y={H - 4} fontSize={9} fill="#fbbf24" textAnchor="end">完走 {fmt(p.eta_best)}〜{fmt(p.eta_worst)}</text>}
+        <polyline points={p.series.map((s) => `${x(new Date(s.date).getTime())},${y(s.pct)}`).join(" ")} fill="none" stroke={P.act} strokeWidth={1.8} strokeLinejoin="round" />
+        <circle cx={x(today)} cy={y(p.pct)} r={2.5} fill={P.act} />
+        <text x={x(start)} y={H - 4} fontSize={9} fill={P.inkFaint} textAnchor="start">{fmt(p.series[0].date)}開始</text>
+        {showProj && <text x={W - padR} y={H - 4} fontSize={9} fill={P.act300} textAnchor="end">完走 {fmt(p.eta_best)}〜{fmt(p.eta_worst)}</text>}
       </svg>
       {/* 凡例 */}
       <div className="mt-0.5 flex flex-wrap gap-x-3 text-[9px] text-ink-faint">

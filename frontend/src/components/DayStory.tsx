@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import type { DayStorySegment, DayStoryInsight } from "../lib/api";
 import { DayDigest } from "./DayDigest";
 import { Skeleton } from "./ui/cockpit";
+import { P } from "../lib/palette";
 
 type Win = "day" | "24h";
 
@@ -37,15 +38,15 @@ const bodyY = (v: number) => BODY_Y1 - (Math.max(0, Math.min(100, v)) / 100) * B
 
 function colorFor(seg: DayStorySegment): string {
   if (seg.source === "sleep") return "#6366f1";
-  if (seg.source === "calendar") return "#64748b";
-  if (seg.source === "workout") return "#34d399";
+  if (seg.source === "calendar") return P.inkFaint;
+  if (seg.source === "workout") return P.prog300;
   const l = seg.label;
-  if (l.includes("記録の谷間")) return "#334155";
-  if (l.includes("外出") || l.includes("移動")) return "#38bdf8";
+  if (l.includes("記録の谷間")) return P.hairline;
+  if (l.includes("外出") || l.includes("移動")) return P.info;
   if (l.includes("家事")) return "#22d3ee"; // 家事・育児など = シアン
-  if (l.includes("集中") || l.includes("負荷") || l.includes("緊張")) return "#f59e0b";
+  if (l.includes("集中") || l.includes("負荷") || l.includes("緊張")) return P.act;
   if (l.includes("休息") || l.includes("リラックス") || l.includes("ゆったり") || l.includes("在席")) return "#2dd4bf";
-  return "#64748b";
+  return P.inkFaint;
 }
 
 const SOURCE_NOTE: Record<DayStorySegment["source"], string> = {
@@ -136,8 +137,8 @@ export function DayStory() {
     caffeine_cutoff: "☕", dim_light: "🌙",
   };
   const SCHED_FILL: Record<string, string> = {
-    dinner: "#fb923c", bath: "#22d3ee", bedtime: "#818cf8", wake: "#fbbf24",
-    caffeine_cutoff: "#f59e0b", dim_light: "#6366f1",
+    dinner: "#fb923c", bath: "#22d3ee", bedtime: "#818cf8", wake: P.act300,
+    caffeine_cutoff: P.act, dim_light: "#6366f1",
   };
   const schedMarks = (t?.schedule ?? [])
     .map((sc) => ({
@@ -218,13 +219,13 @@ export function DayStory() {
         {nowH != null && nowH < 24 && (
           <>
             <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill="#475569" opacity={0.12} />
-            <text x={(X(nowH) + X(24)) / 2} y={ACT_Y + 9} fontSize={9} fill="#94a3b8" textAnchor="middle" opacity={0.8}>予測ゾーン</text>
+            <text x={(X(nowH) + X(24)) / 2} y={ACT_Y + 9} fontSize={9} fill={P.inkDim} textAnchor="middle" opacity={0.8}>予測ゾーン</text>
           </>
         )}
         {/* 時間グリッド (拡大で細かく)。整時は濃いめ、半端目盛りは薄く */}
         {gridTicks.map((h) => (
           <line key={h} x1={X(h)} y1={ACT_Y} x2={X(h)} y2={BODY_Y1}
-                stroke="#1e293b" strokeWidth={Number.isInteger(h) && h % 6 === 0 ? 1 : 0.5}
+                stroke={P.panel} strokeWidth={Number.isInteger(h) && h % 6 === 0 ? 1 : 0.5}
                 opacity={Number.isInteger(h) ? 1 : 0.5} />
         ))}
 
@@ -241,7 +242,7 @@ export function DayStory() {
               </rect>
               {w >= labelMinW && seg.label !== "記録の谷間" && (
                 <text x={x + w / 2} y={ACT_Y + ACT_H / 2 + 4} fontSize={12} fontWeight={600}
-                      fill="#0f172a" textAnchor="middle" pointerEvents="none">{label}</text>
+                      fill={P.hull} textAnchor="middle" pointerEvents="none">{label}</text>
               )}
             </g>
           );
@@ -250,7 +251,7 @@ export function DayStory() {
         {/* ── 座りっぱなし区間 (30分超) を活動バー下端に赤帯で警告 ── */}
         {longSed.map((r, i) => (
           <rect key={`sed${i}`} x={X(r.start_h)} y={ACT_Y + ACT_H - 2}
-                width={Math.max(2, X(r.end_h) - X(r.start_h))} height={2.5} fill="#f87171" opacity={0.9}>
+                width={Math.max(2, X(r.end_h) - X(r.start_h))} height={2.5} fill={P.risk300} opacity={0.9}>
             <title>{`座りっぱなし ${(r.end_h - r.start_h).toFixed(1)}h (30分ごとに立つと良い)`}</title>
           </rect>
         ))}
@@ -261,7 +262,7 @@ export function DayStory() {
           const w = Math.max(3, X(e.end_h) - x);
           return (
             <rect key={`ev${i}`} x={x + 0.5} y={ACT_Y + 0.5} width={w - 1} height={ACT_H - 1}
-                  rx={3} fill="none" stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 2" opacity={0.55}>
+                  rx={3} fill="none" stroke={P.inkDim} strokeWidth={1} strokeDasharray="3 2" opacity={0.55}>
               <title>{`予定(参考): ${e.title}`}</title>
             </rect>
           );
@@ -271,7 +272,7 @@ export function DayStory() {
         {(t?.migraine ?? []).map((m, i) => (
           <rect key={`mig${i}`} x={X(m.start_h)} y={ACT_Y}
                 width={Math.max(3, X(m.end_h ?? nowH ?? 24) - X(m.start_h))}
-                height={BODY_Y1 - ACT_Y} fill="#f43f5e" opacity={0.13}>
+                height={BODY_Y1 - ACT_Y} fill={P.risk} opacity={0.13}>
             <title>{`頭痛${m.severity != null ? ` 強度${m.severity}/10` : ""}`}</title>
           </rect>
         ))}
@@ -287,14 +288,14 @@ export function DayStory() {
         {/* 体調記録: 実入力=塗り◆、無ければ推定=中空◇ を現在位置に補完 */}
         {t?.checkin ? (
           <g transform={`translate(${X(t.checkin.h)},${EVT_Y})`}>
-            <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)" fill="#e2e8f0">
+            <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)" fill={P.ink}>
               <title>{`体調記録 気分${t.checkin.mood ?? "-"}/活力${t.checkin.energy ?? "-"}/ストレス${t.checkin.stress ?? "-"}/筋肉痛${t.checkin.soreness ?? "-"}`}</title>
             </rect>
           </g>
         ) : t?.checkin_estimated && nowH != null ? (
           <g transform={`translate(${X(nowH)},${EVT_Y})`}>
             <rect x={-4} y={-4} width={8} height={8} transform="rotate(45)"
-                  fill="none" stroke="#94a3b8" strokeWidth={1.2} opacity={0.8}>
+                  fill="none" stroke={P.inkDim} strokeWidth={1.2} opacity={0.8}>
               <title>{`体調(推定) 気分${t.checkin_estimated.mood ?? "-"}/活力${t.checkin_estimated.energy ?? "-"}/ストレス${t.checkin_estimated.stress ?? "-"}/筋肉痛${t.checkin_estimated.soreness ?? "-"}`}</title>
             </rect>
           </g>
@@ -305,7 +306,7 @@ export function DayStory() {
         {(t?.recovery_bands ?? []).map((r, i) => (
           <rect key={`rec${i}`} x={X(r.start_h)} y={BODY_Y0}
                 width={Math.max(2, X(r.end_h) - X(r.start_h))} height={BODY_H}
-                fill="#34d399" opacity={0.07}>
+                fill={P.prog300} opacity={0.07}>
             <title>{`回復ゾーン (自律神経が休息モード)`}</title>
           </rect>
         ))}
@@ -334,17 +335,17 @@ export function DayStory() {
         {(t?.focus_windows ?? []).map((f, i) => (
           <rect key={`fw${i}`} x={X(f.start_h)} y={ACT_Y - 0.5}
                 width={Math.max(2, X(f.end_h) - X(f.start_h))} height={ACT_H + 1}
-                fill="none" stroke="#fbbf24" strokeWidth={1.2} strokeDasharray="2 2" opacity={0.7} rx={3}>
+                fill="none" stroke={P.act300} strokeWidth={1.2} strokeDasharray="2 2" opacity={0.7} rx={3}>
             <title>{`集中ピーク窓 (予測スコア${f.score}) — 重い思考タスク向き`}</title>
           </rect>
         ))}
 
         {/* ── 身体反応トラック (Body Battery 面 + ストレス線) ── */}
-        <line x1={0} y1={BODY_Y1} x2={W} y2={BODY_Y1} stroke="#1e293b" strokeWidth={1} />
-        {bbArea && <path d={bbArea} fill="#34d399" opacity={0.16} />}
+        <line x1={0} y1={BODY_Y1} x2={W} y2={BODY_Y1} stroke={P.panel} strokeWidth={1} />
+        {bbArea && <path d={bbArea} fill={P.prog300} opacity={0.16} />}
         {bb.length > 1 && (
           <polyline points={bb.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
-                    fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" />
+                    fill="none" stroke={P.prog300} strokeWidth={2} strokeLinejoin="round" />
         )}
         {/* Body Battery 予測 (最終実測〜未来、破線)。受け渡し点にマーカー */}
         {(t?.body_battery_forecast?.length ?? 0) > 1 && (
@@ -355,28 +356,28 @@ export function DayStory() {
           </>
         )}
         {stress.length > 1 && (
-          <polyline points={stressPts} fill="none" stroke="#f59e0b" strokeWidth={1.2} opacity={0.8} />
+          <polyline points={stressPts} fill="none" stroke={P.act} strokeWidth={1.2} opacity={0.8} />
         )}
         {/* ストレス 予測 (最終実測〜未来、破線) */}
         {(t?.stress_forecast?.length ?? 0) > 1 && (
           <>
             <polyline points={t!.stress_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
-                      fill="none" stroke="#fbbf24" strokeWidth={1.4} strokeDasharray="4 3" strokeLinejoin="round" />
-            <circle cx={X(t!.stress_forecast![0].h)} cy={bodyY(t!.stress_forecast![0].v)} r={2.2} fill="#fbbf24" />
+                      fill="none" stroke={P.act300} strokeWidth={1.4} strokeDasharray="4 3" strokeLinejoin="round" />
+            <circle cx={X(t!.stress_forecast![0].h)} cy={bodyY(t!.stress_forecast![0].v)} r={2.2} fill={P.act300} />
           </>
         )}
 
         {/* 現在線 (全トラック貫通) */}
         {nowH != null && (
           <g>
-            <line x1={X(nowH)} y1={ACT_Y} x2={X(nowH)} y2={BODY_Y1} stroke="#f43f5e" strokeWidth={1.5} />
-            <circle cx={X(nowH)} cy={ACT_Y} r={3} fill="#f43f5e" />
+            <line x1={X(nowH)} y1={ACT_Y} x2={X(nowH)} y2={BODY_Y1} stroke={P.risk} strokeWidth={1.5} />
+            <circle cx={X(nowH)} cy={ACT_Y} r={3} fill={P.risk} />
           </g>
         )}
 
         {/* 時刻軸 (低不透明度)。拡大で細かく、24hビューは origin からの実時刻 */}
         {labelTicks.map((h) => (
-          <text key={h} x={X(h)} y={AXIS_Y} fontSize={10} fill="#64748b"
+          <text key={h} x={X(h)} y={AXIS_Y} fontSize={10} fill={P.inkFaint}
                 textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
         ))}
         </svg>
@@ -423,7 +424,7 @@ export function DayStory() {
         {(t?.caffeine_curve.length || t?.water) ? (
           <svg viewBox={`0 0 ${W + 12} 14`} className="w-full" aria-hidden>
             {labelTicks.map((h) => (
-              <text key={h} x={X(h)} y={10} fontSize={10} fill="#64748b"
+              <text key={h} x={X(h)} y={10} fontSize={10} fill={P.inkFaint}
                     textAnchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{tickText(h)}</text>
             ))}
           </svg>
@@ -434,12 +435,12 @@ export function DayStory() {
       {/* 行動カラー凡例 (帯の色が何を意味するか) */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-dim">
         <Swatch c="#6366f1" t="睡眠" />
-        <Swatch c="#f59e0b" t="集中・活動" />
+        <Swatch c={P.act} t="集中・活動" />
         <Swatch c="#22d3ee" t="家事・育児など" />
         <Swatch c="#2dd4bf" t="休息・在席" />
-        <Swatch c="#38bdf8" t="移動・運動" />
-        <Swatch c="#34d399" t="ワークアウト" />
-        <Swatch c="#334155" t="記録なし" />
+        <Swatch c={P.info} t="移動・運動" />
+        <Swatch c={P.prog300} t="ワークアウト" />
+        <Swatch c={P.hairline} t="記録なし" />
         <span className="flex items-center gap-1">
           <span className="inline-block h-2.5 w-3 rounded-sm border border-dashed border-ink-dim" />
           予定(参考のみ)
@@ -514,7 +515,7 @@ function SubGrid({ gridTicks, X, y0, y1 }: { gridTicks: number[]; X: (h: number)
   return (
     <>
       {gridTicks.map((h) => (
-        <line key={h} x1={X(h)} y1={y0} x2={X(h)} y2={y1} stroke="#1e293b"
+        <line key={h} x1={X(h)} y1={y0} x2={X(h)} y2={y1} stroke={P.panel}
               strokeWidth={Number.isInteger(h) && h % 6 === 0 ? 1 : 0.5}
               opacity={Number.isInteger(h) ? 1 : 0.5} />
       ))}
@@ -560,7 +561,7 @@ function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks
       {/* 歩数バー (運動量。心拍の背後に薄く) */}
       {steps.map((s, i) => s.steps > 0 && (
         <rect key={i} x={X(s.h) - binW / 2} y={H - 8 - barH(s.steps)} width={binW} height={barH(s.steps)}
-              fill="#38bdf8" opacity={0.22}>
+              fill={P.info} opacity={0.22}>
           <title>{`${s.steps}歩`}</title>
         </rect>
       ))}
@@ -575,14 +576,14 @@ function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks
       {/* 心拍 予測 (最終実測〜未来、安静へ減衰。破線)。受け渡し点にマーカー */}
       {(hrForecast?.length ?? 0) > 1 && (
         <>
-          <polyline points={hrForecast!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fda4af" strokeWidth={1.8} strokeDasharray="4 3" opacity={0.95} strokeLinejoin="round" />
-          <circle cx={X(hrForecast![0].h)} cy={y(hrForecast![0].v)} r={2.4} fill="#fda4af" />
+          <polyline points={hrForecast!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke={P.risk300} strokeWidth={1.8} strokeDasharray="4 3" opacity={0.95} strokeLinejoin="round" />
+          <circle cx={X(hrForecast![0].h)} cy={y(hrForecast![0].v)} r={2.4} fill={P.risk300} />
         </>
       )}
-      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill="#94a3b8">
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={P.inkDim}>
         <tspan fill="#fb7185">━</tspan> 心拍(平滑){nowBpm != null ? `約${Math.round(nowBpm)}` : ""}{restingHr != null ? `/安静${Math.round(restingHr)}` : ""}
-        {"  "}<tspan fill="#38bdf8">▮</tspan> 歩数(動いた量)
+        {"  "}<tspan fill={P.info}>▮</tspan> 歩数(動いた量)
       </text>
     </svg>
   );
@@ -612,15 +613,15 @@ function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, 
       {/* 覚醒効果の下限 (1mg/kg, Smith 2002): これ以上残れば効果継続 */}
       {floor != null && floor < peak && (
         <>
-          <line x1={0} y1={y(floor)} x2={SUB_W} y2={y(floor)} stroke="#34d399" strokeWidth={0.8} strokeDasharray="2 3" opacity={0.5} />
-          <text x={SUB_W - 4} y={y(floor) - 2} fontSize={8} fill="#34d399" textAnchor="end" opacity={0.8}>覚醒{Math.round(floor)}</text>
+          <line x1={0} y1={y(floor)} x2={SUB_W} y2={y(floor)} stroke={P.prog300} strokeWidth={0.8} strokeDasharray="2 3" opacity={0.5} />
+          <text x={SUB_W - 4} y={y(floor) - 2} fontSize={8} fill={P.prog300} textAnchor="end" opacity={0.8}>覚醒{Math.round(floor)}</text>
         </>
       )}
       {/* 就寝安全 (0.5mg/L, Drake 2013): これ以下なら睡眠を妨げにくい */}
       {threshold != null && (
         <>
-          <line x1={0} y1={y(threshold)} x2={SUB_W} y2={y(threshold)} stroke="#f59e0b" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
-          <text x={SUB_W - 4} y={y(threshold) - 2} fontSize={8} fill="#f59e0b" textAnchor="end" opacity={0.85}>就寝{Math.round(threshold)}</text>
+          <line x1={0} y1={y(threshold)} x2={SUB_W} y2={y(threshold)} stroke={P.act} strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+          <text x={SUB_W - 4} y={y(threshold) - 2} fontSize={8} fill={P.act} textAnchor="end" opacity={0.85}>就寝{Math.round(threshold)}</text>
         </>
       )}
       <path d={area} fill="#a78bfa" opacity={0.18} />
@@ -635,8 +636,8 @@ function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, 
           </>
         );
       })()}
-      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill={over || overLimit ? "#fcd34d" : "#94a3b8"}>
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={over || overLimit ? P.act300 : P.inkDim}>
         体内カフェイン 現在約{Math.round(nowMg)}mg{todayMg != null && dailyLimit != null ? ` · 本日${todayMg}/${dailyLimit}mg` : ""}
       </text>
     </svg>
@@ -671,19 +672,19 @@ function WaterTrack({ water, nowH, X, gridTicks }: {
   return (
     <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="水分摂取の累積">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
-      <line x1={0} y1={y(goal)} x2={SUB_W} y2={y(goal)} stroke="#38bdf8" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
+      <line x1={0} y1={y(goal)} x2={SUB_W} y2={y(goal)} stroke={P.info} strokeWidth={0.8} strokeDasharray="4 3" opacity={0.5} />
       {/* いつものペース(過去の同時刻累積中央値) = 予測。破線で重ねる */}
       {(water.expected_curve?.length ?? 0) > 1 && (
         <polyline points={water.expected_curve!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")}
-          fill="none" stroke="#fbbf24" strokeWidth={1.4} strokeDasharray="4 3" opacity={0.9} strokeLinejoin="round" />
+          fill="none" stroke={P.act300} strokeWidth={1.4} strokeDasharray="4 3" opacity={0.9} strokeLinejoin="round" />
       )}
       {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
       {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
       {water.intake_curve.map((p, i) => (<circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />))}
-      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill={behind ? "#fbbf24" : deficit > 500 ? "#fcd34d" : "#94a3b8"}>
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={behind ? P.act300 : deficit > 500 ? P.act300 : P.inkDim}>
         水分 {total}/{goal}mL{src}
-        {expNow != null ? <tspan fill="#fbbf24"> · いつも今頃{Math.round(expNow)}{behind ? " → 飲もう！" : ""}</tspan> : null}
+        {expNow != null ? <tspan fill={P.act300}> · いつも今頃{Math.round(expNow)}{behind ? " → 飲もう！" : ""}</tspan> : null}
         {water.sweat_ml > 0 ? ` · 発汗${water.sweat_ml}` : ""}
       </text>
     </svg>
@@ -710,10 +711,10 @@ function PressureTrack({ curve, nowH, X, gridTicks }: {
   return (
     <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="気圧(実測+予報)">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
-      {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke="#94a3b8" strokeWidth={1.5} />}
-      {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? "#fb7185" : "#94a3b8"} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
-      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke="#f43f5e" strokeWidth={1} />}
-      <text x={4} y={9} fontSize={10} fill={warnDrop ? "#fda4af" : "#94a3b8"}>
+      {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={P.inkDim} strokeWidth={1.5} />}
+      {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? "#fb7185" : P.inkDim} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
+      {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
+      <text x={4} y={9} fontSize={10} fill={warnDrop ? P.risk300 : P.inkDim}>
         気圧(実測+予報){nowHpa != null ? ` · 現在${Math.round(nowHpa)}hPa` : ""}{drop != null ? ` · 3h後${drop > 0 ? "+" : ""}${drop.toFixed(1)}${warnDrop ? " ⚠頭痛注意" : ""}` : ""}
       </text>
     </svg>

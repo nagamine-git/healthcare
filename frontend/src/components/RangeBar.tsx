@@ -1,4 +1,5 @@
 import type { TargetRange } from "../lib/api";
+import { P } from "../lib/palette";
 
 type Props = {
   current: number | null;
@@ -37,7 +38,7 @@ export function RangeBar({ current, target, scaleMax }: Props) {
       ? target.ideal == null || cur >= target.ideal
       : target.ideal == null || Math.abs(cur - target.ideal) / target.ideal < 0.1;
 
-  const fillColor = current == null ? "#475569" : inRange ? "#34d399" : "#f59e0b";
+  const fillColor = current == null ? P.hairline : inRange ? P.prog300 : P.act;
   const overColor = "#fb7185"; // 範囲を大きく超えた場合
   const farOver =
     target.kind === "range" && target.max != null && cur > target.max * 1.2;

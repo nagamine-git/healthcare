@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api, type ChatMsg } from "../lib/api";
 import { Panel } from "./ui/cockpit";
@@ -15,6 +15,19 @@ export function ConsultChat() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+
+  // 他画面からの文脈付き深リンク (#consult?prefill=...) を初期入力として消費する
+  useEffect(() => {
+    const m = window.location.hash.match(/^#consult\?prefill=(.+)$/);
+    if (m) {
+      try {
+        setInput(decodeURIComponent(m[1]));
+      } catch {
+        /* 不正なエンコードは無視 */
+      }
+      window.location.hash = "#consult"; // 再訪時に再注入しない
+    }
+  }, []);
 
   const send = useMutation({
     mutationFn: (msgs: ChatMsg[]) => api.consult(msgs),

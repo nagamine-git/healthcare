@@ -86,7 +86,7 @@ function ContributionGrid({
   );
 }
 
-export function GardenPage({ onBack }: { onBack: () => void }) {
+export function GardenPage({ onBack, embedded }: { onBack: () => void; embedded?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["garden"], queryFn: api.garden });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["garden"] });
@@ -116,11 +116,21 @@ export function GardenPage({ onBack }: { onBack: () => void }) {
   const selectedCell = q.data?.grid.find((c) => c.date === selected) ?? null;
 
   return (
-    <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
-      <button onClick={onBack} className="text-sm text-ink-dim">
-        ← 戻る
-      </button>
-      <h1 className="text-xl font-bold">理想の庭</h1>
+    <div
+      className={
+        embedded
+          ? "space-y-4"
+          : "safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4"
+      }
+    >
+      {!embedded && (
+        <>
+          <button onClick={onBack} className="text-sm text-ink-dim">
+            ← 戻る
+          </button>
+          <h1 className="text-xl font-bold">理想の庭</h1>
+        </>
+      )}
       {q.isLoading && <p>読み込み中…</p>}
       {q.isError && <p className="text-risk">取得に失敗しました</p>}
       {q.data && (
