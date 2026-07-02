@@ -1,0 +1,46 @@
+# CI: push/PR で backend (pytest+ruff) と frontend (tsc+vite build) を検証する。
+# デプロイは fp7-e14 側の cron (bin/auto-deploy.sh) が origin/main を5分毎にポーリングして行う。
+# ここが green であることが、その自動デプロイの安全網になる。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -e '.' --group dev
+      - name: Ruff
+        run: .venv/bin/python -m ruff check app/ tests/
+      - name: Pytest
+        run: .venv/bin/python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build (tsc + vite)
+        run: npm run build
