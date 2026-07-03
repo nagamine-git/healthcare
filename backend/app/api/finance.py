@@ -257,9 +257,36 @@ class AssetImportIn(BaseModel):
     images: list[ImageItem] | None = None  # 複数スクショ(MoneyForwardは1画面に収まらない)
 
 
+def merge_asset_items(items: list[dict]) -> list[dict]:
+    """取込バッチ内の重複を整理する (eMAXIS 2口座が1つに潰れるバグの修正)。
+
+    - **銘柄+金額が完全一致** = 複数スクショの重なりで同じ行が2回写った → 1つに排除。
+    - **同名で金額が違う** = 本当に別の保有 (特定口座/NISA 等で MoneyForward が同名表示)
+      → 潰さず「名前 (2)」の連番サフィックスで別行として残す。
+    金額を DB の照合キーにはしない (評価額は毎日変わり、再取込のたびに全資産が複製されるため)。
+    """
+    seen_exact: set[tuple[str, float]] = set()
+    count_by_name: dict[str, int] = {}
+    out: list[dict] = []
+    for it in items:
+        name, value = str(it["name"]), float(it["value"])
+        if (name, value) in seen_exact:
+            continue  # 画面の重なり
+        seen_exact.add((name, value))
+        n = count_by_name.get(name, 0) + 1
+        count_by_name[name] = n
+        final = name if n == 1 else f"{name} ({n})"
+        out.append({"name": final, "value": value})
+    return out
+
+
 @router.post("/api/finance/import-assets")
 async def import_assets(body: AssetImportIn) -> dict[str, Any]:
-    """資産を CSV か スクショ(複数可・OCR)から取り込み、name 一致で upsert(全画面を合算)。"""
+    """資産を CSV か スクショ(複数可・OCR)から取り込み、name 一致で upsert。
+
+    バッチ内の同名異額は連番サフィックスで別行に保存 (merge_asset_items)。
+    次回取込も同じ並びなら同じサフィックスに解決され、値が更新される。
+    """
     images = list(body.images or [])
     if body.image_base64:
         images.append(ImageItem(image_base64=body.image_base64, media_type=body.media_type))
@@ -275,7 +302,7 @@ async def import_assets(body: AssetImportIn) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="取り込める資産がありませんでした(LLM 未設定/読取不可の可能性)")
     with session_scope() as session:
         existing = {h.name: h for h in session.execute(select(AssetHolding)).scalars()}
-        for it in items:
+        for it in merge_asset_items(items):
             row = existing.get(it["name"])
             if row is None:
                 row = AssetHolding(name=it["name"][:120], category="import")

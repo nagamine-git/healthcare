@@ -119,6 +119,64 @@ def test_import_assets_csv_upserts(app_client):
     assert {"現金", "仮想通貨"} <= names
 
 
+def test_merge_asset_items_same_name_different_value_kept_separately():
+    """同一銘柄が複数口座 (特定/NISA 等) にある場合は潰さず連番サフィックスで別行に。"""
+    from app.api.finance import merge_asset_items
+
+    items = [
+        {"name": "SBI証券 eMAXIS Slim 米国株式(S&P500)", "value": 423410.0},
+        {"name": "SBI証券 eMAXIS Slim 米国株式(S&P500)", "value": 180000.0},
+    ]
+    merged = merge_asset_items(items)
+    assert len(merged) == 2
+    assert merged[0]["name"] == "SBI証券 eMAXIS Slim 米国株式(S&P500)"
+    assert merged[1]["name"] == "SBI証券 eMAXIS Slim 米国株式(S&P500) (2)"
+    assert merged[1]["value"] == 180000.0
+
+
+def test_merge_asset_items_screenshot_overlap_deduped():
+    """複数スクショの重なりで同じ行 (銘柄+金額が完全一致) が2回写ったら1つに。"""
+    from app.api.finance import merge_asset_items
+
+    items = [
+        {"name": "三菱UFJ銀行 普通", "value": 719540.0},
+        {"name": "三菱UFJ銀行 普通", "value": 719540.0},  # 画面の重なり
+        {"name": "みずほ銀行 普通", "value": 190167.0},
+    ]
+    merged = merge_asset_items(items)
+    assert len(merged) == 2
+    assert [m["name"] for m in merged] == ["三菱UFJ銀行 普通", "みずほ銀行 普通"]
+
+
+def test_merge_asset_items_three_way_split_numbered():
+    from app.api.finance import merge_asset_items
+
+    items = [
+        {"name": "X", "value": 1.0},
+        {"name": "X", "value": 2.0},
+        {"name": "X", "value": 3.0},
+        {"name": "X", "value": 2.0},  # 2 とは重なり (同値) → 排除
+    ]
+    merged = merge_asset_items(items)
+    assert [(m["name"], m["value"]) for m in merged] == [
+        ("X", 1.0), ("X (2)", 2.0), ("X (3)", 3.0),
+    ]
+
+
+def test_import_assets_same_name_two_accounts_end_to_end(app_client):
+    """eMAXIS が2口座 → 上書きで1つに潰れず、2行とも保存される (実バグ再現)。"""
+    csv = (
+        "SBI証券 eMAXIS Slim 米国株式(S&P500),423410\n"
+        "SBI証券 eMAXIS Slim 米国株式(S&P500),180000\n"
+    )
+    r = app_client.post("/api/finance/import-assets", json={"csv": csv})
+    assert r.status_code == 200
+    holdings = r.json()["rebalance"]["holdings"]
+    emaxis = [h for h in holdings if "eMAXIS" in h["name"]]
+    assert len(emaxis) == 2
+    assert sorted(h["value_jpy"] for h in emaxis) == [180000.0, 423410.0]
+
+
 def test_auto_allocate_excludes_dust(app_client):
     # 総資産の1%未満の極小残高は投資対象外(target_weight=0)。実データのBAT(916円)相当。
     for n, v in [("UFJ 普通", 700000),
