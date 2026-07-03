@@ -45,7 +45,13 @@ export default function App() {
       setQuickLogOpen(false); // 画面遷移でシートは閉じる
     };
     window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
+    // 「いまコレ」等の任意コンポーネントからクイック記録シートを開けるイベント
+    const openQuickLog = () => setQuickLogOpen(true);
+    window.addEventListener("open-quicklog", openQuickLog);
+    return () => {
+      window.removeEventListener("hashchange", handler);
+      window.removeEventListener("open-quicklog", openQuickLog);
+    };
   }, []);
 
   return (

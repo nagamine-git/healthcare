@@ -769,6 +769,21 @@ export type SleepInterventionHistoryNight = SleepInterventionFlags & {
   sleep_score: number | null;
 };
 export type SleepInterventionHistoryResp = { nights: SleepInterventionHistoryNight[] };
+
+// 「いまコレ」— 全ドメイン横断のネクストアクション
+export type NextActionItem = {
+  key: string;
+  priority: number;
+  title: string;
+  why: string;
+  link: string | null; // ハッシュ深リンク or "quicklog" (クイック記録シートを開く)
+};
+export type NextActionResp = {
+  primary: NextActionItem;
+  others: NextActionItem[];
+  computed_at: string;
+};
+
 export type SleepInterventionOutcome = {
   outcome: string;
   outcome_label: string;
@@ -1760,6 +1775,7 @@ export const api = {
     request<SleepInterventionAnalysis>("/api/sleep/interventions"),
   sleepInterventionHistory: () =>
     request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
+  nextAction: () => request<NextActionResp>("/api/next-action"),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,

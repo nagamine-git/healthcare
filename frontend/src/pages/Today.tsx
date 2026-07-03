@@ -34,6 +34,7 @@ import { MealPlanner } from "../components/MealPlanner";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
+import { NextActionCard } from "../components/NextActionCard";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
 import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
@@ -295,7 +296,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== 最上部: 今すぐ効くアラート(安全網)===== */}
+      {/* ===== 最上部: いまコレ(全選択肢の最優先1手) + 今すぐ効くアラート(安全網)===== */}
+      <NextActionCard />
       {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
       <MigraineRiskBanner />
 
