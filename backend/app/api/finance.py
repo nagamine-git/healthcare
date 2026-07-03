@@ -255,6 +255,9 @@ class AssetImportIn(BaseModel):
     image_base64: str | None = None  # 後方互換(単一画像)
     media_type: str = "image/png"
     images: list[ImageItem] | None = None  # 複数スクショ(MoneyForwardは1画面に収まらない)
+    # True: この取込を「正」とし、写っていない過去の import 行を削除する (既定)。
+    # 手動追加 (category != "import") と、一致行のユーザー設定 (目標ウェイト等) は守る。
+    replace: bool = True
 
 
 def merge_asset_items(items: list[dict]) -> list[dict]:
@@ -302,13 +305,21 @@ async def import_assets(body: AssetImportIn) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="取り込める資産がありませんでした(LLM 未設定/読取不可の可能性)")
     with session_scope() as session:
         existing = {h.name: h for h in session.execute(select(AssetHolding)).scalars()}
-        for it in merge_asset_items(items):
+        merged = merge_asset_items(items)
+        for it in merged:
             row = existing.get(it["name"])
             if row is None:
                 row = AssetHolding(name=it["name"][:120], category="import")
                 session.add(row)
                 existing[it["name"]] = row
             row.value_jpy = float(it["value"])
+        if body.replace:
+            # この取込を「正」とする: 写っていない過去の import 行を一掃。
+            # 手動追加 (category != "import") は対象外。一致行はユーザー設定ごと温存済み。
+            new_names = {it["name"] for it in merged}
+            for h in list(existing.values()):
+                if h.category == "import" and h.name not in new_names:
+                    session.delete(h)
         session.flush()
         return compute_finance(session)
 

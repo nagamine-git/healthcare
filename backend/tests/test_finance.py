@@ -177,6 +177,50 @@ def test_import_assets_same_name_two_accounts_end_to_end(app_client):
     assert sorted(h["value_jpy"] for h in emaxis) == [180000.0, 423410.0]
 
 
+def test_import_assets_replace_wipes_stale_import_rows(app_client):
+    """スクショ取込は「その取込を正」として、写っていない import 行を一掃する。"""
+    r1 = app_client.post("/api/finance/import-assets", json={"csv": "旧資産A,100\n旧資産B,200\n"})
+    assert r1.status_code == 200
+    r2 = app_client.post("/api/finance/import-assets", json={"csv": "旧資産A,150\n新資産C,300\n"})
+    names = {h["name"]: h for h in r2.json()["rebalance"]["holdings"]}
+    assert "旧資産B" not in names          # 写っていない → 削除
+    assert names["旧資産A"]["value_jpy"] == 150.0  # 一致 → 値更新
+    assert names["新資産C"]["value_jpy"] == 300.0
+
+
+def test_import_assets_replace_preserves_target_weight(app_client):
+    """一致した行の目標ウェイト (ユーザー設定) は取込で消えない。"""
+    app_client.post("/api/finance/import-assets", json={"csv": "eMAXIS,1000\n"})
+    # ユーザーが目標ウェイトを設定
+    r = app_client.get("/api/finance")
+    h = next(x for x in r.json()["rebalance"]["holdings"] if x["name"] == "eMAXIS")
+    app_client.post("/api/finance/asset", json={
+        "id": h["id"], "name": "eMAXIS", "category": "import",
+        "value_jpy": 1000, "target_weight": 42.0,
+    })
+    # 再取込 (値だけ変わる)
+    r2 = app_client.post("/api/finance/import-assets", json={"csv": "eMAXIS,1100\n"})
+    h2 = next(x for x in r2.json()["rebalance"]["holdings"] if x["name"] == "eMAXIS")
+    assert h2["value_jpy"] == 1100.0
+    assert h2["target_weight"] == 42.0
+
+
+def test_import_assets_replace_keeps_manual_rows(app_client):
+    """手動追加 (category != import) の資産は一掃の対象外。"""
+    app_client.post("/api/finance/asset", json={"name": "手動の金庫", "category": "cash", "value_jpy": 5000})
+    r = app_client.post("/api/finance/import-assets", json={"csv": "スクショ資産,100\n"})
+    names = {h["name"] for h in r.json()["rebalance"]["holdings"]}
+    assert "手動の金庫" in names
+
+
+def test_import_assets_replace_false_appends(app_client):
+    """replace=false なら従来どおり追記 (何も消さない)。"""
+    app_client.post("/api/finance/import-assets", json={"csv": "資産A,100\n"})
+    r = app_client.post("/api/finance/import-assets", json={"csv": "資産B,200\n", "replace": False})
+    names = {h["name"] for h in r.json()["rebalance"]["holdings"]}
+    assert {"資産A", "資産B"} <= names
+
+
 def test_auto_allocate_excludes_dust(app_client):
     # 総資産の1%未満の極小残高は投資対象外(target_weight=0)。実データのBAT(916円)相当。
     for n, v in [("UFJ 普通", 700000),

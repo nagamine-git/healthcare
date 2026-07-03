@@ -175,8 +175,12 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
         </label>
         {imp.isPending && <span className="ml-2 text-[11px] text-ink-faint">読取中…</span>}
         {imp.isError && <span className="ml-2 text-[11px] text-risk">読取失敗</span>}
+        <p className="mt-1 text-[10px] text-act-300/80">
+          取込は「この内容が正」— 写っていない過去の取込資産は削除されます。
+          <strong>全画面ぶんのスクショを一度に選択</strong>してください(手動追加した資産と目標ウェイトは維持)。
+        </p>
         <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={2}
-          placeholder="または CSV を貼付(名前,金額 の各行)。複数スクショは全画面を合算"
+          placeholder="または CSV を貼付(名前,金額 の各行)。取込に無い過去資産は削除"
           className="mt-1 w-full rounded bg-panel px-2 py-1 font-mono text-[11px] text-ink" />
         {csv.trim() && (
           <Button variant="subtle" onClick={() => { imp.mutate({ csv } as never); setCsv(""); }}>CSV取込</Button>
