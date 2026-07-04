@@ -31,7 +31,6 @@ from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.api import next_action as next_action_api
-from app.api import workout_review as workout_review_api
 from app.api import perf as perf_api
 from app.api import profile as profile_api
 from app.api import push as push_api
@@ -40,6 +39,7 @@ from app.api import sleep_intervention as sleep_intervention_api
 from app.api import speech as speech_api
 from app.api import timeline as timeline_api
 from app.api import weather as weather_api
+from app.api import workout_review as workout_review_api
 from app.config import get_settings
 from app.db import create_all, init_engine
 from app.logging import configure_logging, get_logger
