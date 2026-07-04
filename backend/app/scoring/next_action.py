@@ -45,6 +45,8 @@ class Inputs:
     intervention_logged: bool = False           # 今夜の介入を記録済みか
     journal_done: bool = False                  # 今日のジャーナル済みか
     cashflow_days_old: int | None = None        # 入出金データの鮮度 (日)。None=データなし
+    days_since_strength: int | None = None      # 最後の筋トレからの日数。None=記録なし
+    trained_today: bool = False                 # 今日すでに何かトレーニング済みか
 
 
 def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
@@ -100,6 +102,25 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
     if inp.stress_recent is not None and inp.stress_recent >= 70:
         add("stress_break", 72, "4-7-8呼吸を2分 (画面から離れる)",
             f"直近30分のストレス平均 {int(inp.stress_recent)} — 高止まり中", None)
+
+    # --- 4.5 トレーニングギャップ (筋トレ/HIIT/ラッキング) ---
+    # 筋タンパク合成は 48-72h で基線に戻るため、3日以上の空白から漸減が始まる。
+    # ただし休息優先の条件 (BB低・当日トレ済・夜遅く) では出さない。
+    if (
+        inp.days_since_strength is not None and inp.days_since_strength >= 3
+        and not inp.trained_today
+        and 10 <= hour < 21
+        and (inp.bb_current is None or inp.bb_current >= 35)
+    ):
+        n = inp.days_since_strength
+        pri = 65 if n >= 5 else 56
+        menu = (
+            "筋トレ / HIIT / ラッキング"
+            if (inp.bb_current or 0) >= 60
+            else "筋トレ (or 軽めのラッキング)"
+        )
+        add("training_gap", pri, f"{menu} — 前回の筋トレから{n}日",
+            "筋タンパク合成は48-72hで基線に戻る — 3日以上の空白で維持→漸減。回復も足りている", None)
 
     # --- 5. 計測の土台: Garmin を着けていない (心拍が途絶) ---
     if inp.minutes_since_hr is not None and inp.minutes_since_hr > 90 and 8 <= hour < 23:
@@ -237,7 +258,20 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             last_tx = db.execute(select(CashflowTx.date).order_by(CashflowTx.date.desc()).limit(1)).scalar()
             inp.cashflow_days_old = (target - last_tx).days if last_tx else None
 
-    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs):
+    def _training():
+        from app.llm.client import _days_since_last_strength_training
+        from app.models import Workout
+        from app.scoring.timewindow import jst_day_bounds
+
+        inp.days_since_strength = _days_since_last_strength_training(target)
+        lo, hi = jst_day_bounds(target)
+        with session_scope() as db:
+            first = db.execute(
+                select(Workout.start).where(Workout.start >= lo, Workout.start < hi).limit(1)
+            ).scalar()
+            inp.trained_today = first is not None
+
+    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training):
         safe(fn)
     return inp, now
 

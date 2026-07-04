@@ -76,3 +76,37 @@ def test_quiet_afternoon_falls_back_to_learning():
                  cashflow_days_old=3)
     keys = _keys(build_candidates(inp, _at(15)))
     assert keys[0] == "learning"
+
+def test_training_gap_fires_after_3_days():
+    inp = Inputs(days_since_strength=4, bb_current=70.0)
+    cands = build_candidates(inp, _at(15))
+    tg = next(c for c in cands if c["key"] == "training_gap")
+    assert tg["priority"] == 56
+    assert "HIIT" in tg["title"]  # BB高い日は高強度もメニューに
+
+
+def test_training_gap_escalates_at_5_days_and_hides_hiit_when_bb_moderate():
+    inp = Inputs(days_since_strength=6, bb_current=45.0)
+    tg = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "training_gap")
+    assert tg["priority"] == 65
+    assert "HIIT" not in tg["title"]  # 回復が中程度なら高強度は出さない
+
+
+def test_training_gap_suppressed_when_already_trained_today():
+    inp = Inputs(days_since_strength=4, trained_today=True, bb_current=70.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
+
+
+def test_training_gap_suppressed_when_depleted_or_late():
+    # BB 低すぎ → 休息が先 (仮眠ルールに譲る)
+    low = Inputs(days_since_strength=4, bb_current=20.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(low, _at(15)))
+    # 21時以降は就寝を優先
+    late = Inputs(days_since_strength=4, bb_current=70.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(late, _at(21, 30)))
+
+
+def test_training_gap_quiet_within_2_days():
+    inp = Inputs(days_since_strength=2, bb_current=70.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
+
