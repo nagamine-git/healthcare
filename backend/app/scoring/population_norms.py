@@ -130,6 +130,7 @@ def build_distribution(
     target_body_fat_pct: float | None = None,
     body_fat_tolerance_pct: float | None = None,
     vo2max: float | None = None,
+    vo2max_estimated: bool = False,
 ) -> dict:
     """体型4指標 (BMI/体脂肪率/FFMI/心肺VO2max) の値・母集団mean/sd・percentile・目標範囲をまとめる。
 
@@ -190,6 +191,9 @@ def build_distribution(
             "vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, None, evaluable
         ),
     ]
+    # Garmin 実測が無い期間は公表式による推定値で代替することがある (出所を明示)
+    if vo2max is not None and vo2max_estimated:
+        metrics[-1]["estimated"] = True
     return {"evaluable": evaluable, "metrics": metrics}
 
 

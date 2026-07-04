@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.db import session_scope
-from app.models import DailySummary, WeightSample
+from app.models import DailySummary, MetricSample, WeightSample
 from app.scoring.population_norms import build_distribution
 from app.scoring.profile import resolve_profile
 
@@ -42,6 +42,23 @@ async def get_physique_distribution() -> dict[str, Any]:
             .scalars()
             .first()
         )
+        # Garmin 実測が無ければ、公表式による推定 (metric_sample: vo2max_estimated) で代替
+        vo2max_estimated = False
+        if vo2max is None:
+            est = (
+                session.execute(
+                    select(MetricSample.value)
+                    .where(MetricSample.metric_key == "vo2max_estimated",
+                           MetricSample.value.is_not(None))
+                    .order_by(MetricSample.ts.desc())
+                    .limit(1)
+                )
+                .scalars()
+                .first()
+            )
+            if est is not None:
+                vo2max = float(est)
+                vo2max_estimated = True
     return build_distribution(
         weight_kg=weight_kg,
         body_fat_pct=body_fat_pct,
@@ -52,4 +69,5 @@ async def get_physique_distribution() -> dict[str, Any]:
         target_body_fat_pct=prof.target_body_fat_pct,
         body_fat_tolerance_pct=prof.body_fat_tolerance_pct,
         vo2max=vo2max,
+        vo2max_estimated=vo2max_estimated,
     )

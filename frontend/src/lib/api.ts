@@ -1254,6 +1254,7 @@ export type PhysiqueDistributionMetric = {
   source: string;
   target_low: number | null;
   target_high: number | null;
+  estimated?: boolean; // Garmin実測でなく公表式による推定値
 };
 export type PhysiqueDistribution = {
   evaluable: boolean;

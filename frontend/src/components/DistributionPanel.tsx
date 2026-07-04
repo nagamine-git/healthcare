@@ -51,7 +51,13 @@ function MetricChart({ m }: { m: PhysiqueDistributionMetric }) {
           </span>
         </div>
         {m.value != null ? (
-          <span className="text-lg font-semibold tabular-nums text-ink">
+          <span className="flex items-center gap-1.5 text-lg font-semibold tabular-nums text-ink">
+            {m.estimated && (
+              <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-[9px] font-normal text-info-300"
+                    title="Garmin実測ではなく公表式 (Uth/ACSM) による推定">
+                推定
+              </span>
+            )}
             {m.value}
             <span className="ml-0.5 text-xs font-normal text-ink-dim">{m.unit}</span>
           </span>

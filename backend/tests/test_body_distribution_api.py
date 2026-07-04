@@ -30,3 +30,21 @@ def test_distribution_shape(app_client):
         assert {
             "value", "mean", "sd", "percentile", "source", "target_low", "target_high", "label", "unit"
         } <= set(m)
+
+def test_vo2max_falls_back_to_estimate(app_client, monkeypatch):
+    """Garmin 実測が無い場合、metric_sample の推定値 (vo2max_estimated) で代替し出所を明示。"""
+    from datetime import datetime
+
+    from app.db import session_scope
+    from app.models import MetricSample
+
+    with session_scope() as s:
+        s.add(MetricSample(source="estimate", metric_key="vo2max_estimated",
+                           ts=datetime(2026, 7, 4, 12, 0, 5), value=48.9))
+
+    r = app_client.get("/api/physique/distribution")
+    assert r.status_code == 200
+    vo2 = next(m for m in r.json()["metrics"] if m["key"] == "vo2max")
+    assert vo2["value"] == 48.9
+    assert vo2.get("estimated") is True
+
