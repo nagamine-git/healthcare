@@ -100,3 +100,30 @@ def test_build_distribution_not_evaluable_without_profile():
     assert d["evaluable"] is False
     for m in d["metrics"]:
         assert m["percentile"] is None  # percentileは出さない
+
+def test_vo2max_target_band_from_body_goal():
+    """VO2max の目標帯 = [目標体重でも絶対能力を守る値, 同年代上位10%]。"""
+    from app.scoring.population_norms import build_distribution
+
+    out = build_distribution(
+        weight_kg=55.6, body_fat_pct=15.0, age=31, sex="male", height_cm=186.0,
+        target_weight_kg=60.0, target_body_fat_pct=12.0, body_fat_tolerance_pct=1.5,
+        vo2max=48.9,
+    )
+    vo2 = next(m for m in out["metrics"] if m["key"] == "vo2max")
+    # 下限: 48.9 × 55.6/60 = 45.3 / 上限: 41 + 1.28×8 = 51.2
+    assert vo2["target_low"] == 45.3
+    assert vo2["target_high"] == 51.2
+
+
+def test_vo2max_target_band_absent_without_inputs():
+    from app.scoring.population_norms import build_distribution
+
+    out = build_distribution(
+        weight_kg=55.6, body_fat_pct=15.0, age=31, sex="male", height_cm=186.0,
+        target_weight_kg=60.0, target_body_fat_pct=12.0, body_fat_tolerance_pct=1.5,
+        vo2max=None,  # 値が無ければ帯も出さない
+    )
+    vo2 = next(m for m in out["metrics"] if m["key"] == "vo2max")
+    assert vo2["target_low"] is None and vo2["target_high"] is None
+

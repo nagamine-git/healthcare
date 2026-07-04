@@ -183,12 +183,27 @@ def build_distribution(
     ffmi_lo = _ffmi_at_bf(bf_hi)  # 体脂肪率が高い → FFMI 低
     ffmi_hi = _ffmi_at_bf(bf_lo)  # 体脂肪率が低い → FFMI 高
 
+    # VO2max の目標帯 (目標体型から導出):
+    # - 下限: 目標体重になっても「絶対能力 (L/分)」を落とさない値 = 現在値 × 現体重/目標体重。
+    #   増量すると体重あたり VO2max は機械的に下がるため、これを守れば心肺の実力は維持。
+    # - 上限: 同年代・同性の上位10% (mean + 1.28σ)。心肺フィットネスは予後指標として
+    #   上げ止まりが無い (高いほど良い) ため、人口分布の上位帯を目標にする。
+    vo2_lo = vo2_hi = None
+    vo2_norm = norm_for("vo2max", age, sex)
+    if vo2max is not None and weight_kg and target_weight_kg and vo2_norm:
+        keep_absolute = vo2max * weight_kg / target_weight_kg
+        top10 = vo2_norm[0] + 1.28 * vo2_norm[1]
+        vo2_lo, vo2_hi = sorted((round(keep_absolute, 1), round(top10, 1)))
+        if vo2_lo == vo2_hi:
+            vo2_hi = round(vo2_hi + 1.0, 1)
+
     metrics = [
         _metric("bmi", "BMI", "", bmi_v, age, sex, bmi_lo, bmi_hi, evaluable),
         _metric("body_fat", "体脂肪率", "%", body_fat_pct, age, sex, bf_lo, bf_hi, evaluable),
         _metric("ffmi", "FFMI (筋肉量指数)", "", ffmi_v, age, sex, ffmi_lo, ffmi_hi, evaluable),
         _metric(
-            "vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex, None, None, evaluable
+            "vo2max", "心肺フィットネス (VO2max)", "ml/kg/min", vo2max, age, sex,
+            vo2_lo, vo2_hi, evaluable,
         ),
     ]
     # Garmin 実測が無い期間は公表式による推定値で代替することがある (出所を明示)
