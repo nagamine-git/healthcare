@@ -35,6 +35,15 @@ function Row({ it }: { it: WorkoutReviewItem }) {
           {it.type_label}
           {it.duration_min != null && <span className="text-ink-faint"> {it.duration_min}分</span>}
         </span>
+        {it.est_vo2max && (
+          <span
+            title={`${it.est_vo2max.note} (${it.est_vo2max.low}〜${it.est_vo2max.high})`}
+            className="rounded-full bg-info/10 px-2 py-0.5 text-[10px] text-info-300"
+          >
+            推定VO2Max ≈{Math.round(it.est_vo2max.mid)}
+            <span className="opacity-70"> ({it.est_vo2max.low}–{it.est_vo2max.high})</span>
+          </span>
+        )}
         {!it.review_text && (
           <button
             onClick={() => gen.mutate()}

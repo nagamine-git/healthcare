@@ -771,6 +771,14 @@ export type SleepInterventionHistoryNight = SleepInterventionFlags & {
 export type SleepInterventionHistoryResp = { nights: SleepInterventionHistoryNight[] };
 
 // ワークアウト一言評価 (タップで生成・永続化)
+export type Vo2maxEstimate = {
+  mid: number;
+  low: number;
+  high: number;
+  methods: Record<string, number>;
+  speed_source: string | null;
+  note: string;
+};
 export type WorkoutReviewItem = {
   workout_id: string;
   date: string;
@@ -781,6 +789,7 @@ export type WorkoutReviewItem = {
   review_text: string | null;
   review_tone: "good" | "caution" | "info" | null;
   reviewed_at: string | null;
+  est_vo2max: Vo2maxEstimate | null;
 };
 export type WorkoutReviewsResp = { items: WorkoutReviewItem[] };
 

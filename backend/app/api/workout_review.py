@@ -20,7 +20,49 @@ _TYPE_LABEL = {
 }
 
 
-def _item(w: Workout, r: WorkoutReview | None) -> dict[str, Any]:
+def _rhr_near(session, d) -> float | None:
+    """workout 日以前の直近の安静時心拍。"""
+    from app.models import DailySummary
+
+    row = session.execute(
+        select(DailySummary.resting_hr)
+        .where(DailySummary.date <= d, DailySummary.resting_hr.isnot(None))
+        .order_by(DailySummary.date.desc()).limit(1)
+    ).scalar()
+    return float(row) if row is not None else None
+
+
+def _hr_max_observed(session) -> float | None:
+    """直近90日の実測最大心拍 (HRmax の下限推定として使う)。"""
+    row = session.execute(
+        select(Workout.max_hr)
+        .where(Workout.max_hr.isnot(None), Workout.start >= datetime.utcnow() - timedelta(days=90))
+        .order_by(Workout.max_hr.desc()).limit(1)
+    ).scalar()
+    return float(row) if row is not None else None
+
+
+def _est_vo2max(session, w: Workout) -> dict[str, Any] | None:
+    """ラン系のみ、公表式で幅つき推定 (Garmin 欠測時のフォールバック参考値)。"""
+    if w.type not in ("running", "treadmill_running", "trail_running"):
+        return None
+    from app.scoring.vo2max_estimate import estimate_for_run
+
+    raw = w.raw_json or {}
+    hr_max = _hr_max_observed(session) or (w.max_hr if w.max_hr else None)
+    stride_cm = raw.get("avgStrideLength")
+    return estimate_for_run(
+        duration_s=float(w.duration_s or 0),
+        avg_hr=w.avg_hr,
+        hr_rest=_rhr_near(session, (w.start + timedelta(hours=9)).date()),
+        hr_max=hr_max,
+        distance_m=w.distance_m,
+        steps=raw.get("steps"),
+        stride_m=float(stride_cm) / 100 if stride_cm else None,
+    )
+
+
+def _item(w: Workout, r: WorkoutReview | None, est: dict[str, Any] | None = None) -> dict[str, Any]:
     jst = w.start + timedelta(hours=9)
     return {
         "workout_id": w.id,
@@ -34,6 +76,7 @@ def _item(w: Workout, r: WorkoutReview | None) -> dict[str, Any]:
         "reviewed_at": (
             r.created_at.replace(tzinfo=UTC).isoformat() if r and r.created_at else None
         ),
+        "est_vo2max": est,
     }
 
 
@@ -51,7 +94,7 @@ async def list_reviews(days: int = 2) -> dict[str, Any]:
                 select(WorkoutReview).where(WorkoutReview.workout_id.in_([w.id for w in rows]))
             ).scalars()
         } if rows else {}
-        items = [_item(w, reviews.get(w.id)) for w in rows]
+        items = [_item(w, reviews.get(w.id), _est_vo2max(session, w)) for w in rows]
     return {"items": items}
 
 
@@ -64,7 +107,7 @@ async def create_review(workout_id: str, force: bool = False) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="workout not found")
         existing = session.get(WorkoutReview, workout_id)
         if existing is not None and not force:
-            return _item(w, existing)
+            return _item(w, existing, _est_vo2max(session, w))
 
     from app.llm.workout_review import generate_review
 
@@ -84,4 +127,4 @@ async def create_review(workout_id: str, force: bool = False) -> dict[str, Any]:
         row.model = got.get("model")
         row.created_at = datetime.utcnow()
         session.flush()
-        return _item(w, row)
+        return _item(w, row, _est_vo2max(session, w))

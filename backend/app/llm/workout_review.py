@@ -98,6 +98,13 @@ def _gather_context(workout_id: str) -> dict[str, Any] | None:
             "recent_same_type": [brief(x) for x in same],
         }
     try:
+        from app.api.workout_review import _est_vo2max
+        with session_scope() as s2:
+            w2 = s2.get(Workout, workout_id)
+            ctx["est_vo2max"] = _est_vo2max(s2, w2) if w2 else None
+    except Exception:
+        ctx["est_vo2max"] = None
+    try:
         ctx["tonight_plan"] = compute_tonight_plan(app_today())
     except Exception:
         ctx["tonight_plan"] = None
