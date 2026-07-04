@@ -34,6 +34,7 @@ from app.models.health import (
     UserProfile,
     WeightSample,
     Workout,
+    WorkoutReview,
 )
 
 __all__ = [
@@ -72,4 +73,5 @@ __all__ = [
     "UserProfile",
     "WeightSample",
     "Workout",
+    "WorkoutReview",
 ]

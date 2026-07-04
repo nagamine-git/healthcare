@@ -31,6 +31,7 @@ from app.api import learning as learning_api
 from app.api import life as life_api
 from app.api import migraine as migraine_api
 from app.api import next_action as next_action_api
+from app.api import workout_review as workout_review_api
 from app.api import perf as perf_api
 from app.api import profile as profile_api
 from app.api import push as push_api
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(sleep_drivers_api.router)
     app.include_router(sleep_intervention_api.router)
     app.include_router(next_action_api.router)
+    app.include_router(workout_review_api.router)
     app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)
     app.include_router(advice_feedback_api.router)

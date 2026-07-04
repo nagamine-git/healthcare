@@ -770,6 +770,20 @@ export type SleepInterventionHistoryNight = SleepInterventionFlags & {
 };
 export type SleepInterventionHistoryResp = { nights: SleepInterventionHistoryNight[] };
 
+// ワークアウト一言評価 (タップで生成・永続化)
+export type WorkoutReviewItem = {
+  workout_id: string;
+  date: string;
+  start_jst: string;
+  type: string | null;
+  type_label: string;
+  duration_min: number | null;
+  review_text: string | null;
+  review_tone: "good" | "caution" | "info" | null;
+  reviewed_at: string | null;
+};
+export type WorkoutReviewsResp = { items: WorkoutReviewItem[] };
+
 // 「いまコレ」— 全ドメイン横断のネクストアクション
 export type NextActionItem = {
   key: string;
@@ -1776,6 +1790,12 @@ export const api = {
   sleepInterventionHistory: () =>
     request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
   nextAction: () => request<NextActionResp>("/api/next-action"),
+  workoutReviews: (days = 2) =>
+    request<WorkoutReviewsResp>(`/api/workout-reviews?days=${days}`),
+  workoutReviewCreate: (workoutId: string) =>
+    request<WorkoutReviewItem>(`/api/workout-reviews/${encodeURIComponent(workoutId)}`, {
+      method: "POST",
+    }),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,

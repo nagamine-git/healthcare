@@ -95,6 +95,23 @@ class Workout(Base):
     raw_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class WorkoutReview(Base):
+    """ワークアウトへの AI 一言評価 (ユーザーのタップで生成し、以後は保存済みを表示)。
+
+    自動生成はしない (LLM コストはタップ時の1回だけ)。tone: good|caution|info。
+    """
+
+    __tablename__ = "workout_review"
+
+    workout_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("workout.id", ondelete="CASCADE"), primary_key=True
+    )
+    text: Mapped[str] = mapped_column(String(400))
+    tone: Mapped[str] = mapped_column(String(10), default="info")
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WeightSample(Base):
     __tablename__ = "weight_sample"
 
