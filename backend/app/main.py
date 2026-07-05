@@ -24,6 +24,7 @@ from app.api import finance as finance_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
 from app.api import garden as garden_api
+from app.api import highlight_review as highlight_review_api
 from app.api import identity as identity_api
 from app.api import imputation as imputation_api
 from app.api import journal as journal_api
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(sleep_drivers_api.router)
     app.include_router(sleep_intervention_api.router)
     app.include_router(next_action_api.router)
+    app.include_router(highlight_review_api.router)
     app.include_router(workout_review_api.router)
     app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)

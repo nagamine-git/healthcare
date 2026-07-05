@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { WorkoutReviewStrip } from "./WorkoutReviewStrip";
 import { Armchair, Check, Footprints, Activity, Moon, Flame, Coffee, Droplet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
@@ -204,9 +203,6 @@ export function DayStory() {
 
       {/* 今日のハイライト (時系列ダイジェスト): 何時に何をしたかをグラフと同じ軸で */}
       <DayDigest segments={d.segments} t={t} originJst={d.origin_jst} nowH={d.now_h} />
-
-      {/* ワークアウトの AI 一言評価 (タップ生成・永続化) */}
-      <WorkoutReviewStrip />
 
       {/* 拡大すると横スクロール。メイン+カフェイン+水分を1つの容器に入れ、
           同じ幅・同じグリッド・同じx軸でスクロールが連動する */}

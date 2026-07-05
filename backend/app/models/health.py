@@ -95,6 +95,25 @@ class Workout(Base):
     raw_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
+class HighlightReview(Base):
+    """今日のハイライトの各イベントへの AI 評価 (タップで生成・永続化)。
+
+    評価軸は「目標体型に対してベストな努力か・改善点は何か」。イベントは
+    クライアント表示から決まる (date, event_key="HH:MM|ラベル") で一意化する。
+    """
+
+    __tablename__ = "highlight_review"
+    __table_args__ = (UniqueConstraint("date", "event_key", name="uq_highlight_review"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    event_key: Mapped[str] = mapped_column(String(160))
+    text: Mapped[str] = mapped_column(String(400))
+    tone: Mapped[str] = mapped_column(String(10), default="info")
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WorkoutReview(Base):
     """ワークアウトへの AI 一言評価 (ユーザーのタップで生成し、以後は保存済みを表示)。
 

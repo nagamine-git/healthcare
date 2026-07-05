@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Armchair, Brain, ChevronDown, ClipboardCheck, Coffee,
-  Dumbbell, Home, ListChecks, MapPin, Moon, Sunrise,
+  Dumbbell, Home, ListChecks, MapPin, Moon, Sparkles, Sunrise,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { DayStorySegment, DayTimelineData } from "../lib/api";
+import type { DayStorySegment, DayTimelineData, HighlightReviewsResp } from "../lib/api";
+import { api } from "../lib/api";
 
 /**
  * 今日のハイライト: グラフと同じデータを「何時にこれをやった」の時系列ダイジェストに。
@@ -14,6 +16,13 @@ import type { DayStorySegment, DayTimelineData } from "../lib/api";
  */
 
 type Entry = { h: number; icon: LucideIcon; color: string; text: string; sub?: string };
+
+// AI 評価 (目標体型軸) のトーン別スタイル
+const REVIEW_TONE_CLS: Record<string, string> = {
+  good: "border-prog-500/40 bg-prog-500/10 text-prog-300",
+  caution: "border-act-700/50 bg-act/10 text-act-300",
+  info: "border-hairline bg-panel/60 text-ink-dim",
+};
 
 function pad(n: number): string {
   return n.toString().padStart(2, "0");
@@ -45,6 +54,22 @@ export function DayDigest({ segments, t, originJst, nowH }: {
   nowH: number | null;
 }) {
   const [open, setOpen] = useState(true);
+  const qc = useQueryClient();
+  // 保存済みの AI 評価 (目標体型軸)。date|HH:MM|ラベル で突き合わせる
+  const reviewsQ = useQuery({ queryKey: ["highlight-reviews"], queryFn: api.highlightReviews });
+  const reviewMap = new Map(
+    (reviewsQ.data?.items ?? []).map((r) => [`${r.date}|${r.event_key}`, r]),
+  );
+  const gen = useMutation({
+    mutationFn: api.highlightReviewCreate,
+    onSuccess: (created) => {
+      qc.setQueryData<HighlightReviewsResp>(["highlight-reviews"], (old) => ({
+        items: [...(old?.items ?? []).filter(
+          (x) => !(x.date === created.date && x.event_key === created.event_key),
+        ), created],
+      }));
+    },
+  });
   const origin = new Date(originJst).getTime();
   const clock = (h: number): string => {
     const dt = new Date(origin + h * 3600_000);
@@ -139,14 +164,47 @@ export function DayDigest({ segments, t, originJst, nowH }: {
         <ul className="px-3 pb-2.5">
           {entries.map((e, i) => {
             const Icon = e.icon;
+            const when = clock(e.h);
+            const d = new Date(origin + e.h * 3600_000);
+            const dateIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const key = `${when}|${e.text}`;
+            const review = reviewMap.get(`${dateIso}|${key}`);
+            const pendingThis = gen.isPending && gen.variables?.event_key === key;
             return (
-              <li key={i} className="flex items-center gap-2.5 py-1">
-                <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-ink-faint">{clock(e.h)}</span>
-                <Icon size={14} className={`shrink-0 ${e.color}`} />
-                <span className="min-w-0 leading-tight">
-                  <span className="text-[13px] text-ink">{e.text}</span>
-                  {e.sub && <span className="ml-1.5 text-[11px] text-ink-faint">{e.sub}</span>}
-                </span>
+              <li key={i} className="py-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-ink-faint">{when}</span>
+                  <Icon size={14} className={`shrink-0 ${e.color}`} />
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="text-[13px] text-ink">{e.text}</span>
+                    {e.sub && <span className="ml-1.5 text-[11px] text-ink-faint">{e.sub}</span>}
+                  </span>
+                  {!review && (
+                    <button
+                      aria-label={`${e.text} をAI評価`}
+                      onClick={() =>
+                        gen.mutate({ date: dateIso, event_key: key, label: e.text, time_jst: when, sub: e.sub })
+                      }
+                      disabled={gen.isPending}
+                      className="shrink-0 p-1 text-ink-faint transition hover:text-act-300 active:scale-90 disabled:opacity-40"
+                    >
+                      {pendingThis ? (
+                        <span className="text-[10px]">評価中…</span>
+                      ) : (
+                        <Sparkles size={12} />
+                      )}
+                    </button>
+                  )}
+                </div>
+                {review && (
+                  <p
+                    className={`ml-[3.1rem] mt-0.5 rounded-lg border px-2 py-1 text-[11px] leading-relaxed ${
+                      REVIEW_TONE_CLS[review.tone] ?? REVIEW_TONE_CLS.info
+                    }`}
+                  >
+                    {review.text}
+                  </p>
+                )}
               </li>
             );
           })}

@@ -793,6 +793,15 @@ export type WorkoutReviewItem = {
 };
 export type WorkoutReviewsResp = { items: WorkoutReviewItem[] };
 
+// ハイライトイベントの AI 評価 (目標体型軸・タップで生成)
+export type HighlightReviewItem = {
+  date: string;
+  event_key: string;
+  text: string;
+  tone: "good" | "caution" | "info";
+};
+export type HighlightReviewsResp = { items: HighlightReviewItem[] };
+
 // 「いまコレ」— 全ドメイン横断のネクストアクション
 export type NextActionItem = {
   key: string;
@@ -1800,6 +1809,18 @@ export const api = {
   sleepInterventionHistory: () =>
     request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
   nextAction: () => request<NextActionResp>("/api/next-action"),
+  highlightReviews: () => request<HighlightReviewsResp>("/api/highlight-reviews"),
+  highlightReviewCreate: (body: {
+    date: string;
+    event_key: string;
+    label: string;
+    time_jst?: string;
+    sub?: string;
+  }) =>
+    request<HighlightReviewItem>("/api/highlight-reviews", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   workoutReviews: (days = 2) =>
     request<WorkoutReviewsResp>(`/api/workout-reviews?days=${days}`),
   workoutReviewCreate: (workoutId: string) =>
