@@ -225,6 +225,23 @@ def _days_since_last_strength_training(target: date_type) -> int | None:
     return None
 
 
+def _is_strength_type(wtype: str | None) -> bool:
+    return bool(wtype in _STRENGTH_TYPES or (wtype and "strength" in wtype.lower()))
+
+
+def _strength_days_in_window(target: date_type, days: int = 14) -> int:
+    """直近 N 日で筋トレをした「日数」(同日複数は 1)。週頻度 (under-training) 判定用。"""
+    from app.models import Workout
+
+    since = datetime.combine(target - timedelta(days=days - 1), datetime.min.time())
+    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    with session_scope() as session:
+        rows = session.execute(
+            select(Workout.start, Workout.type).where(Workout.start >= since, Workout.start < end)
+        ).all()
+    return len({start.date() for start, wtype in rows if _is_strength_type(wtype)})
+
+
 def _gather_recent_training_prescriptions(
     target: date_type, days: int = 21
 ) -> list[dict[str, Any]]:
@@ -1034,6 +1051,7 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["alerts"] = _gather_wellbeing_alerts(target)
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
+    today_payload["strength_days_14"] = _strength_days_in_window(target, days=14)
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     today_payload["previous_advice_today"] = _gather_previous_advice_today(target)
     today_payload.update(_gather_today_activity(target))

@@ -280,28 +280,18 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             inp.cashflow_days_old = (target - last_tx).days if last_tx else None
 
     def _training():
-        from app.llm.client import _STRENGTH_TYPES, _days_since_last_strength_training
+        from app.llm.client import _days_since_last_strength_training, _strength_days_in_window
         from app.models import Workout
         from app.scoring.timewindow import jst_day_bounds
 
         inp.days_since_strength = _days_since_last_strength_training(target)
+        inp.strength_days_14 = _strength_days_in_window(target, days=14)
         lo, hi = jst_day_bounds(target)
         with session_scope() as db:
             first = db.execute(
                 select(Workout.start).where(Workout.start >= lo, Workout.start < hi).limit(1)
             ).scalar()
             inp.trained_today = first is not None
-            # 直近14日の筋トレ「日数」(週頻度判定用)。同日複数は1回に丸める
-            since = datetime.combine(target - timedelta(days=13), datetime.min.time())
-            rows = db.execute(
-                select(Workout.start, Workout.type).where(Workout.start >= since, Workout.start < hi)
-            ).all()
-            days = {
-                (st + timedelta(hours=9)).date()
-                for st, ty in rows
-                if ty in _STRENGTH_TYPES or (ty and "strength" in ty.lower())
-            }
-            inp.strength_days_14 = len(days)
 
     for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training):
         safe(fn)
