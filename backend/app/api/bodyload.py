@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.scoring import bodyload, bodymap
+from app.scoring import bodyload, bodymap, training_status
 
 router = APIRouter()
 
@@ -24,3 +24,9 @@ async def get_bodyload() -> dict[str, Any]:
 async def get_bodymap() -> dict[str, Any]:
     """部位別の筋負荷マップ + 統合ステータス (HP ゲージ)。"""
     return bodymap.state()
+
+
+@router.get("/api/training-status")
+async def get_training_status() -> dict[str, Any]:
+    """トレーニング状況を これまで→今→これから で1本化して返す。"""
+    return training_status.state()

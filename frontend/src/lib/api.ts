@@ -802,6 +802,17 @@ export type HighlightReviewItem = {
 };
 export type HighlightReviewsResp = { items: HighlightReviewItem[] };
 
+// トレーニング状況 (これまで→今→これから)
+export type TrainingStatus = {
+  past: { week_strength: number; week_cardio: number; strength_14d: number; target_week: number };
+  now: { verdict: "enough" | "behind" | "way_behind"; recovered: number; recovering: number; loaded: number };
+  next: {
+    remaining_this_week: number;
+    today_should_train: { key: string; label: string; home?: string }[];
+  };
+  confidence: string;
+};
+
 // 「いまコレ」— 全ドメイン横断のネクストアクション
 export type NextActionItem = {
   key: string;
@@ -1809,6 +1820,7 @@ export const api = {
   sleepInterventionHistory: () =>
     request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
   nextAction: () => request<NextActionResp>("/api/next-action"),
+  trainingStatus: () => request<TrainingStatus>("/api/training-status"),
   highlightReviews: () => request<HighlightReviewsResp>("/api/highlight-reviews"),
   highlightReviewCreate: (body: {
     date: string;

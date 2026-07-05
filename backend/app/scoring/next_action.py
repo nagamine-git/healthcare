@@ -47,6 +47,8 @@ class Inputs:
     cashflow_days_old: int | None = None        # 入出金データの鮮度 (日)。None=データなし
     days_since_strength: int | None = None      # 最後の筋トレからの日数。None=記録なし
     trained_today: bool = False                 # 今日すでに何かトレーニング済みか
+    morning_bb: float | None = None             # 今朝の Body Battery (6時固定・回復状態の代理)
+    strength_days_14: int = 0                   # 直近14日の筋トレ日数 (週頻度の判定)
 
 
 def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
@@ -104,23 +106,35 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             f"直近30分のストレス平均 {int(inp.stress_recent)} — 高止まり中", None)
 
     # --- 4.5 トレーニングギャップ (筋トレ/HIIT/ラッキング) ---
-    # 筋タンパク合成は 48-72h で基線に戻るため、3日以上の空白から漸減が始まる。
-    # ただし休息優先の条件 (BB低・当日トレ済・夜遅く) では出さない。
+    # 可否は「今のBB」ではなく「今朝のBB (回復状態の代理)」で見る。夜は誰でもBBが自然に
+    # 下がるので、それで抑制すると under-training を助長する (鶏卵)。週の筋トレ頻度が
+    # 目標 (週3回=14日6回) 未満なら積極的に背中を押す。
+    behind = inp.strength_days_14 < 6  # 週3回=14日6回 未満なら頻度不足
     if (
-        inp.days_since_strength is not None and inp.days_since_strength >= 3
+        inp.days_since_strength is not None and inp.days_since_strength >= 2
         and not inp.trained_today
-        and 10 <= hour < 21
-        and (inp.bb_current is None or inp.bb_current >= 35)
+        and 8 <= hour < 21
+        and (inp.morning_bb is None or inp.morning_bb >= 30)  # 本当に低回復の朝だけ休む
     ):
         n = inp.days_since_strength
-        pri = 65 if n >= 5 else 56
-        menu = (
-            "筋トレ / HIIT / ラッキング"
-            if (inp.bb_current or 0) >= 60
-            else "筋トレ (or 軽めのラッキング)"
-        )
-        add("training_gap", pri, f"{menu} — 前回の筋トレから{n}日",
-            "筋タンパク合成は48-72hで基線に戻る — 3日以上の空白で維持→漸減。回復も足りている", None)
+        pri = 56
+        if behind:
+            pri = 70 if n >= 5 else 66  # 頻度不足なら底上げ (water/protein より上)
+        elif n >= 5:
+            pri = 65
+        can_high = (inp.morning_bb or 0) >= 60
+        menu = "筋トレ / HIIT / ラッキング" if can_high else "筋トレ (短時間でも可)"
+        week_n = inp.strength_days_14  # 直近14日だが「今週」の体感として提示
+        why = f"前回の筋トレから{n}日 / 直近2週で{week_n}回"
+        if behind:
+            why += "（目標 週3回に不足 — 積極的に刺激を）"
+        else:
+            why += " — 筋タンパク合成は48-72hで基線に戻る"
+        # 就寝3時間前以降なら短時間を促す
+        bed = _parse_hhmm((inp.tonight or {}).get("bedtime"), now.date())
+        if bed and now >= bed - timedelta(hours=3):
+            menu = "軽めの筋トレ (就寝2h前までに短時間で)"
+        add("training_gap", pri, menu, why, None)
 
     # --- 5. 計測の土台: Garmin を着けていない (心拍が途絶) ---
     if inp.minutes_since_hr is not None and inp.minutes_since_hr > 90 and 8 <= hour < 23:
@@ -235,6 +249,13 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             ).scalars().all()
             if stress_rows:
                 inp.stress_recent = sum(float(v) for v in stress_rows) / len(stress_rows)
+            # 今朝の BB (回復状態の代理。夜の自然低下と区別する)
+            from app.models import BodyBatteryDaily
+
+            mbb = db.execute(
+                select(BodyBatteryDaily.morning_value).where(BodyBatteryDaily.date == target)
+            ).scalar()
+            inp.morning_bb = float(mbb) if mbb is not None else None
 
     def _nutrition():
         from app.scoring.nutrition import aggregate_nutrition
@@ -259,7 +280,7 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             inp.cashflow_days_old = (target - last_tx).days if last_tx else None
 
     def _training():
-        from app.llm.client import _days_since_last_strength_training
+        from app.llm.client import _STRENGTH_TYPES, _days_since_last_strength_training
         from app.models import Workout
         from app.scoring.timewindow import jst_day_bounds
 
@@ -270,6 +291,17 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
                 select(Workout.start).where(Workout.start >= lo, Workout.start < hi).limit(1)
             ).scalar()
             inp.trained_today = first is not None
+            # 直近14日の筋トレ「日数」(週頻度判定用)。同日複数は1回に丸める
+            since = datetime.combine(target - timedelta(days=13), datetime.min.time())
+            rows = db.execute(
+                select(Workout.start, Workout.type).where(Workout.start >= since, Workout.start < hi)
+            ).all()
+            days = {
+                (st + timedelta(hours=9)).date()
+                for st, ty in rows
+                if ty in _STRENGTH_TYPES or (ty and "strength" in ty.lower())
+            }
+            inp.strength_days_14 = len(days)
 
     for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training):
         safe(fn)

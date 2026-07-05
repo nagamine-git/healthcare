@@ -77,36 +77,50 @@ def test_quiet_afternoon_falls_back_to_learning():
     keys = _keys(build_candidates(inp, _at(15)))
     assert keys[0] == "learning"
 
-def test_training_gap_fires_after_3_days():
-    inp = Inputs(days_since_strength=4, bb_current=70.0)
-    cands = build_candidates(inp, _at(15))
-    tg = next(c for c in cands if c["key"] == "training_gap")
-    assert tg["priority"] == 56
-    assert "HIIT" in tg["title"]  # BB高い日は高強度もメニューに
+def test_training_gap_pushes_under_trainer_even_in_evening():
+    # 朝BB満タン・夜(20時)でも、週頻度が不足なら背中を押す (鶏卵修正の核)
+    inp = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=70.0, bb_current=20.0)
+    tg = next(c for c in build_candidates(inp, _at(20)) if c["key"] == "training_gap")
+    assert tg["priority"] == 66  # under-training 底上げ (water/protein より上)
+    assert "目標 週3回に不足" in tg["why"]
 
 
-def test_training_gap_escalates_at_5_days_and_hides_hiit_when_bb_moderate():
-    inp = Inputs(days_since_strength=6, bb_current=45.0)
+def test_training_gap_escalates_at_5_days_when_behind():
+    inp = Inputs(days_since_strength=6, strength_days_14=1, morning_bb=65.0)
     tg = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "training_gap")
-    assert tg["priority"] == 65
-    assert "HIIT" not in tg["title"]  # 回復が中程度なら高強度は出さない
+    assert tg["priority"] == 70
+    assert "HIIT" in tg["title"]  # 朝BB高ければ高強度もメニュー
 
 
-def test_training_gap_suppressed_when_already_trained_today():
-    inp = Inputs(days_since_strength=4, trained_today=True, bb_current=70.0)
-    assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
+def test_training_gap_lower_priority_when_frequency_met():
+    # 週3回 (14日6回) 達成済みなら控えめ (56)
+    inp = Inputs(days_since_strength=3, strength_days_14=6, morning_bb=65.0)
+    tg = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "training_gap")
+    assert tg["priority"] == 56
 
 
-def test_training_gap_suppressed_when_depleted_or_late():
-    # BB 低すぎ → 休息が先 (仮眠ルールに譲る)
-    low = Inputs(days_since_strength=4, bb_current=20.0)
+def test_training_gap_suppressed_only_on_low_morning_bb():
+    # 朝BBが本当に低い日 (回復不良) は休む
+    low = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=25.0)
     assert all(c["key"] != "training_gap" for c in build_candidates(low, _at(15)))
-    # 21時以降は就寝を優先
-    late = Inputs(days_since_strength=4, bb_current=70.0)
-    assert all(c["key"] != "training_gap" for c in build_candidates(late, _at(21, 30)))
+    # 夜の bb_current が低くても朝BBが高ければ出す (鶏卵回避)
+    ok = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=70.0, bb_current=12.0)
+    assert any(c["key"] == "training_gap" for c in build_candidates(ok, _at(20)))
 
 
-def test_training_gap_quiet_within_2_days():
-    inp = Inputs(days_since_strength=2, bb_current=70.0)
+def test_training_gap_suppressed_when_trained_today():
+    inp = Inputs(days_since_strength=4, strength_days_14=2, trained_today=True, morning_bb=70.0)
     assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
 
+
+def test_training_gap_bedtime_switches_to_short_session():
+    inp = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=70.0,
+                 tonight={"bedtime": "23:30"})
+    # 21時前だが就寝3h前 (20:30以降) → 短時間メニュー
+    tg = next(c for c in build_candidates(inp, _at(20, 45)) if c["key"] == "training_gap")
+    assert "短時間" in tg["title"]
+
+
+def test_training_gap_quiet_within_1_day():
+    inp = Inputs(days_since_strength=1, strength_days_14=3, morning_bb=70.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
