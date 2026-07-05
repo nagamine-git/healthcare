@@ -813,6 +813,28 @@ export type TrainingStatus = {
   confidence: string;
 };
 
+// スマホ依存 (iOS スクリーンタイム取込)
+export type ScreenTimeApp = { name: string; minutes: number };
+export type ScreenTimeSummary = {
+  status: "ok" | "no_data";
+  latest_date?: string | null;
+  latest_daily_min?: number | null;
+  avg7_min?: number | null;
+  week_daily_min?: number | null;
+  trend?: "up" | "down" | "flat" | null;
+  entertainment_min?: number | null;
+  entertainment_share_pct?: number | null;
+  top_apps?: ScreenTimeApp[];
+  target_daily_min?: number;
+  over_target?: boolean;
+  n_days?: number;
+};
+export type ScreenTimeResp = {
+  summary: ScreenTimeSummary;
+  days: unknown[];
+  week: unknown | null;
+};
+
 // 「いまコレ」— 全ドメイン横断のネクストアクション
 export type NextActionItem = {
   key: string;
@@ -1820,6 +1842,12 @@ export const api = {
   sleepInterventionHistory: () =>
     request<SleepInterventionHistoryResp>("/api/sleep-intervention/history"),
   nextAction: () => request<NextActionResp>("/api/next-action"),
+  screentime: () => request<ScreenTimeResp>("/api/screentime"),
+  screentimeImport: (images: { image_base64: string; media_type: string }[]) =>
+    request<ScreenTimeResp>("/api/screentime/import", {
+      method: "POST",
+      body: JSON.stringify({ images }),
+    }),
   trainingStatus: () => request<TrainingStatus>("/api/training-status"),
   highlightReviews: () => request<HighlightReviewsResp>("/api/highlight-reviews"),
   highlightReviewCreate: (body: {

@@ -9,18 +9,10 @@ import {
   type WishlistItem,
 } from "../lib/api";
 import { Button, Panel, Pill, Skeleton } from "../components/ui/cockpit";
+import { fileToB64 } from "../lib/files";
 
 const yen = (n: number | null | undefined) =>
   n == null ? "—" : `¥${Math.round(n).toLocaleString()}`;
-
-function fileToB64(file: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(",")[1] ?? "");
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-}
 
 const REB_SIGNAL: Record<RebalanceHolding["signal"], { label: string; tone: "prog" | "act" | "risk" | "neutral" }> = {
   buy: { label: "買い増し", tone: "prog" },

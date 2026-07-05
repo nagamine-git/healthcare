@@ -30,6 +30,7 @@ import { AtlasTree } from "../components/AtlasTree";
 import { FitnessTestPanel, FitnessDueBanner } from "../components/FitnessTestPanel";
 import { DistributionPanel } from "../components/DistributionPanel";
 import { ActivitySignalCard } from "../components/ActivitySignalCard";
+import { ScreenTimePanel } from "../components/ScreenTimePanel";
 import { MealPlanner } from "../components/MealPlanner";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
@@ -509,6 +510,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         <AlcoholPanel />
         <SectionHeader label="活動・外出" hint="Garmin / iPhone を相互補完して推測 (欠損は不明)" />
         <ActivitySignalCard />
+        <SectionHeader label="デジタル" hint="スマホ依存 — スクリーンタイムのスクショ取込" />
+        <ScreenTimePanel />
       </div>
       )}
 

@@ -114,6 +114,29 @@ class HighlightReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ScreenTimeSample(Base):
+    """iOS スクリーンタイムのスクショ取込 (スマホ依存トラッキング)。
+
+    period_type=day|week の複合PK。daily_min は「1日あたり分」(Day=当日合計 /
+    Week=日平均) で横断比較の基準。categories/top_apps は分単位の JSON。
+    """
+
+    __tablename__ = "screen_time_sample"
+    __table_args__ = (
+        UniqueConstraint("period_type", "period_start", name="uq_screen_time_sample"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    period_type: Mapped[str] = mapped_column(String(8))       # day | week
+    period_start: Mapped[date] = mapped_column(Date, index=True)
+    daily_min: Mapped[float] = mapped_column(Float)           # 1日あたり分 (比較基準)
+    total_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    categories: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {name: minutes}
+    top_apps: Mapped[list | None] = mapped_column(JSON, nullable=True)    # [{name, minutes}]
+    source: Mapped[str] = mapped_column(String(16), default="screenshot")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WorkoutReview(Base):
     """ワークアウトへの AI 一言評価 (ユーザーのタップで生成し、以後は保存済みを表示)。
 
