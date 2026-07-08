@@ -1,6 +1,6 @@
 """実績ベースの負荷提案 (double progression) — LLM の目視漸進をシステム算出に置き換える。
 
-材料: Garmin 筋トレの raw_json (summarizedExerciseSets: category/weight/reps) と
+材料: Garmin 筋トレの raw_json (summarizedExerciseSets: category/subCategory/maxWeight[g]/reps) と
 直近の LLM 処方 (LlmComment.payload.actions[].exercises)。無い種目は
 settings.user_starting_weights × training_level 係数で初期値を出す。
 """
@@ -17,6 +17,51 @@ LEVEL_FACTOR = {"beginner": 1.0, "intermediate": 1.25, "advanced": 1.5}
 _TARGET_REPS = 10        # double progression の上限 rep
 _PROGRESS_SESSIONS = 2   # 同重量でこれだけ達成したら昇量
 _DELOAD_DAYS = 7
+_BW_HARD_REPS = 20       # 自重でこれ超えたら難種目へ移行
+
+# Garmin の種目 enum (category/subCategory) → 日本語ラベル。LLM 処方と突き合わせる。
+_EXERCISE_LABELS = {
+    "ROMANIAN_DEADLIFT": "ルーマニアンデッドリフト", "DEADLIFT": "デッドリフト",
+    "BENCH_PRESS": "ベンチプレス", "DUMBBELL_BENCH_PRESS": "ダンベルベンチプレス",
+    "INCLINE_BENCH_PRESS": "インクラインベンチプレス",
+    "SHOULDER_PRESS": "ショルダープレス", "OVERHEAD_PRESS": "ショルダープレス",
+    "DUMBBELL_SHOULDER_PRESS": "ダンベルショルダープレス",
+    "PUSH_UP": "腕立て", "DIAMOND_PUSH_UP": "ダイヤモンド腕立て",
+    "ROW": "ローイング", "BENT_OVER_ROW": "ローイング", "DUMBBELL_ROW": "ダンベルロー",
+    "SQUAT": "スクワット", "GOBLET_SQUAT": "ゴブレットスクワット",
+    "BULGARIAN_SPLIT_SQUAT": "ブルガリアンスクワット", "LUNGE": "ランジ",
+    "BICEP_CURL": "カール", "CURL": "カール", "HAMMER_CURL": "ハンマーカール",
+    "KNEELING_AB_WHEEL": "アブローラー", "AB_WHEEL": "アブローラー",
+    "LATERAL_RAISE": "サイドレイズ", "PLANK": "プランク",
+    "CALF_RAISE": "カーフレイズ", "HIP_THRUST": "ヒップスラスト",
+}
+
+
+def _label_for(category: Any, sub_category: Any) -> str | None:
+    for key in (sub_category, category):
+        k = str(key or "").upper()
+        if k in _EXERCISE_LABELS:
+            return _EXERCISE_LABELS[k]
+    raw = str(sub_category or category or "").replace("_", " ").title().strip()
+    return raw or None
+
+
+def _parse_sets(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Garmin raw_json の summarizedExerciseSets を [{label, weight_kg, reps}] に。
+
+    maxWeight は **グラム**単位 (8000=8kg)。0/欠損は自重として weight_kg=0 で残す
+    (自重も回数で漸進を追うため、以前のように捨てない)。
+    """
+    out: list[dict[str, Any]] = []
+    for st in raw.get("summarizedExerciseSets") or []:
+        label = _label_for(st.get("category"), st.get("subCategory"))
+        reps = int(st.get("reps") or 0)
+        if not label or reps <= 0:
+            continue
+        mw = st.get("maxWeight")
+        weight_kg = round(float(mw) / 1000.0, 1) if mw else 0.0
+        out.append({"label": label, "weight_kg": weight_kg, "reps": reps})
+    return out
 
 
 def _next_weight(w: float) -> float:
@@ -52,6 +97,18 @@ def suggest_for_exercise(
     last = history[0]
     lw = float(last["weight_kg"])
     days_gap = (today - last["date"]).days
+    # 自重 (weight 0): 重量でなく回数で漸進。据え置きを許さない (ぬるま湯回避)
+    if lw == 0:
+        lr = int(last.get("reps") or 0)
+        if lr >= _BW_HARD_REPS:
+            return {
+                "suggested_weight_kg": 0.0, "suggested_reps": f"{lr}+",
+                "basis": f"自重{lr}回 — 難種目/加重へ変更 (片脚・デクライン・リュック加重)",
+            }
+        return {
+            "suggested_weight_kg": 0.0, "suggested_reps": f"{lr + 2}以上",
+            "basis": f"前回{lr}回 → +2回で漸進 (自重は回数を伸ばす)",
+        }
     if days_gap > _DELOAD_DAYS:
         return {
             "suggested_weight_kg": _prev_weight(lw), "suggested_reps": "10-12",
@@ -90,16 +147,10 @@ def _garmin_history(target: date_type, days: int = 42) -> dict[str, list[dict[st
             select(Workout).where(Workout.start >= since).order_by(Workout.start.desc())
         ).scalars().all()
         for w in rows:
-            raw = w.raw_json or {}
-            sets = raw.get("summarizedExerciseSets") or []
             d = (w.start + timedelta(hours=9)).date()
-            for st in sets:
-                name = str(st.get("category") or "").lower()
-                wt, reps = st.get("weight"), st.get("reps")
-                if not name or wt is None:
-                    continue
-                out.setdefault(name, []).append(
-                    {"date": d, "weight_kg": float(wt), "reps": int(reps or 0)}
+            for st in _parse_sets(w.raw_json or {}):
+                out.setdefault(st["label"], []).append(
+                    {"date": d, "weight_kg": st["weight_kg"], "reps": st["reps"]}
                 )
     return out
 
@@ -114,7 +165,7 @@ def gather_load_suggestions(target: date_type) -> dict[str, Any]:
     for k, v in (s.user_starting_weights or {}).items():
         pw = _parse_weight(v)
         if pw is not None:
-            starting[k.lower()] = pw
+            starting[k] = pw
     hist = _garmin_history(target)
     suggestions: dict[str, Any] = {}
     keys = set(hist) | set(starting)

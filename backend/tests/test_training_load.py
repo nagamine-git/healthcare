@@ -37,3 +37,30 @@ def test_deload_after_long_gap():
     s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
     assert s["suggested_weight_kg"] == 8.0  # 1段階下げて再開
     assert "deload" in s["basis"]
+
+
+def test_parse_sets_reads_grams_and_bodyweight():
+    from app.scoring.training_load import _parse_sets
+
+    raw = {"summarizedExerciseSets": [
+        {"category": "DEADLIFT", "subCategory": "ROMANIAN_DEADLIFT", "reps": 11, "maxWeight": 8000, "sets": 1},
+        {"category": "PUSH_UP", "reps": 12, "maxWeight": 0, "sets": 1},
+        {"category": "CORE", "subCategory": "KNEELING_AB_WHEEL", "reps": 30, "maxWeight": 0},
+    ]}
+    got = _parse_sets(raw)
+    assert {"label": "ルーマニアンデッドリフト", "weight_kg": 8.0, "reps": 11} in got
+    assert {"label": "腕立て", "weight_kg": 0.0, "reps": 12} in got
+    assert {"label": "アブローラー", "weight_kg": 0.0, "reps": 30} in got
+
+
+def test_bodyweight_progresses_by_reps_not_weight():
+    # 前回 腕立て12回 (自重) → 次は据え置きでなく回数を増やす (ぬるま湯回避)
+    hist = [{"date": date(2026, 7, 6), "weight_kg": 0.0, "reps": 12}]
+    s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
+    assert s["suggested_weight_kg"] == 0.0
+    assert "12" in s["basis"] or "回" in s["basis"]
+    # 目標レップに達したら難種目へ
+    hard = suggest_for_exercise(
+        history=[{"date": date(2026, 7, 6), "weight_kg": 0.0, "reps": 25}], today=TODAY, starting_weight=None
+    )
+    assert "難" in hard["basis"] or "変" in hard["basis"]
