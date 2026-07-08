@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     body_fat_tolerance_pct: float = 1.5
 
     # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
+    # トレーニング習熟度 (beginner/intermediate/advanced)。実績が無い種目の初期重量係数に使う
+    training_level: str = "beginner"
+
     user_equipment: list[str] = Field(
         default_factory=lambda: [
             "ダンベル (2 / 4 / 8 / 12 / 16 / 20 kg のいずれか。10kg や 6kg などの中間サイズは持っていない)",

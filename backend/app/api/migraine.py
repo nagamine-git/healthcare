@@ -117,6 +117,18 @@ async def migraine_triggers() -> dict[str, Any]:
     from app.scoring.migraine_triggers import analyze_triggers
 
     target = datetime.now(ZoneInfo(get_settings().app_tz)).date()
+    # エピソード終了でコンディション前提が変わる → 当日助言をバックグラウンド再生成
+    # (生成時に「継続中」で休養に倒れた助言を、終了後も一日中引きずらないため)
+    try:
+        import asyncio
+
+        from app.llm.client import generate_advice_for_date
+        from app.scoring.timewindow import app_today
+
+        asyncio.get_running_loop().create_task(generate_advice_for_date(app_today()))
+    except Exception:
+        pass
+
     return analyze_triggers(target)
 
 

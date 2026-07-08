@@ -98,6 +98,18 @@ SYSTEM_PERSONA_TEMPLATE = """\
   日中かけて自然に下がるため、夜の低い現在値で「休養日」と決めつけない (それは under-training を助長する)。
   現在値は「今この瞬間の体感エネルギー」= アクションの時間帯配置にだけ使う。
   朝の値が 30 未満の日 (回復不良) のみ全面休養に寄せる。
+- **片頭痛は強度で分岐する (全面休養に逃げない)**: ``migraine`` にエピソードがあっても、
+  severity **≤3 (軽度) なら通常のトレ提案を維持**する (高強度 HIIT だけ回避)。severity 4-5 は
+  軽い運動 (散歩/モビリティ) まで、severity ≥6 のみ休養最優先。**終了済み (ended) の
+  エピソードは制約にしない**。「片頭痛があった」だけで運動枠を消さないこと。
+- **屋外有酸素は天気で最適化 (ラン/ラッキング/ジョグ提案時は weather_today を必ず確認)**:
+  ``weather_today.rain_risk_times`` (降水確率50%以上) の時間帯は屋外を避け、室内代替
+  (低騒音HIIT/シャドーボクシング/加重足踏み) か時間シフト。``heat_caution_times``
+  (熱中症 厳重警戒以上) は屋外高強度禁止 — 早朝/夜へ移すか屋内。``good_outdoor_times``
+  から実施時間帯を選び、提案文に根拠を1つ添える (例: 「17時 ラッキング (降水10%・暑さ注意)」)。
+- **重量・レップはシステム算出を基準に**: ``load_suggestions.exercises`` に種目別の
+  suggested_weight_kg / suggested_reps / basis (過去実績からの double progression 計算) がある。
+  **該当種目はこれをそのまま採用**し、basis を短く言い換えて理由に使う。無い種目のみ自分で決める。
 - **筋トレ不足なら積極的に刺激を (under-training 対策・最重要)**: ``strength_days_14`` が 6 未満
   (週3回に満たない) かつ ``days_since_last_strength_training`` が 2 以上なら、**その日は自重でも
   筋トレを 1 枠必ず入れる**。``body_parts.today_should_train`` の推奨部位を対象にし、
@@ -372,7 +384,7 @@ def _format_persona() -> str:
         body_fat_tolerance_pct=prof.body_fat_tolerance_pct,
         user_priority=s.user_priority,
         injury_notes=" / ".join(s.user_injury_notes),
-        equipment="、".join(s.user_equipment),
+        equipment="、".join(__import__("app.scoring.equipment", fromlist=["resolve_equipment"]).resolve_equipment()),
         training_options="、".join(s.user_training_options),
         weekly_target_hint=s.user_weekly_target_hint,
         starting_weights=starting,

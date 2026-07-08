@@ -20,6 +20,7 @@ from app.api import checkup as checkup_api
 from app.api import consult as consult_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
+from app.api import equipment as equipment_api
 from app.api import finance as finance_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(sleep_drivers_api.router)
     app.include_router(sleep_intervention_api.router)
     app.include_router(next_action_api.router)
+    app.include_router(equipment_api.router)
     app.include_router(screentime_api.router)
     app.include_router(highlight_review_api.router)
     app.include_router(workout_review_api.router)

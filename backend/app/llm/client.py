@@ -1052,6 +1052,23 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     today_payload["recent_workouts_14d"] = _gather_recent_workouts(target, days=14)
     today_payload["days_since_last_strength_training"] = _days_since_last_strength_training(target)
     today_payload["strength_days_14"] = _strength_days_in_window(target, days=14)
+    # 天気 (屋外有酸素の降水・熱中症判断) と 実績ベース負荷 (double progression のシステム算出)
+    try:
+        from app.integrations.weather_forecast import get_weather_forecast
+        from app.scoring.weather_risk import brief_from_hourly
+
+        wf = get_weather_forecast()
+        today_payload["weather_today"] = brief_from_hourly((wf or {}).get("hourly") or [])
+    except Exception as exc:
+        logger.info("weather_brief_failed", error=str(exc))
+        today_payload["weather_today"] = None
+    try:
+        from app.scoring.training_load import gather_load_suggestions
+
+        today_payload["load_suggestions"] = gather_load_suggestions(target)
+    except Exception as exc:
+        logger.info("load_suggestions_failed", error=str(exc))
+        today_payload["load_suggestions"] = None
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     today_payload["previous_advice_today"] = _gather_previous_advice_today(target)
     today_payload.update(_gather_today_activity(target))

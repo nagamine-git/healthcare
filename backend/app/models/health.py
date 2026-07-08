@@ -114,6 +114,18 @@ class HighlightReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class EquipmentItem(Base):
+    """自宅トレ器具 (LLM のトレ処方が使ってよい機材)。空なら settings からシード。"""
+
+    __tablename__ = "equipment_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120))
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ScreenTimeSample(Base):
     """iOS スクリーンタイムのスクショ取込 (スマホ依存トラッキング)。
 
