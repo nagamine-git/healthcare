@@ -33,7 +33,12 @@ def _mock_llm(monkeypatch, calls):
 def test_create_persist_idempotent_and_list(app_client, monkeypatch):
     calls = {"n": 0}
     _mock_llm(monkeypatch, calls)
-    body = {"date": "2026-07-05", "event_key": "01:32|就寝", "label": "就寝", "time_jst": "01:32"}
+    # 一覧 API は既定で直近3日 (app_today-3) に絞るため、日付は「今日」基準の相対で作る。
+    # 固定日付だと実時刻が進むと窓から外れてテストが時限で壊れる。
+    from app.scoring.timewindow import app_today
+
+    day = app_today().isoformat()
+    body = {"date": day, "event_key": "01:32|就寝", "label": "就寝", "time_jst": "01:32"}
 
     r1 = app_client.post("/api/highlight-reviews", json=body)
     assert r1.status_code == 200 and r1.json()["tone"] == "caution" and calls["n"] == 1
@@ -45,7 +50,7 @@ def test_create_persist_idempotent_and_list(app_client, monkeypatch):
     assert r3.status_code == 200 and calls["n"] == 2
 
     lst = app_client.get("/api/highlight-reviews").json()["items"]
-    assert any(i["event_key"] == "01:32|就寝" and i["date"] == "2026-07-05" for i in lst)
+    assert any(i["event_key"] == "01:32|就寝" and i["date"] == day for i in lst)
 
 
 def test_same_key_different_date_is_separate(app_client, monkeypatch):
