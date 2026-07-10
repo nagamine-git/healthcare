@@ -28,12 +28,43 @@ export function DistributionPanel() {
         最強の予後指標である心肺フィットネス (VO2max) も。
         {!data.evaluable && " 設定で生年月日・性別・身長を入れると percentile が出ます。"}
       </p>
+      <SourceAsOf bodyComp={data.body_comp_as_of} vo2max={data.vo2max_as_of} />
       <div className="space-y-3">
         {data.metrics.map((m) => (
           <MetricChart key={m.key} m={m} />
         ))}
       </div>
     </section>
+  );
+}
+
+/** "YYYY-MM-DD" → "M/D(N日前)"。today 基準の相対 (単一ユーザー・ローカル日付=app_tz)。 */
+function fmtAsOf(iso: string): string {
+  const [y, mo, d] = iso.split("-").map(Number);
+  const then = new Date(y, mo - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((today.getTime() - then.getTime()) / 86_400_000);
+  const rel = days <= 0 ? "今日" : days === 1 ? "昨日" : `${days}日前`;
+  return `${mo}/${d}(${rel})`;
+}
+
+/** 推定が参考にした最終記録の日時をソース別 (体組成 / VO2max) に集約表示する。 */
+function SourceAsOf({ bodyComp, vo2max }: { bodyComp: string | null; vo2max: string | null }) {
+  if (!bodyComp && !vo2max) return null;
+  const parts: { label: string; iso: string }[] = [];
+  if (bodyComp) parts.push({ label: "体組成", iso: bodyComp });
+  if (vo2max) parts.push({ label: "心肺(VO2max)", iso: vo2max });
+  return (
+    <p className="text-[10px] text-ink-faint">
+      参考記録 —{" "}
+      {parts.map((p, i) => (
+        <span key={p.label}>
+          {i > 0 && " ・ "}
+          {p.label} <span className="text-ink-dim">{fmtAsOf(p.iso)}</span>
+        </span>
+      ))}
+    </p>
   );
 }
 

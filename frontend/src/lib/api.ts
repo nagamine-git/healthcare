@@ -725,13 +725,13 @@ export type SleepDriverFactor = {
   direction: "改善" | "悪化";
   diff: number;
   p: number;
-  q: number;
-  tier: "strong" | "suggestive" | "trend" | "weak";
+  q: number | null; // preliminary は FDR 未補正で null
+  tier: "strong" | "suggestive" | "trend" | "weak" | "preliminary";
   n: number;
 };
 export type SleepRecommendation = { text: string; driver: string; basis: string; tier: string };
 export type SleepDriverState = {
-  status: "analyzed" | "accumulating" | "no_data";
+  status: "analyzed" | "preliminary" | "accumulating" | "no_data";
   n_nights: number;
   reliability?: "high" | "medium" | "low";
   remaining?: number;
@@ -854,9 +854,11 @@ export type SleepInterventionOutcome = {
   outcome_label: string;
   diff: number;
   p: number;
-  q: number;
-  tier: "strong" | "suggestive" | "trend" | "weak";
+  q: number | null; // preliminary は FDR 未補正で null
+  tier: "strong" | "suggestive" | "trend" | "weak" | "preliminary";
   direction: "改善" | "悪化";
+  n_did?: number; // 暫定シグナルの各群夜数 (preliminary 表示に使う)
+  n_didnt?: number;
 };
 export type SleepInterventionResult = {
   key: string;
@@ -868,12 +870,12 @@ export type SleepInterventionResult = {
   outcomes: SleepInterventionOutcome[];
 };
 export type SleepInterventionAnalysis = {
-  status: "analyzed" | "accumulating";
+  status: "analyzed" | "preliminary" | "accumulating";
   n_nights: number;
   remaining?: number;
   reliability?: "high" | "medium" | "low";
   interventions: SleepInterventionResult[];
-  suggestion: { text: string; reason: string } | null;
+  suggestion: { text: string; reason: string; kind?: string } | null;
 };
 
 export type HabitPaceItem = {
@@ -1301,6 +1303,8 @@ export type PhysiqueDistributionMetric = {
 export type PhysiqueDistribution = {
   evaluable: boolean;
   metrics: PhysiqueDistributionMetric[];
+  body_comp_as_of: string | null; // BMI/体脂肪/FFMI が参照した最新体組成記録の日付 (YYYY-MM-DD)
+  vo2max_as_of: string | null; // VO2max が参照した記録の日付 (実測=DailySummary / 推定=MetricSample)
 };
 export type ActivityDay = {
   date: string;
