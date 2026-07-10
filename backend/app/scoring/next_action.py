@@ -49,6 +49,63 @@ class Inputs:
     trained_today: bool = False                 # 今日すでに何かトレーニング済みか
     morning_bb: float | None = None             # 今朝の Body Battery (6時固定・回復状態の代理)
     strength_days_14: int = 0                   # 直近14日の筋トレ日数 (週頻度の判定)
+    last_night_min: float | None = None         # 前夜 (target 付け) の総睡眠分。睡眠負債の算定に使う
+    target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
+
+
+# --- 仮眠の科学ベース設計パラメータ ---
+# 深睡眠 (N3) に入る前に起きれば睡眠慣性 (grogginess) を避けられる → パワーナップ上限20分。
+# 30-60分は最悪の「グロッグ帯」なので絶対に提案しない。大きな睡眠負債があり時間に余裕が
+# あるときだけ、1睡眠周期 (約90分) を完走して REM 末で目覚める案に切り替える。
+# 遅い仮眠は夜間の睡眠圧 (アデノシン) を削るので、16:00 か 就寝6時間前の早い方までに終える。
+_POWER_NAP_MAX_MIN = 20
+_POWER_NAP_MIN_MIN = 10          # これ未満しか取れないなら仮眠の価値が薄い → 提案しない
+_FULL_CYCLE_MIN = 90
+_NAP_DEBT_FOR_CYCLE_MIN = 90     # 前夜がこの分以上不足していればフルサイクルを正当化
+_NAP_LATEST_CLOCK = time(16, 0)  # これ以降に終わる仮眠は夜間睡眠を削る
+_NAP_BEDTIME_GUARD_H = 6         # 就寝この時間前以降は仮眠しない (睡眠圧を残す)
+
+
+def recommend_nap(
+    now: datetime,
+    bb_current: float | None,
+    last_night_min: float | None,
+    bedtime: datetime | None,
+    target_sleep_min: int,
+) -> dict[str, Any] | None:
+    """科学ベースの仮眠プランを返す。発火条件を満たさなければ None。
+
+    返り値: {minutes, kind ("power"|"cycle"), wake_by (datetime), cutoff (datetime), debt}
+    now は JST naive。bedtime は同日の HH:MM を表す datetime か None。
+    """
+    # 発火はエネルギー枯渇時のみ (従来踏襲)。午前11時より前は昼夜リズム的に非推奨。
+    if bb_current is None or bb_current >= 25:
+        return None
+    if now.hour + now.minute / 60 < 11:
+        return None
+    # カットオフ = min(16:00, 就寝6時間前)。仮眠はこの時刻までに「終える」。
+    cutoff = datetime.combine(now.date(), _NAP_LATEST_CLOCK)
+    if bedtime is not None:
+        guard = bedtime - timedelta(hours=_NAP_BEDTIME_GUARD_H)
+        if guard < cutoff:
+            cutoff = guard
+    available = (cutoff - now).total_seconds() / 60
+    if available < _POWER_NAP_MIN_MIN:
+        return None  # もう遅い — 夜まで我慢するのが正解
+    debt = max(0.0, target_sleep_min - last_night_min) if last_night_min is not None else 0.0
+    if debt >= _NAP_DEBT_FOR_CYCLE_MIN and available >= _FULL_CYCLE_MIN + 5:
+        minutes, kind = _FULL_CYCLE_MIN, "cycle"
+    else:
+        # パワーナップ: 20分上限。使える時間が短ければ詰める (最低10分)。30-60帯は構造上不可能。
+        minutes = int(max(_POWER_NAP_MIN_MIN, min(_POWER_NAP_MAX_MIN, available)))
+        kind = "power"
+    return {
+        "minutes": minutes,
+        "kind": kind,
+        "wake_by": now + timedelta(minutes=minutes),
+        "cutoff": cutoff,
+        "debt": debt,
+    }
 
 
 def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
@@ -98,9 +155,19 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             f"今夜の計画: 入浴 {tp.get('bath')} / 就寝 {tp.get('bedtime')}。ここを守ると明日が変わる", None)
 
     # --- 4. いまの生理状態 ---
-    if inp.bb_current is not None and inp.bb_current < 25 and 11 <= hour < 19:
-        add("nap", 75, "15–20分の仮眠 (またはアイマスクで横になる)",
-            f"Body Battery {int(inp.bb_current)} — エネルギー枯渇中。短い仮眠が最も回収効率が高い", None)
+    plan = recommend_nap(now, inp.bb_current, inp.last_night_min, bedtime, inp.target_sleep_min)
+    if plan is not None:
+        wake = plan["wake_by"].strftime("%H:%M")
+        cutoff = plan["cutoff"].strftime("%H:%M")
+        if plan["kind"] == "cycle":
+            add("nap", 75, f"90分の仮眠（1睡眠周期・{wake} 起床）",
+                f"前夜が目標比 -{int(plan['debt'])}分 — 1周期(約90分)を完走すれば REM 末で"
+                f"目覚めやすく慣性が小さい。{cutoff} までに終える", None)
+        else:
+            m = plan["minutes"]
+            add("nap", 75, f"{m}分のパワーナップ（{wake} までに起床）",
+                f"Body Battery {int(inp.bb_current)} — {m}分で深睡眠に入る前に起き睡眠慣性を回避。"
+                f"夜の睡眠を守るため {cutoff} 以降は不可", None)
     if inp.stress_recent is not None and inp.stress_recent >= 70:
         add("stress_break", 72, "4-7-8呼吸を2分 (画面から離れる)",
             f"直近30分のストレス平均 {int(inp.stress_recent)} — 高止まり中", None)
@@ -195,6 +262,7 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
     tz = ZoneInfo(s.app_tz)
     now = datetime.now(tz).replace(tzinfo=None)
     inp = Inputs()
+    inp.target_sleep_min = s.target_sleep_min
 
     def safe(fn):
         try:
@@ -256,6 +324,13 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
                 select(BodyBatteryDaily.morning_value).where(BodyBatteryDaily.date == target)
             ).scalar()
             inp.morning_bb = float(mbb) if mbb is not None else None
+            # 前夜 (target 付け) の総睡眠分 — 仮眠の長さ算定 (睡眠負債) に使う
+            from app.models import SleepSession
+
+            ln = db.execute(
+                select(SleepSession.total_min).where(SleepSession.date == target)
+            ).scalar()
+            inp.last_night_min = float(ln) if ln is not None else None
 
     def _nutrition():
         from app.scoring.nutrition import aggregate_nutrition

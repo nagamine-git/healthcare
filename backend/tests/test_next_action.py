@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.scoring.next_action import Inputs, build_candidates
+from app.scoring.next_action import Inputs, build_candidates, recommend_nap
 
 
 def _at(h: int, m: int = 0) -> datetime:
@@ -124,3 +124,77 @@ def test_training_gap_bedtime_switches_to_short_session():
 def test_training_gap_quiet_within_1_day():
     inp = Inputs(days_since_strength=1, strength_days_14=3, morning_bb=70.0)
     assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
+
+
+# ===== 仮眠の科学ベース睡眠時間計算 (recommend_nap) =====
+
+
+def test_nap_defaults_to_power_nap_20min():
+    # BB枯渇・時間に余裕・睡眠負債なし → 睡眠慣性を避ける20分パワーナップ
+    plan = recommend_nap(_at(13), bb_current=15.0, last_night_min=480,
+                         bedtime=_at(23, 30), target_sleep_min=480)
+    assert plan is not None
+    assert plan["kind"] == "power"
+    assert plan["minutes"] == 20
+
+
+def test_nap_full_cycle_when_sleep_deprived_and_time_allows():
+    # 前夜5h (負債180分)・13時・遅い就寝 → 1睡眠周期の90分
+    plan = recommend_nap(_at(13), bb_current=15.0, last_night_min=300,
+                         bedtime=_at(23, 30), target_sleep_min=480)
+    assert plan is not None
+    assert plan["kind"] == "cycle"
+    assert plan["minutes"] == 90
+
+
+def test_nap_never_enters_grog_zone_when_time_is_short():
+    # 15:45 → カットオフ16:00まで15分。負債大でも90分は不可。30-60分帯にも絶対入れない
+    plan = recommend_nap(_at(15, 45), bb_current=15.0, last_night_min=300,
+                         bedtime=_at(23, 30), target_sleep_min=480)
+    assert plan is not None
+    assert plan["kind"] == "power"
+    assert plan["minutes"] <= 20
+    assert not (30 <= plan["minutes"] <= 60)
+
+
+def test_nap_suppressed_after_1600_cutoff():
+    # 16:10 → 16:00 のカットオフを過ぎている → 遅い仮眠は夜間睡眠を削るので出さない
+    assert recommend_nap(_at(16, 10), bb_current=15.0, last_night_min=480,
+                         bedtime=_at(23, 30), target_sleep_min=480) is None
+
+
+def test_nap_cutoff_pulled_earlier_by_early_bedtime():
+    # 就寝19:00 → 6時間前=13:00 がカットオフ。13:30 は過ぎているので None
+    assert recommend_nap(_at(13, 30), bb_current=15.0, last_night_min=480,
+                         bedtime=_at(19, 0), target_sleep_min=480) is None
+
+
+def test_nap_not_fired_when_energy_ok():
+    # BBが十分 → 仮眠は提案しない
+    assert recommend_nap(_at(13), bb_current=60.0, last_night_min=300,
+                         bedtime=_at(23, 30), target_sleep_min=480) is None
+
+
+def test_nap_power_when_late_afternoon_even_if_deprived():
+    # 15:00・負債大でも 16:00 まで60分しかない → フルサイクル不可でパワーナップ
+    plan = recommend_nap(_at(15), bb_current=15.0, last_night_min=300,
+                         bedtime=_at(23, 30), target_sleep_min=480)
+    assert plan is not None
+    assert plan["kind"] == "power"
+
+
+def test_nap_missing_sleep_data_degrades_to_power_nap():
+    # 前夜データ欠測 → 負債0扱いでパワーナップ (堅牢な劣化)
+    plan = recommend_nap(_at(13), bb_current=10.0, last_night_min=None,
+                         bedtime=None, target_sleep_min=480)
+    assert plan is not None
+    assert plan["kind"] == "power"
+    assert plan["minutes"] == 20
+
+
+def test_nap_wired_into_candidates_with_calculated_duration():
+    inp = Inputs(bb_current=15.0, last_night_min=480,
+                 tonight={"bedtime": "23:30"}, target_sleep_min=480)
+    nap = next(c for c in build_candidates(inp, _at(13)) if c["key"] == "nap")
+    assert "20分" in nap["title"]
+    assert "起床" in nap["title"]  # 起床時刻を提示
