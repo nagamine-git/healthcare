@@ -23,9 +23,13 @@ from app.scoring.migraine_stats import benjamini_hochberg, permutation_test
 from app.scoring.timewindow import app_today
 
 _DAYS = 120        # 解析窓 (日)
-_MIN_NIGHTS = 6    # これ未満の記録夜数なら「蓄積中」表示
-_MIN_GROUP = 3     # 着けた/外した 各群の最小数 (未満は検定しない)
+_MIN_NIGHTS = 6    # これ以上 & 各群>=_MIN_GROUP で「有意性を語れる (powered)」
+_MIN_GROUP = 3     # 着けた/外した 各群の最小数 (powered 判定に使用)
+_MIN_ARM_PRELIM = 2  # 各群これ以上あれば「暫定シグナル」(方向+効果量) は出す
 FDR_Q = 0.05
+
+# 探索 (未検証の介入を今夜試す) の優先順。文献的な堅さ・導入しやすさ順。
+_EXPLORE_ORDER = ["earplugs", "mouth_tape", "eyemask", "nose_strip"]
 
 # 介入 (key, ラベル)
 INTERVENTIONS: list[tuple[str, str]] = [
@@ -107,102 +111,107 @@ def _tier(p: float, q: float) -> str:
     return "weak"
 
 
+def _verdict(primary: dict[str, Any] | None) -> str:
+    """主指標から確定 verdict。暫定 (preliminary) は確定させず insufficient 扱い。"""
+    if primary is None or primary["tier"] == "preliminary":
+        return "insufficient"
+    if primary["tier"] in ("strong", "suggestive"):
+        return "improves" if primary["diff"] > 0 else "worsens"
+    return "no_effect"
+
+
 def _analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """DB 非依存の純関数。行 (アウトカム + 介入フラグ) から効果分析を組み立てる。"""
+    """DB 非依存の純関数。行 (アウトカム + 介入フラグ) から効果分析を組み立てる。
+
+    ハードゲート (n>=_MIN_NIGHTS & 各群>=_MIN_GROUP) 未満でも、各群 >=_MIN_ARM_PRELIM あれば
+    「暫定シグナル」(方向 + 効果量 + n) を tier="preliminary" で出す。有意性・因果は主張しない。
+    データが育てば同じ枠が strong/suggestive/trend/weak に自動昇格する。
+    """
     n = len(rows)
     base: dict[str, Any] = {"n_nights": n, "interventions": [], "suggestion": None}
-    if n < _MIN_NIGHTS:
-        base["status"] = "accumulating"
-        base["remaining"] = _MIN_NIGHTS - n
-        return base
 
-    # 全 (介入×アウトカム) を検定 → まとめて FDR。
-    tests: list[dict[str, Any]] = []
+    # 各 (介入×アウトカム) の観測差を算出 (各群 >=_MIN_ARM_PRELIM)。
+    # powered = 各群>=_MIN_GROUP かつ n>=_MIN_NIGHTS。powered のみ FDR 補正して有意性を語る。
+    raw: dict[tuple[str, str], dict[str, Any]] = {}
+    powered: list[tuple[str, str]] = []
     for ikey, _ilabel in INTERVENTIONS:
         for okey, olabel in OUTCOMES:
             did = [r[okey] for r in rows if r.get(ikey) is True and r.get(okey) is not None]
             didnt = [r[okey] for r in rows if r.get(ikey) is False and r.get(okey) is not None]
-            if len(did) < _MIN_GROUP or len(didnt) < _MIN_GROUP:
+            if len(did) < _MIN_ARM_PRELIM or len(didnt) < _MIN_ARM_PRELIM:
                 continue
             p, diff = permutation_test(did, didnt)
             if p is None or diff is None:
                 continue
-            tests.append({
-                "intervention": ikey, "outcome": okey, "outcome_label": olabel,
-                "p": round(p, 4), "diff": diff,
-            })
+            is_powered = len(did) >= _MIN_GROUP and len(didnt) >= _MIN_GROUP and n >= _MIN_NIGHTS
+            raw[(ikey, okey)] = {
+                "outcome_label": olabel, "p": round(p, 4), "diff": diff,
+                "powered": is_powered, "n_did": len(did), "n_didnt": len(didnt),
+            }
+            if is_powered:
+                powered.append((ikey, okey))
 
     qmap: dict[tuple[str, str], float] = {}
-    if tests:
-        qs = benjamini_hochberg([t["p"] for t in tests])
-        for t, q in zip(tests, qs, strict=True):
-            qmap[(t["intervention"], t["outcome"])] = q
+    if powered:
+        qs = benjamini_hochberg([raw[k]["p"] for k in powered])
+        for k, q in zip(powered, qs, strict=True):
+            qmap[k] = q
 
     for ikey, ilabel in INTERVENTIONS:
         # 群サイズはアウトカム欠測に依存しないよう、記録された True/False 夜数で数える
         n_did = sum(1 for r in rows if r.get(ikey) is True)
         n_didnt = sum(1 for r in rows if r.get(ikey) is False)
+        if n_did + n_didnt == 0:
+            continue  # 一度も記録の無い介入はパネルに出さない (今夜プランで探索対象にする)
         outcomes: list[dict[str, Any]] = []
-        for t in tests:
-            if t["intervention"] != ikey:
+        for okey, _olabel in OUTCOMES:
+            r = raw.get((ikey, okey))
+            if r is None:
                 continue
-            q = qmap[(ikey, t["outcome"])]
-            tier = _tier(t["p"], q)
+            if r["powered"]:
+                q: float | None = round(qmap[(ikey, okey)], 4)
+                tier = _tier(r["p"], qmap[(ikey, okey)])
+            else:
+                q = None
+                tier = "preliminary"
             outcomes.append({
-                "outcome": t["outcome"], "outcome_label": t["outcome_label"],
-                "diff": round(t["diff"], 1), "p": t["p"], "q": round(q, 4), "tier": tier,
-                "direction": "改善" if t["diff"] > 0 else "悪化",
+                "outcome": okey, "outcome_label": r["outcome_label"],
+                "diff": round(r["diff"], 1), "p": r["p"], "q": q, "tier": tier,
+                "direction": "改善" if r["diff"] > 0 else "悪化",
+                "n_did": r["n_did"], "n_didnt": r["n_didnt"],
             })
         primary = next((o for o in outcomes if o["outcome"] == _PRIMARY), None)
-        if primary is None:
-            verdict = "insufficient"
-        elif primary["tier"] in ("strong", "suggestive") and primary["diff"] > 0:
-            verdict = "improves"
-        elif primary["tier"] in ("strong", "suggestive") and primary["diff"] < 0:
-            verdict = "worsens"
-        else:
-            verdict = "no_effect"
-        # 見出しは主指標順、その後 tier の強い順
-        outcomes.sort(key=lambda o: (o["outcome"] != _PRIMARY, o["q"]))
+        verdict = _verdict(primary)
+        # 主指標を先頭 → powered 優先 → q 昇順 (preliminary は q=None なので末尾寄せ)
+        outcomes.sort(key=lambda o: (
+            o["outcome"] != _PRIMARY, o["tier"] == "preliminary",
+            o["q"] if o["q"] is not None else 1.0,
+        ))
         base["interventions"].append({
             "key": ikey, "label": ilabel,
             "n_did": n_did, "n_didnt": n_didnt,
             "verdict": verdict, "primary": primary, "outcomes": outcomes,
         })
 
-    base["suggestion"] = _suggestion(rows, base["interventions"])
-    base["status"] = "analyzed"
-    base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
+    base["suggestion"] = _tonight_plan(rows, base["interventions"])
+
+    prelim_any = any(
+        o["tier"] == "preliminary" for iv in base["interventions"] for o in iv["outcomes"]
+    )
+    if powered:
+        base["status"] = "analyzed"
+        base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
+    elif prelim_any:
+        base["status"] = "preliminary"
+        base["remaining"] = max(0, _MIN_NIGHTS - n)
+    else:
+        base["status"] = "accumulating"
+        base["remaining"] = max(0, _MIN_NIGHTS - n)
     return base
 
 
-def _suggestion(
-    rows: list[dict[str, Any]], interventions: list[dict[str, Any]]
-) -> dict[str, str] | None:
-    """交絡を崩す「今夜の検証」を最大1件提案 (ハイブリッド運用の核)。"""
-    label = {k: v for k, v in INTERVENTIONS}
-
-    # (a) ほぼ毎晩着けている介入 (外した夜が不足) → 今夜は外して検証。
-    #     効果未確定 (verdict=insufficient/no_effect) のものを優先。
-    undecided = {
-        iv["key"] for iv in interventions if iv["verdict"] in ("insufficient", "no_effect")
-    }
-    always_on = [
-        iv for iv in interventions
-        if iv["n_didnt"] < _MIN_GROUP and iv["n_did"] >= _MIN_GROUP
-    ]
-    always_on.sort(key=lambda iv: (iv["key"] not in undecided, iv["n_didnt"]))
-    if always_on:
-        iv = always_on[0]
-        return {
-            "text": f"今夜は{iv['label']}を外して寝てみる",
-            "reason": (
-                f"{iv['label']}を外した夜が{iv['n_didnt']}夜しかなく、効果を判定できません。"
-                "着けない夜を作ると比較できます。"
-            ),
-        }
-
-    # (b) 2 介入がほぼ常に同時 (着ける/外すが一致しすぎ) → 今夜は一方だけ。
+def _deconfound(rows: list[dict[str, Any]], label: dict[str, str]) -> dict[str, str] | None:
+    """2 介入がほぼ常に同時 (着脱が一致しすぎ) なら「今夜は一方だけ」を提案。"""
     keys = [k for k, _ in INTERVENTIONS]
     best: tuple[int, str, str] | None = None  # (不一致夜数, keyA, keyB)
     for i in range(len(keys)):
@@ -212,21 +221,100 @@ def _suggestion(
             if len(both) < _MIN_NIGHTS:
                 continue
             discordant = sum(1 for r in both if r[a] != r[b])
-            # 両方とも「着ける寄り」で不一致が乏しい = 効果を切り分けられない
             a_on = sum(1 for r in both if r[a] is True)
             b_on = sum(1 for r in both if r[b] is True)
             if discordant < _MIN_GROUP and a_on >= _MIN_GROUP and b_on >= _MIN_GROUP:
                 if best is None or discordant < best[0]:
                     best = (discordant, a, b)
-    if best is not None:
-        _, a, b = best
+    if best is None:
+        return None
+    _, a, b = best
+    return {
+        "kind": "deconfound",
+        "text": f"今夜は{label[a]}と{label[b]}のどちらか一方だけにする",
+        "reason": (
+            f"{label[a]}と{label[b]}をほぼ毎晩セットで使っているため、"
+            "どちらが効いているか分離できません。片方だけの夜を作ると切り分けられます。"
+        ),
+    }
+
+
+def _tonight_plan(
+    rows: list[dict[str, Any]], interventions: list[dict[str, Any]]
+) -> dict[str, str] | None:
+    """「今夜何で寝るべきか」を 1 手だけ提案 (夜1から動く探索+活用)。
+
+    優先度: 交絡崩し > explore-off (ほぼ毎晩ON・未確定を今夜外す) > exploit (実証済みを継続) >
+    explore-on (未検証の介入を今夜試す)。データ収集を優先しつつ、勝者が出たら継続を促す。
+    """
+    label = {k: v for k, v in INTERVENTIONS}
+    by_key = {iv["key"]: iv for iv in interventions}
+
+    def cover(key: str) -> tuple[int, int]:
+        return (
+            sum(1 for r in rows if r.get(key) is True),
+            sum(1 for r in rows if r.get(key) is False),
+        )
+
+    def undecided(key: str) -> bool:
+        iv = by_key.get(key)
+        return iv is None or iv.get("verdict") in ("insufficient", "no_effect")
+
+    # 1. 交絡崩し
+    dc = _deconfound(rows, label)
+    if dc:
+        return dc
+
+    # 2. explore-off: ほぼ毎晩ON・未確定 → 今夜外して比較群を作る
+    off = []
+    for key in _EXPLORE_ORDER:
+        n_did, n_didnt = cover(key)
+        if n_did >= _MIN_GROUP and n_didnt < _MIN_GROUP and undecided(key):
+            off.append((n_didnt, _EXPLORE_ORDER.index(key), key))
+    if off:
+        off.sort()
+        key = off[0][2]
+        _, n_didnt = cover(key)
         return {
-            "text": f"今夜は{label[a]}と{label[b]}のどちらか一方だけにする",
+            "kind": "explore",
+            "text": f"今夜は{label[key]}を外して寝てみる",
             "reason": (
-                f"{label[a]}と{label[b]}をほぼ毎晩セットで使っているため、"
-                "どちらが効いているか分離できません。片方だけの夜を作ると切り分けられます。"
+                f"{label[key]}を外した夜が{n_didnt}夜しかなく、効果を判定できません。"
+                "着けない夜を作ると比較できます。"
             ),
         }
+
+    # 3. exploit: 実証済み (improves) の勝者を継続
+    winners = [iv for iv in interventions if iv.get("verdict") == "improves"]
+    if winners:
+        iv = winners[0]
+        pr = iv.get("primary") or {}
+        det = f"（{pr['outcome_label']} +{abs(pr['diff'])}）" if pr else ""
+        return {
+            "kind": "exploit",
+            "text": f"今夜も{iv['label']}をつける",
+            "reason": f"あなたのデータで{iv['label']}は睡眠の質を上げると確認済み{det}。続けましょう。",
+        }
+
+    # 4. explore-on: 未検証の介入を今夜試す (夜1から)
+    on = []
+    for key in _EXPLORE_ORDER:
+        n_did, _n_didnt = cover(key)
+        if n_did < _MIN_GROUP and undecided(key):
+            on.append((n_did, _EXPLORE_ORDER.index(key), key))
+    if on:
+        on.sort()
+        key = on[0][2]
+        n_did, _ = cover(key)
+        if n_did == 0:
+            reason = f"{label[key]}を試した夜がまだありません。まず数夜つけると効果を測れます。"
+        else:
+            reason = (
+                f"{label[key]}を着けた夜が{n_did}夜しかなく、効果を判定できません。"
+                "着ける夜を増やすと比較できます。"
+            )
+        return {"kind": "explore", "text": f"今夜は{label[key]}をつけて寝てみる", "reason": reason}
+
     return None
 
 

@@ -51,6 +51,7 @@ class Inputs:
     strength_days_14: int = 0                   # 直近14日の筋トレ日数 (週頻度の判定)
     last_night_min: float | None = None         # 前夜 (target 付け) の総睡眠分。睡眠負債の算定に使う
     target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
+    sleep_experiment: dict[str, Any] | None = None  # 今夜の睡眠実験 (探索/活用/交絡崩し) の提案
 
 
 # --- 仮眠の科学ベース設計パラメータ ---
@@ -217,6 +218,12 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             add("caffeine_cutoff", 58, f"カフェインは {cutoff.strftime('%H:%M')} {when}",
                 "就寝6時間前ルール (半減期): 以降の摂取は深睡眠を削る", None)
 
+    # --- 6.5 就寝前: 今夜の睡眠実験 (何で寝るべきか / データ取得のための探索+活用) ---
+    se = inp.sleep_experiment
+    if se and hour >= 19 and not inp.intervention_logged:
+        add("sleep_experiment", 60, str(se.get("text", "今夜の睡眠介入を決める")),
+            str(se.get("reason", "")), None)
+
     # --- 7. 栄養ペース (7:00-23:00 の経過割合に対する不足) ---
     if inp.water_actual_ml is not None and inp.water_ideal_ml:
         frac = min(1.0, max(0.0, (hour - 7) / 16))
@@ -368,7 +375,11 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             ).scalar()
             inp.trained_today = first is not None
 
-    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training):
+    def _sleep_exp():
+        from app.scoring.sleep_interventions import analyze as analyze_interventions
+        inp.sleep_experiment = analyze_interventions(target).get("suggestion")
+
+    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training, _sleep_exp):
         safe(fn)
     return inp, now
 

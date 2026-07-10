@@ -38,3 +38,26 @@ def test_alcohol_lowers_efficiency(db_engine):
     assert alc is not None, out["quality"]
     assert alc["direction"] == "悪化"
     assert alc["tier"] in ("strong", "suggestive", "trend")
+
+
+def test_preliminary_signal_below_gate(db_engine):
+    """8夜未満 (ゲート未達) でも各群>=2あれば暫定シグナル (方向+効果量) を出す。"""
+    today = date(2026, 6, 15)
+    with session_scope() as s:
+        for i in range(1, 6):  # 5夜
+            d = today - timedelta(days=i)
+            drank = i % 2 == 0  # i=2,4 の 2 夜
+            awake = 75 if drank else 22
+            s.add(SleepSession(date=d, source="garmin", total_min=420, awake_min=awake, sleep_score=70))
+            if drank:
+                ts = datetime.combine(d - timedelta(days=1), datetime.min.time()).replace(hour=11)
+                s.add(AlcoholIntake(ts=ts, source="beer", grams=20.0))
+    out = sd.analyze(today)
+    assert out["status"] == "preliminary"
+    alc = next(
+        (f for f in out["quality"] if f["driver"] == "alcohol_eve" and f["outcome"] == "efficiency"),
+        None,
+    )
+    assert alc is not None, out
+    assert alc["tier"] == "preliminary"
+    assert alc["direction"] == "悪化"

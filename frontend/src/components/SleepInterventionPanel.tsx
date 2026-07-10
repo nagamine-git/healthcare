@@ -12,10 +12,11 @@ import { LoadingState } from "./ui/cockpit";
  */
 
 const TIER_OP: Record<string, string> = {
-  strong: "opacity-100", suggestive: "opacity-90", trend: "opacity-70", weak: "opacity-45",
+  strong: "opacity-100", suggestive: "opacity-90", trend: "opacity-70",
+  weak: "opacity-45", preliminary: "opacity-60",
 };
 const TIER_LABEL: Record<string, string> = {
-  strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い",
+  strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い", preliminary: "暫定",
 };
 const VERDICT: Record<string, { label: string; cls: string }> = {
   improves: { label: "改善", cls: "bg-prog-500/20 text-prog-300" },
@@ -33,6 +34,28 @@ function Secondary({ o }: { o: SleepInterventionOutcome }) {
         {good ? "↑改善" : "↓悪化"}
       </span>
       <span className="shrink-0 text-[9px] text-ink-faint">{TIER_LABEL[o.tier]}</span>
+    </div>
+  );
+}
+
+const PLAN_KIND: Record<string, string> = {
+  explore: "探索 (データを取る)", exploit: "実証済みを継続", deconfound: "交絡を切り分け",
+};
+
+/** 「今夜何で寝るか」— 探索 (データ収集) / 活用 (実証済み継続) / 交絡崩し の 1 手。 */
+function TonightPlan({ s }: { s: { text: string; reason: string; kind?: string } }) {
+  return (
+    <div className="space-y-0.5 rounded-xl bg-indigo-500/10 p-2.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-semibold text-indigo-200">今夜何で寝るか</span>
+        {s.kind && PLAN_KIND[s.kind] && (
+          <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] text-indigo-200">
+            {PLAN_KIND[s.kind]}
+          </span>
+        )}
+      </div>
+      <div className="text-[12px] text-ink">{s.text}</div>
+      <div className="text-[10px] text-ink-faint">{s.reason}</div>
     </div>
   );
 }
@@ -58,12 +81,14 @@ function Row({ iv }: { iv: SleepInterventionResult }) {
             {p.diff > 0 ? "+" : ""}{p.diff}点
           </span>{" "}
           <span className="text-ink-faint">
-            (p={p.p} · {TIER_LABEL[p.tier]})
+            {p.tier === "preliminary"
+              ? `(暫定 · 着${p.n_did ?? "?"}/外${p.n_didnt ?? "?"}夜 · 未確定)`
+              : `(p=${p.p} · ${TIER_LABEL[p.tier]})`}
           </span>
         </div>
       ) : (
         <div className="text-[11px] text-ink-faint">
-          着けた/外した夜が各3夜たまると判定できます。
+          着けた/外した夜が各2夜たまると暫定の傾向、各3夜で判定が出ます。
         </div>
       )}
       {secondary.length > 0 && (
@@ -83,15 +108,16 @@ export function SleepInterventionPanel() {
 
   if (s.status === "accumulating") {
     return (
-      <section className="rounded-xl bg-hull/40 p-4">
+      <section className="space-y-2.5 rounded-xl bg-hull/40 p-4">
         <div className="flex items-center gap-1.5">
           <FlaskConical size={14} className="text-indigo-300" />
           <span className="text-xs uppercase tracking-wider text-ink-dim">介入の効果検証</span>
         </div>
-        <p className="mt-1 text-[11px] text-ink-faint">
+        <p className="text-[11px] text-ink-faint">
           分析開始まであと{s.remaining}夜（現在{s.n_nights}夜記録）。毎晩の記録が貯まると、
-          各介入が睡眠スコアを有意に上げるか検定します。
+          各介入が睡眠の質を有意に上げるか検定します。
         </p>
+        {s.suggestion && <TonightPlan s={s.suggestion} />}
       </section>
     );
   }
@@ -121,13 +147,7 @@ export function SleepInterventionPanel() {
         </span>
       </div>
 
-      {s.suggestion && (
-        <div className="space-y-0.5 rounded-xl bg-indigo-500/10 p-2.5">
-          <div className="text-[10px] font-semibold text-indigo-200">今夜の検証</div>
-          <div className="text-[12px] text-ink">{s.suggestion.text}</div>
-          <div className="text-[10px] text-ink-faint">{s.suggestion.reason}</div>
-        </div>
-      )}
+      {s.suggestion && <TonightPlan s={s.suggestion} />}
 
       <div className="space-y-1.5">
         {s.interventions.map((iv) => <Row key={iv.key} iv={iv} />)}

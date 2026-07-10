@@ -198,3 +198,29 @@ def test_nap_wired_into_candidates_with_calculated_duration():
     nap = next(c for c in build_candidates(inp, _at(13)) if c["key"] == "nap")
     assert "20分" in nap["title"]
     assert "起床" in nap["title"]  # 起床時刻を提示
+
+
+# ===== 就寝前: 今夜の睡眠実験 (sleep_experiment) =====
+
+
+def test_sleep_experiment_fires_in_evening():
+    inp = Inputs(
+        sleep_experiment={"kind": "explore", "text": "今夜は耳栓を外して寝てみる", "reason": "比較のため"},
+        tonight={"bedtime": "23:30"},
+    )
+    se = next(c for c in build_candidates(inp, _at(21)) if c["key"] == "sleep_experiment")
+    assert "耳栓" in se["title"]
+    assert se["why"] == "比較のため"
+
+
+def test_sleep_experiment_quiet_in_daytime():
+    inp = Inputs(sleep_experiment={"kind": "explore", "text": "今夜は耳栓を外して寝てみる", "reason": "x"})
+    assert "sleep_experiment" not in _keys(build_candidates(inp, _at(14)))
+
+
+def test_sleep_experiment_suppressed_when_already_logged():
+    inp = Inputs(
+        sleep_experiment={"kind": "explore", "text": "今夜は耳栓を外して寝てみる", "reason": "x"},
+        intervention_logged=True,
+    )
+    assert "sleep_experiment" not in _keys(build_candidates(inp, _at(21)))

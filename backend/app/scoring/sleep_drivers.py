@@ -33,8 +33,10 @@ from app.scoring.migraine_stats import benjamini_hochberg, permutation_test
 from app.scoring.timewindow import app_today
 
 _DAYS = 120        # 解析窓
-_MIN_PAIRS = 8     # 有効ペアがこれ未満のドライバーは検定しない
-_MIN_GROUP = 3     # 高/低 各群の最小数
+_MIN_PAIRS = 8     # これ以上 & 各群>=_MIN_GROUP で「有意性を語れる (powered)」
+_MIN_GROUP = 3     # 高/低 各群の最小数 (powered 判定)
+_MIN_PAIRS_PRELIM = 4    # これ以上あれば暫定シグナル (方向+効果量) を出す
+_MIN_GROUP_PRELIM = 2    # 暫定シグナルの高/低 各群の最小数
 FDR_Q = 0.05
 
 # アウトカム (すべて「高いほど良い」)。(key, ラベル, グループ)
@@ -163,26 +165,23 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
     rows = _collect(target)
     n = len(rows)
     base: dict[str, Any] = {"n_nights": n, "quality": [], "next_day": []}
-    if n < _MIN_PAIRS:
-        base["status"] = "accumulating"
-        base["remaining"] = _MIN_PAIRS - n
-        return base
 
-    # 全 (アウトカム×ドライバー) を検定し、まとめて FDR
+    # 全 (アウトカム×ドライバー) を検定。各群 >=_MIN_GROUP_PRELIM で暫定シグナルを出す。
+    # powered = ペア>=_MIN_PAIRS & 各群>=_MIN_GROUP & n>=_MIN_PAIRS のときだけ FDR で有意性を語る。
     tests: list[dict[str, Any]] = []
     for okey, olabel, group in _OUTCOMES:
         for dkey, dlabel in _DRIVERS:
             if dkey == "duration" and okey in ("efficiency", "deep_min", "sleep_score", "hrv_overnight"):
                 continue  # 睡眠時間→睡眠の質は自明寄りなので翌日のみ対象
             pairs = [(r[dkey], r[okey]) for r in rows if r.get(dkey) is not None and r.get(okey) is not None]
-            if len(pairs) < _MIN_PAIRS:
+            if len(pairs) < _MIN_PAIRS_PRELIM:
                 continue
             # 順位ベースで上位半分(high)/下位半分(low)。二値ドライバーの同値偏りを避ける。
             pairs.sort(key=lambda p: p[0])
             mid = len(pairs) // 2
             low = [o for _, o in pairs[:mid]]
             high = [o for _, o in pairs[mid:]]
-            if len(high) < _MIN_GROUP or len(low) < _MIN_GROUP:
+            if len(high) < _MIN_GROUP_PRELIM or len(low) < _MIN_GROUP_PRELIM:
                 continue
             # 高低で差が無い(全ドライバー値が同一)なら無意味なのでスキップ
             if pairs[0][0] == pairs[-1][0]:
@@ -190,44 +189,65 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
             p, diff = permutation_test(high, low)
             if p is None or diff is None:
                 continue
+            powered = (
+                len(pairs) >= _MIN_PAIRS and len(high) >= _MIN_GROUP
+                and len(low) >= _MIN_GROUP and n >= _MIN_PAIRS
+            )
             tests.append({
                 "outcome": okey, "outcome_label": olabel, "group": group,
                 "driver": dkey, "label": dlabel, "p": round(p, 4), "diff": diff,
-                "n": len(pairs),
+                "n": len(pairs), "powered": powered,
             })
 
     if not tests:
-        base["status"] = "no_data"
+        base["status"] = "accumulating" if n < _MIN_PAIRS else "no_data"
+        base["remaining"] = max(0, _MIN_PAIRS - n)
         return base
-    qs = benjamini_hochberg([t["p"] for t in tests])
-    for t, q in zip(tests, qs, strict=True):
+
+    powered_tests = [t for t in tests if t["powered"]]
+    qmap: dict[int, float] = {}
+    if powered_tests:
+        qs = benjamini_hochberg([t["p"] for t in powered_tests])
+        for t, q in zip(powered_tests, qs, strict=True):
+            qmap[id(t)] = q
+    for t in tests:
         if abs(t["diff"]) < 1e-9:
             continue
-        if q < FDR_Q:
-            tier = "strong"
-        elif t["p"] < 0.1:
-            tier = "suggestive"
-        elif t["p"] < 0.25:
-            tier = "trend"
+        if t["powered"]:
+            q = qmap[id(t)]
+            if q < FDR_Q:
+                tier = "strong"
+            elif t["p"] < 0.1:
+                tier = "suggestive"
+            elif t["p"] < 0.25:
+                tier = "trend"
+            else:
+                tier = "weak"
+            qv: float | None = round(q, 4)
         else:
-            tier = "weak"
+            tier = "preliminary"
+            qv = None
         # diff>0: ドライバー高い日に outcome が高い (全 outcome 高いほど良い)
         factor = {
             "driver": t["driver"], "label": t["label"],
             "outcome": t["outcome"], "outcome_label": t["outcome_label"],
             "direction": "改善" if t["diff"] > 0 else "悪化",
-            "diff": round(t["diff"], 1), "p": t["p"], "q": round(q, 4),
+            "diff": round(t["diff"], 1), "p": t["p"], "q": qv,
             "tier": tier, "n": t["n"],
         }
         base[t["group"]].append(factor)
 
     anchors = _anchors(rows)
     base["anchors"] = anchors
-    base["quality"].sort(key=lambda f: (f["q"], f["p"]))
-    base["next_day"].sort(key=lambda f: (f["q"], f["p"]))
+    base["quality"].sort(key=lambda f: (f["q"] if f["q"] is not None else 1.0, f["p"]))
+    base["next_day"].sort(key=lambda f: (f["q"] if f["q"] is not None else 1.0, f["p"]))
     base["recommendations"] = _recommendations(base["quality"] + base["next_day"], anchors)
-    base["status"] = "analyzed"
     base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
+    if powered_tests:
+        base["status"] = "analyzed"
+    else:
+        base["status"] = "preliminary"
+        base["remaining"] = max(0, _MIN_PAIRS - n)
     return base
 
 
@@ -295,7 +315,8 @@ def _recommendations(factors: list[dict[str, Any]], anchors: dict[str, Any] | No
     recs: list[dict[str, Any]] = []
     seen: set[str] = set()
     for f in sorted(factors, key=lambda x: -_TIER_RANK.get(x["tier"], 0)):
-        if f["tier"] == "weak" or f["driver"] in seen:
+        # 具体的な生活変更の推奨は trend 以上に限る (weak/preliminary は暗示に留める)
+        if f["tier"] in ("weak", "preliminary") or f["driver"] in seen:
             continue
         text = _action_text(f["driver"], f["direction"], anchors)
         if not text:

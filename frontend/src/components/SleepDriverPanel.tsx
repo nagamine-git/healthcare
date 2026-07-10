@@ -10,8 +10,13 @@ import { LoadingState } from "./ui/cockpit";
  */
 
 // 確度 → 不透明度 (薄さ)
-const TIER_OP: Record<string, string> = { strong: "opacity-100", suggestive: "opacity-90", trend: "opacity-70", weak: "opacity-45" };
-const TIER_LABEL: Record<string, string> = { strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い" };
+const TIER_OP: Record<string, string> = {
+  strong: "opacity-100", suggestive: "opacity-90", trend: "opacity-70",
+  weak: "opacity-45", preliminary: "opacity-60",
+};
+const TIER_LABEL: Record<string, string> = {
+  strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い", preliminary: "暫定",
+};
 
 function Factor({ f }: { f: SleepDriverFactor }) {
   const good = f.direction === "改善";
