@@ -40,7 +40,10 @@ export function ImputedNotice({ imputed }: { imputed?: Record<string, ImputedMet
         {items.map((it) => {
           const conf = CONF[it.confidence] ?? CONF.low;
           return (
-            <div key={it.metric} className="flex items-baseline gap-2 text-[11px]">
+            <div
+              key={it.metric}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
+            >
               <span className="w-24 shrink-0 text-ink-dim">{LABEL[it.metric] ?? it.metric}</span>
               <span className="shrink-0 tabular-nums text-ink">
                 {fmt(it.metric, it.value)}
