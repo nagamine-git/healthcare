@@ -1429,6 +1429,32 @@ export type FinanceResponse = {
   };
   roi: { candidates: RoiRow[]; budget: number | null; earmarked: number | null };
   cashflow: CashflowSummary;
+  advisor: FinanceAdvisor;
+  profile: LifeProfile;
+};
+export type FinanceAdvisor = {
+  gross: number;
+  debt: number;
+  net: number;
+  headline: number; // 総資産 × 純資産
+  leverage: "none" | "good" | "bad" | "caution";
+  has_data: boolean;
+  diagnosis: { key: string; level: "info" | "warn"; text: string }[];
+  moves: { priority: number; kind: string; text: string; why: string }[];
+};
+export type LifeProfile = {
+  partner: boolean | null;
+  children: number | null;
+  dependents: number | null;
+  housing: "rent" | "own" | null;
+  housing_cost_jpy: number | null;
+  monthly_income_jpy: number | null;
+  income_type: "employee" | "self_employed" | "mixed" | null;
+  debt_balance_jpy: number | null;
+  debt_rate_pct: number | null;
+  nisa_monthly_jpy: number | null;
+  ideco_monthly_jpy: number | null;
+  note: string | null;
 };
 export type AssetInput = {
   id?: number;
@@ -1971,6 +1997,9 @@ export const api = {
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
   adminPerf: () => request<PerfResponse>("/api/admin/perf"),
   finance: () => request<FinanceResponse>("/api/finance"),
+  financeProfile: () => request<LifeProfile>("/api/finance/profile"),
+  financeProfileSave: (body: Partial<LifeProfile>) =>
+    request<FinanceResponse>("/api/finance/profile", { method: "PUT", body: JSON.stringify(body) }),
   financeAsset: (body: AssetInput) =>
     request<FinanceResponse>("/api/finance/asset", { method: "POST", body: JSON.stringify(body) }),
   financeAssetDelete: (id: number) =>

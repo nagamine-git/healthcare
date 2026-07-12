@@ -456,6 +456,209 @@ function CashflowSection({ data }: { data: FinanceResponse }) {
   );
 }
 
+const LEVERAGE: Record<string, { label: string; cls: string; note: string }> = {
+  good: { label: "良い借金(低利)", cls: "text-prog-300", note: "金利 < 期待リターン。手元は投資に回す方が有利" },
+  bad: { label: "悪い借金(高利)", cls: "text-risk", note: "金利が純資産を毎年削る。先に返す" },
+  caution: { label: "要注意", cls: "text-act-300", note: "金利しだい。金利を超えて稼げる時だけ○" },
+  none: { label: "無借金", cls: "text-ink-dim", note: "" },
+};
+
+/** 看板(総資産×純資産)+ 診断(なんで増えない)+ 最善手(優先順位つき)。 */
+function AdvisorSection({ data }: { data: FinanceResponse }) {
+  const a = data.advisor;
+  if (!a?.has_data) {
+    return (
+      <Panel>
+        <h2 className="text-sm font-semibold text-ink">資産の最善手</h2>
+        <p className="mt-1 text-xs text-ink-faint">
+          資産・入出金の取込と、下の「生活状況」を入力すると、なぜ増えないかの診断と最善手が出ます。
+        </p>
+      </Panel>
+    );
+  }
+  const lev = LEVERAGE[a.leverage] ?? LEVERAGE.none;
+  return (
+    <Panel>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-ink">資産の最善手</h2>
+        {a.debt > 0 && (
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${lev.cls}`}>{lev.label}</span>
+        )}
+      </div>
+
+      {/* 看板: 総資産 × 純資産 */}
+      <div className="mt-2 rounded-xl bg-void/40 p-3">
+        <div className="text-[10px] uppercase tracking-wider text-ink-faint">看板指標 — 総資産 × 純資産を増やす</div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <div>
+            <div className="text-[10px] text-ink-faint">総資産</div>
+            <div className="text-lg font-semibold tabular-nums text-ink">{yen(a.gross)}</div>
+          </div>
+          <span className="text-ink-faint">×</span>
+          <div>
+            <div className="text-[10px] text-ink-faint">純資産(=総資産−負債)</div>
+            <div className={`text-lg font-semibold tabular-nums ${a.net < 0 ? "text-risk" : "text-ink"}`}>
+              {yen(a.net)}
+            </div>
+          </div>
+        </div>
+        {lev.note && <div className={`mt-1 text-[10px] ${lev.cls}`}>{lev.note}</div>}
+      </div>
+
+      {/* 診断: なんで増えない */}
+      {a.diagnosis.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">なんで増えない</div>
+          <ul className="mt-1 space-y-1">
+            {a.diagnosis.map((d) => (
+              <li key={d.key} className="flex gap-1.5 text-[12px] text-ink-dim">
+                <span className={d.level === "warn" ? "text-risk" : "text-ink-faint"}>
+                  {d.level === "warn" ? "▲" : "・"}
+                </span>
+                <span className="min-w-0 flex-1">{d.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 最善手: 優先順位つき */}
+      {a.moves.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">いまの最善手(優先順)</div>
+          <ol className="mt-1 space-y-1.5">
+            {a.moves.map((m, i) => (
+              <li key={m.kind} className="flex gap-2 rounded-lg bg-void/30 p-2">
+                <span className="text-[12px] font-bold text-act-300">{i + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-medium text-ink">{m.text}</div>
+                  <div className="text-[10px] text-ink-faint">{m.why}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function NumField({ label, value, onChange, suffix }: {
+  label: string; value: number | null; onChange: (v: number | null) => void; suffix?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-ink-faint">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          inputMode="decimal"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          className="w-full rounded-lg border border-panel bg-void/50 px-2 py-1 text-[13px] tabular-nums text-ink"
+        />
+        {suffix && <span className="text-[10px] text-ink-faint">{suffix}</span>}
+      </div>
+    </label>
+  );
+}
+
+/** 生活状況(世帯・住居・収入・負債・制度枠)。最善手の精度を上げる入力欄。 */
+function LifeProfileForm({ data }: { data: FinanceResponse }) {
+  const qc = useQueryClient();
+  const mut = useFinanceMut(qc);
+  const save = mut((v) => api.financeProfileSave(v as never));
+  const [p, setP] = useState<FinanceResponse["profile"]>(data.profile);
+  const set = <K extends keyof typeof p>(k: K, v: (typeof p)[K]) => setP((o) => ({ ...o, [k]: v }));
+
+  return (
+    <Panel>
+      <h2 className="text-sm font-semibold text-ink">生活状況</h2>
+      <p className="mt-0.5 text-[11px] text-ink-faint">
+        資産データに出ない文脈(世帯・住居・負債・制度枠)を入れると、診断と最善手が具体的になります。
+      </p>
+
+      <div className="mt-2 space-y-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">世帯</div>
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-ink-faint">配偶者</span>
+              <button
+                onClick={() => set("partner", !p.partner)}
+                className={`rounded-lg px-2 py-1 text-[13px] ${p.partner ? "bg-prog-500/20 text-prog-300" : "bg-void/50 text-ink-dim"}`}
+              >
+                {p.partner ? "あり" : "なし"}
+              </button>
+            </label>
+            <NumField label="子ども(人)" value={p.children} onChange={(v) => set("children", v)} />
+            <NumField label="扶養(人)" value={p.dependents} onChange={(v) => set("dependents", v)} />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">住居</div>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-ink-faint">形態</span>
+              <select
+                value={p.housing ?? ""}
+                onChange={(e) => set("housing", (e.target.value || null) as typeof p.housing)}
+                className="rounded-lg border border-panel bg-void/50 px-2 py-1 text-[13px] text-ink"
+              >
+                <option value="">—</option>
+                <option value="rent">賃貸</option>
+                <option value="own">持ち家</option>
+              </select>
+            </label>
+            <NumField label="月の家賃/返済" value={p.housing_cost_jpy} onChange={(v) => set("housing_cost_jpy", v)} suffix="円" />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">収入</div>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <NumField label="手取り月収" value={p.monthly_income_jpy} onChange={(v) => set("monthly_income_jpy", v)} suffix="円" />
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-ink-faint">種類</span>
+              <select
+                value={p.income_type ?? ""}
+                onChange={(e) => set("income_type", (e.target.value || null) as typeof p.income_type)}
+                className="rounded-lg border border-panel bg-void/50 px-2 py-1 text-[13px] text-ink"
+              >
+                <option value="">—</option>
+                <option value="employee">会社員</option>
+                <option value="self_employed">自営</option>
+                <option value="mixed">複合</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">負債</div>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <NumField label="残高" value={p.debt_balance_jpy} onChange={(v) => set("debt_balance_jpy", v)} suffix="円" />
+            <NumField label="加重平均金利" value={p.debt_rate_pct} onChange={(v) => set("debt_rate_pct", v)} suffix="%" />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">制度枠(月額)</div>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <NumField label="NISA積立" value={p.nisa_monthly_jpy} onChange={(v) => set("nisa_monthly_jpy", v)} suffix="円" />
+            <NumField label="iDeCo" value={p.ideco_monthly_jpy} onChange={(v) => set("ideco_monthly_jpy", v)} suffix="円" />
+          </div>
+        </div>
+
+        <Button onClick={() => save.mutate(p)} disabled={save.isPending}>
+          {save.isPending ? "保存中…" : "保存して診断を更新"}
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
 export function FinancePage({ onBack }: { onBack: () => void }) {
   const q = useQuery({ queryKey: ["finance"], queryFn: api.finance, retry: false });
   return (
@@ -471,9 +674,11 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
         <Skeleton className="h-64" />
       ) : (
         <>
+          <AdvisorSection data={q.data} />
           <CashflowSection data={q.data} />
           <RebalanceSection data={q.data} />
           <RoiSection data={q.data} />
+          <LifeProfileForm data={q.data} />
         </>
       )}
     </div>
