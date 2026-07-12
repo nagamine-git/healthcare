@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     target_body_fat_pct: float = 18.0
     body_fat_tolerance_pct: float = 1.5
 
+    # 資産アドバイザーの閾値 (personal)。良い借金=金利より稼ぐ資産に使う借金。
+    finance_good_debt_max_rate: float = 3.0     # %以下=低利=良い借金候補
+    finance_bad_debt_min_rate: float = 7.0      # %以上=高利=悪い借金 (先に返済)
+    finance_min_savings_rate: float = 0.15      # 貯蓄率の下限目安
+    finance_housing_burden_ratio: float = 0.30  # 住居費/収入 が重い閾値
+
     # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
     # トレーニング習熟度 (beginner/intermediate/advanced)。実績が無い種目の初期重量係数に使う
     training_level: str = "beginner"

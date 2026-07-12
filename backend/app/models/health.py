@@ -836,6 +836,36 @@ class CashflowTx(Base):
     is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class LifeProfile(Base):
+    """資産アドバイス用の生活状況(単一行 id=1)。NULL は「未入力」として素直に扱う。
+
+    総資産(AssetHolding)/入出金(CashflowTx)から取れない文脈 — 世帯・住居・負債・制度枠 —
+    をユーザーが入力し、finance_advisor が「なんで増えないか」の診断と最善手に使う。
+    """
+
+    __tablename__ = "life_profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    # 世帯
+    partner: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    children: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dependents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 住居
+    housing: Mapped[str | None] = mapped_column(String(8), nullable=True)  # rent|own
+    housing_cost_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 月の家賃 or 返済
+    # 収入
+    monthly_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 手取り月収の上書き
+    income_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # employee|self_employed|mixed
+    # 負債
+    debt_balance_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    debt_rate_pct: Mapped[float | None] = mapped_column(Float, nullable=True)  # 加重平均金利
+    # 制度枠
+    nisa_monthly_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ideco_monthly_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class PerfIssue(Base):
     """パフォーマンス問題の記録(エラー / 低速レスポンス / 低速クエリ)。
 

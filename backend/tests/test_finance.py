@@ -375,3 +375,42 @@ def test_wishlist_import_falls_back_to_image(app_client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["items"][0]["name"] == "From image"
     assert seen.get("image_b64") == "abc"  # 画像経路が使われた
+
+
+# ===== 生活状況プロフィール + 最善手アドバイザー =====
+
+
+def test_compute_finance_includes_advisor(db_engine):
+    from app.scoring.finance import get_life_profile
+
+    with session_scope() as session:
+        session.add(AssetHolding(name="現金", category="cash", value_jpy=3_000_000, target_weight=0))
+        session.add(AssetHolding(name="積立", category="invest", value_jpy=1_000_000, target_weight=1))
+        get_state(session).reserve_jpy = 1_000_000
+        lp = get_life_profile(session)
+        lp.debt_balance_jpy = 500_000
+        lp.debt_rate_pct = 15.0  # 高利 → 悪い借金
+    with session_scope() as session:
+        f = compute_finance(session)
+    adv = f["advisor"]
+    assert adv["gross"] == 4_000_000
+    assert adv["net"] == 3_500_000  # gross - debt
+    assert adv["headline"] == 4_000_000 * 3_500_000
+    assert adv["leverage"] == "bad"
+    assert adv["moves"][0]["kind"] == "debt"  # 高利返済が最優先
+    assert f["profile"]["debt_rate_pct"] == 15.0
+
+
+def test_profile_put_get_roundtrip(app_client):
+    r = app_client.put(
+        "/api/finance/profile",
+        json={"housing": "rent", "housing_cost_jpy": 120000,
+              "debt_balance_jpy": 800000, "debt_rate_pct": 1.0},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "advisor" in body
+    assert body["profile"]["housing"] == "rent"
+    assert body["advisor"]["leverage"] == "good"  # 1% は低利=良い借金
+    g = app_client.get("/api/finance/profile").json()
+    assert g["housing_cost_jpy"] == 120000 and g["debt_rate_pct"] == 1.0

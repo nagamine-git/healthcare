@@ -16,7 +16,14 @@ from app.db import session_scope
 from app.llm.finance_ocr import extract_assets
 from app.llm.finance_roi_ai import extract_wishlist_items, suggest_roi
 from app.models.health import AssetHolding, CashflowTx, RoiCandidate
-from app.scoring.finance import compute_cashflow, compute_finance, compute_rebalance, get_state
+from app.scoring.finance import (
+    compute_cashflow,
+    compute_finance,
+    compute_rebalance,
+    get_life_profile,
+    get_state,
+    life_profile_to_dict,
+)
 
 router = APIRouter()
 
@@ -24,6 +31,42 @@ router = APIRouter()
 @router.get("/api/finance")
 async def get_finance() -> dict[str, Any]:
     with session_scope() as session:
+        return compute_finance(session)
+
+
+# ---------------- 生活状況プロフィール ----------------
+class LifeProfileIn(BaseModel):
+    partner: bool | None = None
+    children: int | None = None
+    dependents: int | None = None
+    housing: str | None = None  # rent|own
+    housing_cost_jpy: float | None = None
+    monthly_income_jpy: float | None = None
+    income_type: str | None = None  # employee|self_employed|mixed
+    debt_balance_jpy: float | None = None
+    debt_rate_pct: float | None = None
+    nisa_monthly_jpy: float | None = None
+    ideco_monthly_jpy: float | None = None
+    note: str | None = None
+
+
+@router.get("/api/finance/profile")
+async def get_profile() -> dict[str, Any]:
+    with session_scope() as session:
+        return life_profile_to_dict(get_life_profile(session))
+
+
+@router.put("/api/finance/profile")
+async def put_profile(body: LifeProfileIn) -> dict[str, Any]:
+    from datetime import datetime
+
+    with session_scope() as session:
+        lp = get_life_profile(session)
+        # 送られたフィールドだけ上書き (未指定=変更しない)
+        for k, v in body.model_dump(exclude_unset=True).items():
+            setattr(lp, k, v)
+        lp.updated_at = datetime.utcnow()
+        session.flush()
         return compute_finance(session)
 
 

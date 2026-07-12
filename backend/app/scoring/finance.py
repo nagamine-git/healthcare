@@ -15,7 +15,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.health import AssetHolding, CashflowTx, FinanceState, RoiCandidate
+from app.config import get_settings
+from app.models.health import AssetHolding, CashflowTx, FinanceState, LifeProfile, RoiCandidate
 from app.scoring.timewindow import app_today
 
 
@@ -274,9 +275,66 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
     }
 
 
+def get_life_profile(session: Session) -> LifeProfile:
+    lp = session.get(LifeProfile, 1)
+    if lp is None:
+        lp = LifeProfile(id=1)
+        session.add(lp)
+        session.flush()
+    return lp
+
+
+def life_profile_to_dict(lp: LifeProfile) -> dict[str, Any]:
+    return {
+        "partner": lp.partner, "children": lp.children, "dependents": lp.dependents,
+        "housing": lp.housing, "housing_cost_jpy": lp.housing_cost_jpy,
+        "monthly_income_jpy": lp.monthly_income_jpy, "income_type": lp.income_type,
+        "debt_balance_jpy": lp.debt_balance_jpy, "debt_rate_pct": lp.debt_rate_pct,
+        "nisa_monthly_jpy": lp.nisa_monthly_jpy, "ideco_monthly_jpy": lp.ideco_monthly_jpy,
+        "note": lp.note,
+    }
+
+
+def compute_advisor(
+    session: Session, reb: dict[str, Any], cf: dict[str, Any]
+) -> dict[str, Any]:
+    """看板指標(総資産×純資産)+ 診断 + 最善手。既存の reb/cf と LifeProfile から組む。"""
+    from app.scoring.finance_advisor import AdvisorInputs, build_advisor
+
+    s = get_settings()
+    lp = get_life_profile(session)
+    has_cf = bool(cf.get("has_data"))
+    avg_income = cf.get("avg_monthly_income") if has_cf else None
+    if not avg_income and lp.monthly_income_jpy:
+        avg_income = lp.monthly_income_jpy
+    inp = AdvisorInputs(
+        gross=reb.get("total") or 0.0,
+        debt=lp.debt_balance_jpy or 0.0,
+        debt_rate_pct=lp.debt_rate_pct,
+        avg_income=avg_income,
+        avg_expense=cf.get("avg_monthly_expense") if has_cf else None,
+        avg_net=cf.get("avg_monthly_net") if has_cf else None,
+        unallocated=reb.get("unallocated") or 0.0,
+        reserve=reb.get("reserve") or 0.0,
+        suggested_reserve=cf.get("suggested_reserve") if has_cf else None,
+        housing_cost=lp.housing_cost_jpy,
+        nisa_monthly=lp.nisa_monthly_jpy,
+        ideco_monthly=lp.ideco_monthly_jpy,
+    )
+    return build_advisor(
+        inp,
+        good_rate=s.finance_good_debt_max_rate,
+        bad_rate=s.finance_bad_debt_min_rate,
+        min_savings_rate=s.finance_min_savings_rate,
+        housing_burden_ratio=s.finance_housing_burden_ratio,
+    )
+
+
 def compute_finance(session: Session) -> dict[str, Any]:
     reb = compute_rebalance(session)
     roi = compute_roi_ranking(session, reb["investable"] or 0.0, reb["wage_jpy_per_h"] or 2000.0)
     cf = compute_cashflow(session, reb["total"] or 0.0)
     cf.pop("_avg_exp", None)
-    return {"rebalance": reb, "roi": roi, "cashflow": cf}
+    advisor = compute_advisor(session, reb, cf)
+    profile = life_profile_to_dict(get_life_profile(session))
+    return {"rebalance": reb, "roi": roi, "cashflow": cf, "advisor": advisor, "profile": profile}
