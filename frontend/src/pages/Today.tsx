@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings as SettingsIcon } from "lucide-react";
-import { api, type GardenGridCell } from "../lib/api";
-import { gardenCellStyle } from "../lib/gardenColor";
+import { api } from "../lib/api";
 import { SubScoreRadar } from "../components/SubScoreRadar";
 import { DayStory } from "../components/DayStory";
 import { AdviceCard } from "../components/AdviceCard";
@@ -20,7 +19,6 @@ import { WeatherPanel } from "../components/WeatherPanel";
 import { StaleBanner } from "../components/StaleBanner";
 import { StatusLamps } from "../components/StatusLamps";
 import { WellbeingAlertsBanner } from "../components/WellbeingAlertsBanner";
-import { DayPrediction } from "../components/DayPrediction";
 import { LearningCard } from "../components/LearningCard";
 import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
@@ -44,10 +42,7 @@ import { SleepInterventionHistory } from "../components/SleepInterventionHistory
 import { SleepInterventionPanel } from "../components/SleepInterventionPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
-import { CockpitHero } from "../components/CockpitHero";
-import { StatusStrip } from "../components/StatusStrip";
 import { SectionHeader, Skeleton } from "../components/ui/cockpit";
-import { LifeTreePanel } from "../components/LifeTreePanel";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
 
@@ -138,7 +133,6 @@ export function TodayPage({ onOpenDebug }: Props) {
     queryFn: api.gcalStatus,
     retry: false,
   });
-  const gardenQ = useQuery({ queryKey: ["garden"], queryFn: api.garden, retry: false });
 
   // ページ open 時、データが古ければ自動でフル更新
   // (last_data_update が 30 分以上前 / 未取得)
@@ -329,53 +323,11 @@ export function TodayPage({ onOpenDebug }: Props) {
         igniteSignal={data.last_data_update_at ?? data.date}
       />
 
-      {/* 朝のリチュアル: 今日の紙 */}
-      <button
-        type="button"
-        onClick={() => (window.location.hash = "#journal")}
-        className="w-full rounded-xl border border-hairline bg-hull p-3 text-left text-sm text-ink-dim transition-colors hover:border-ink-faint"
-      >
-        📝 今日の紙(手書き用テンプレ)を開く → <span className="text-ink-faint">テーマ・勝ちタスク候補つき</span>
-      </button>
-
-      {/* 主役: 今日やること(一手 + 効く行動) */}
-      <CockpitHero />
-
-      {/* 状態: 今日(身体リング) / 人生(進捗バー)を1枚に集約 */}
-      <StatusStrip score={score} headline={data.advice?.payload?.headline} />
-
-      <LifeTreePanel />
-
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}
         isRefreshing={dataRefresh.isPending}
         onRefresh={() => dataRefresh.mutate()}
       />
-
-      {gardenQ.data && (
-        <button
-          type="button"
-          onClick={() => (window.location.hash = "#garden")}
-          className="w-full rounded-xl bg-hull p-3 text-left transition-colors hover:bg-panel"
-        >
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-xs tracking-wider text-ink-dim">🌱 理想の庭</span>
-            <span className="text-sm font-bold text-prog-300">{gardenQ.data.streak}日連続</span>
-          </div>
-          <div className="flex gap-[2px]">
-            {gardenQ.data.grid.slice(-84).map((c: GardenGridCell) => {
-              const style = gardenCellStyle(c.level, c.focus);
-              return (
-                <div
-                  key={c.date}
-                  style={style ?? undefined}
-                  className={`h-2 w-2 rounded-sm ${style ? "" : "bg-panel"}`}
-                />
-              );
-            })}
-          </div>
-        </button>
-      )}
 
       <div id="weather-section">
         <SectionHeader label="天気" hint="今日の天気・降水確率 + 週間予報" />
@@ -384,7 +336,6 @@ export function TodayPage({ onOpenDebug }: Props) {
       <div id="alerts-section">
         <SectionHeader label="今日の指針" hint="アラート（安全網）+ 片頭痛リスク + LLM推奨アクション" />
         <div className="space-y-3">
-          <DayPrediction />
           <FitnessDueBanner onOpen={() => setTab("physique")} />
           <AdviceCard
             advice={data.advice}
