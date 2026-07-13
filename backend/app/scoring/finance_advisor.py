@@ -35,6 +35,7 @@ class AdvisorInputs:
     housing_cost: float | None = None     # 月の家賃 or ローン返済
     nisa_monthly: float | None = None
     ideco_monthly: float | None = None
+    has_nisa: bool = False                 # 既に NISA を使っているか (保有 or 積立設定)
 
 
 def _man(v: float | None) -> str:
@@ -138,9 +139,10 @@ def build_advisor(
         moves.append({"priority": 75, "kind": "invest",
                       "text": f"余剰現金 {_man(inp.unallocated)} を NISA/インデックスへ",
                       "why": "現金は増えない。低コスト分散で複利に乗せるのが王道"})
-    if not (inp.nisa_monthly and inp.nisa_monthly > 0):
+    using_nisa = inp.has_nisa or bool(inp.nisa_monthly and inp.nisa_monthly > 0)
+    if not using_nisa:
         moves.append({"priority": 70, "kind": "tax",
-                      "text": "NISA の積立を始める(非課税)",
+                      "text": "NISA枠を活用する(未設定なら毎月の積立を開始)",
                       "why": "運用益が非課税になるだけでリターンが底上げされる"})
     if savings_rate is not None and savings_rate < min_savings_rate:
         moves.append({"priority": 60, "kind": "savings",

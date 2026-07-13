@@ -112,3 +112,14 @@ def test_graceful_when_no_data():
     assert res["has_data"] is False
     assert res["diagnosis"] == []
     assert res["moves"] == []
+
+
+def test_start_nisa_suppressed_when_already_using():
+    # 既に NISA を使っている → 「NISAを始める」を出さない(eMAXIS NISA 保有済みの誤提案対策)
+    res = build_advisor(_inp(gross=1000.0, avg_income=40.0, avg_net=10.0, has_nisa=True))
+    assert not any(m["kind"] == "tax" for m in res["moves"])
+
+
+def test_start_nisa_shown_when_not_using():
+    res = build_advisor(_inp(gross=1000.0, avg_income=40.0, avg_net=10.0, has_nisa=False))
+    assert any(m["kind"] == "tax" for m in res["moves"])

@@ -152,27 +152,13 @@ function RebalanceSection({ data }: { data: FinanceResponse }) {
       </div>
 
       <div className="mt-3 rounded-lg border border-hairline bg-hull/40 p-2">
-        <p className="telemetry-label">取込(MoneyForward)</p>
-        <label className="mt-1 inline-block cursor-pointer rounded bg-prog-700 px-2.5 py-1 text-xs hover:bg-prog-500">
-          スクショから取込(複数可)
-          <input type="file" accept="image/*" multiple className="hidden"
-            onChange={async (e) => {
-              const files = Array.from(e.target.files ?? []); e.target.value = "";
-              if (!files.length) return;
-              const images = await Promise.all(
-                files.map(async (f) => ({ image_base64: await fileToB64(f), media_type: f.type || "image/png" })),
-              );
-              imp.mutate({ images } as never);
-            }} />
-        </label>
-        {imp.isPending && <span className="ml-2 text-[11px] text-ink-faint">読取中…</span>}
-        {imp.isError && <span className="ml-2 text-[11px] text-risk">読取失敗</span>}
-        <p className="mt-1 text-[10px] text-act-300/80">
-          取込は「この内容が正」— 写っていない過去の取込資産は削除されます。
-          <strong>全画面ぶんのスクショを一度に選択</strong>してください(手動追加した資産と目標ウェイトは維持)。
+        <p className="telemetry-label">資産の取込</p>
+        <p className="mt-1 text-[10px] text-ink-faint">
+          スクショ取込は上部の「MoneyForward スクショ取込」から(資産・負債・収支をまとめて)。
+          ここは CSV 貼付用です。
         </p>
         <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={2}
-          placeholder="または CSV を貼付(名前,金額 の各行)。取込に無い過去資産は削除"
+          placeholder="CSV を貼付(名前,金額 の各行)。取込に無い過去資産は削除"
           className="mt-1 w-full rounded bg-panel px-2 py-1 font-mono text-[11px] text-ink" />
         {csv.trim() && (
           <Button variant="subtle" onClick={() => { imp.mutate({ csv } as never); setCsv(""); }}>CSV取込</Button>

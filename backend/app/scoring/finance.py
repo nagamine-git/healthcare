@@ -315,6 +315,10 @@ def compute_advisor(
     avg_net = cf.get("avg_monthly_net") if has_cf else None
     if avg_net is None and avg_income is not None and avg_expense is not None:
         avg_net = avg_income - avg_expense
+    # 既に NISA を使っているか: 積立設定 or 保有名に NISA を含む (誤って「NISAを始める」を出さない)
+    has_nisa = bool(lp.nisa_monthly_jpy and lp.nisa_monthly_jpy > 0) or any(
+        "NISA" in (h.get("name") or "").upper() for h in (reb.get("holdings") or [])
+    )
     inp = AdvisorInputs(
         gross=reb.get("total") or 0.0,
         debt=lp.debt_balance_jpy or 0.0,
@@ -328,6 +332,7 @@ def compute_advisor(
         housing_cost=lp.housing_cost_jpy,
         nisa_monthly=lp.nisa_monthly_jpy,
         ideco_monthly=lp.ideco_monthly_jpy,
+        has_nisa=has_nisa,
     )
     return build_advisor(
         inp,
