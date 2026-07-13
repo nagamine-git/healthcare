@@ -36,6 +36,7 @@ import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
+import { PyramidHome } from "../components/PyramidHome";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
@@ -319,6 +320,8 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 総合 (サマリー) ============ */}
       {tab === "summary" && (
       <div className="space-y-3">
+      {/* 幸せに生きる — 4本柱の Apple 級シンプルな俯瞰(タップで段階展開) */}
+      <PyramidHome />
       {/* アラート一覧(攻めどき等の計器ランプ)を最上部に */}
       <StatusLamps
         alerts={data.alerts}
