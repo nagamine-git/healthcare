@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.db import session_scope
-from app.llm.finance_ocr import extract_assets
+from app.llm.finance_ocr import extract_assets, extract_finance
 from app.llm.finance_roi_ai import extract_wishlist_items, suggest_roi
 from app.models.health import AssetHolding, CashflowTx, RoiCandidate
 from app.scoring.finance import (
@@ -42,6 +42,7 @@ class LifeProfileIn(BaseModel):
     housing: str | None = None  # rent|own
     housing_cost_jpy: float | None = None
     monthly_income_jpy: float | None = None
+    monthly_expense_jpy: float | None = None
     income_type: str | None = None  # employee|self_employed|mixed
     debt_balance_jpy: float | None = None
     debt_rate_pct: float | None = None
@@ -396,6 +397,69 @@ def _parse_cashflow_csv(text: str) -> list[dict]:
 
 class CashflowImportIn(BaseModel):
     csv: str
+
+
+class ScreenshotsIn(BaseModel):
+    images: list[ImageItem]
+    replace_assets: bool = True  # 資産は「この取込を正」とする(import 行の掃除)
+
+
+@router.post("/api/finance/import-screenshots")
+async def import_screenshots(body: ScreenshotsIn) -> dict[str, Any]:
+    """MoneyForward の任意スクショ(複数可)を OCR → 重複除去 → 確度 high のみ確定。
+
+    資産→AssetHolding / 負債合計→LifeProfile.debt / 月次収支→LifeProfile に振り分け。
+    medium/low は確定せず import_summary.skipped に返す(要確認)。
+    """
+    from app.scoring.finance import get_life_profile
+    from app.scoring.finance_ingest import consolidate_finance_ocr
+
+    results: list[dict[str, Any]] = []
+    for im in body.images:
+        got = await extract_finance(image_b64=im.image_base64, media_type=im.media_type)
+        if got:
+            results.append(got)
+    con = consolidate_finance_ocr(results)
+    c = con["committed"]
+    if not (c["assets"] or c["debts"] or c["income_monthly"] is not None or c["expense_monthly"] is not None):
+        raise HTTPException(
+            status_code=422,
+            detail="確度の高い項目を読み取れませんでした(LLM 未設定/読取不可/低確度の可能性)",
+        )
+    entered: dict[str, Any] = {"assets": 0, "debts": 0, "income": None, "expense": None}
+    with session_scope() as session:
+        # 資産
+        if c["assets"]:
+            existing = {h.name: h for h in session.execute(select(AssetHolding)).scalars()}
+            merged = merge_asset_items([{"name": a["name"], "value": a["value"]} for a in c["assets"]])
+            for it in merged:
+                row = existing.get(it["name"])
+                if row is None:
+                    row = AssetHolding(name=it["name"][:120], category="import")
+                    session.add(row)
+                    existing[it["name"]] = row
+                row.value_jpy = float(it["value"])
+            if body.replace_assets:
+                new_names = {it["name"] for it in merged}
+                for h in list(existing.values()):
+                    if h.category == "import" and h.name not in new_names:
+                        session.delete(h)
+            entered["assets"] = len(merged)
+        # 負債・収支 → LifeProfile
+        lp = get_life_profile(session)
+        if c["debts"]:
+            lp.debt_balance_jpy = sum(float(d["value"]) for d in c["debts"])
+            entered["debts"] = len(c["debts"])
+        if c["income_monthly"] is not None:
+            lp.monthly_income_jpy = float(c["income_monthly"])
+            entered["income"] = lp.monthly_income_jpy
+        if c["expense_monthly"] is not None:
+            lp.monthly_expense_jpy = float(c["expense_monthly"])
+            entered["expense"] = lp.monthly_expense_jpy
+        session.flush()
+        result = compute_finance(session)
+    result["import_summary"] = {"entered": entered, "skipped": con["skipped"]}
+    return result
 
 
 @router.post("/api/finance/import-cashflow")

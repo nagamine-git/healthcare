@@ -1431,6 +1431,10 @@ export type FinanceResponse = {
   cashflow: CashflowSummary;
   advisor: FinanceAdvisor;
   profile: LifeProfile;
+  import_summary?: {
+    entered: { assets: number; debts: number; income: number | null; expense: number | null };
+    skipped: { type: string; name?: string; value: number; confidence: string }[];
+  };
 };
 export type FinanceAdvisor = {
   gross: number;
@@ -1449,6 +1453,7 @@ export type LifeProfile = {
   housing: "rent" | "own" | null;
   housing_cost_jpy: number | null;
   monthly_income_jpy: number | null;
+  monthly_expense_jpy: number | null;
   income_type: "employee" | "self_employed" | "mixed" | null;
   debt_balance_jpy: number | null;
   debt_rate_pct: number | null;
@@ -1997,6 +2002,11 @@ export const api = {
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
   adminPerf: () => request<PerfResponse>("/api/admin/perf"),
   finance: () => request<FinanceResponse>("/api/finance"),
+  financeImportScreenshots: (images: { image_base64: string; media_type: string }[]) =>
+    request<FinanceResponse>("/api/finance/import-screenshots", {
+      method: "POST",
+      body: JSON.stringify({ images }),
+    }),
   financeProfile: () => request<LifeProfile>("/api/finance/profile"),
   financeProfileSave: (body: Partial<LifeProfile>) =>
     request<FinanceResponse>("/api/finance/profile", { method: "PUT", body: JSON.stringify(body) }),

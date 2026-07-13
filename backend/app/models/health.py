@@ -855,6 +855,7 @@ class LifeProfile(Base):
     housing_cost_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 月の家賃 or 返済
     # 収入
     monthly_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 手取り月収の上書き
+    monthly_expense_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 月支出(収支スクショ由来)
     income_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # employee|self_employed|mixed
     # 負債
     debt_balance_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)

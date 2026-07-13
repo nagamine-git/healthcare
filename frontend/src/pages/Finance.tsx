@@ -617,8 +617,9 @@ function LifeProfileForm({ data }: { data: FinanceResponse }) {
 
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">収入</div>
-          <div className="mt-1 grid grid-cols-2 gap-2">
+          <div className="mt-1 grid grid-cols-3 gap-2">
             <NumField label="手取り月収" value={p.monthly_income_jpy} onChange={(v) => set("monthly_income_jpy", v)} suffix="円" />
+            <NumField label="月支出" value={p.monthly_expense_jpy} onChange={(v) => set("monthly_expense_jpy", v)} suffix="円" />
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] text-ink-faint">種類</span>
               <select
@@ -659,6 +660,71 @@ function LifeProfileForm({ data }: { data: FinanceResponse }) {
   );
 }
 
+/** MoneyForward の任意スクショ(資産/負債/収支)を読み取り、重複除去+高確度のみ自動入力。 */
+function MFScreenshotImport() {
+  const qc = useQueryClient();
+  const [summary, setSummary] = useState<FinanceResponse["import_summary"] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const mut = useMutation({
+    mutationFn: (images: { image_base64: string; media_type: string }[]) =>
+      api.financeImportScreenshots(images),
+    onSuccess: (d) => {
+      qc.setQueryData(["finance"], d);
+      setSummary(d.import_summary ?? null);
+      setErr(null);
+    },
+    onError: () => setErr("確度の高い項目を読み取れませんでした(未設定/読取不可の可能性)"),
+  });
+  return (
+    <Panel>
+      <h2 className="text-sm font-semibold text-ink">MoneyForward スクショ取込</h2>
+      <p className="mt-0.5 text-[11px] text-ink-faint">
+        資産・負債・月の収支、どの画面でもまとめて選択。中身を読み取り、重複を消し、
+        <strong className="text-ink-dim">確度が高いものだけ</strong>自動で入れます(低いものは要確認で保留)。
+      </p>
+      <label className="mt-2 inline-block cursor-pointer rounded-lg bg-prog-700 px-3 py-1.5 text-xs text-void hover:bg-prog-500">
+        {mut.isPending ? "読取中…" : "スクショを選ぶ(複数可)"}
+        <input
+          type="file" accept="image/*" multiple className="hidden"
+          onChange={async (e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (!files.length) return;
+            setSummary(null); setErr(null);
+            const images = await Promise.all(
+              files.map(async (f) => ({ image_base64: await fileToB64(f), media_type: f.type || "image/png" })),
+            );
+            mut.mutate(images);
+          }}
+        />
+      </label>
+      {err && <p className="mt-2 text-[11px] text-risk">{err}</p>}
+      {summary && (
+        <div className="mt-2 space-y-1 text-[11px]">
+          <p className="text-prog-300">
+            入りました — 資産{summary.entered.assets}件 / 負債{summary.entered.debts}件
+            {summary.entered.income != null && ` / 月収入 ${yen(summary.entered.income)}`}
+            {summary.entered.expense != null && ` / 月支出 ${yen(summary.entered.expense)}`}
+          </p>
+          {summary.skipped.length > 0 && (
+            <div className="text-ink-faint">
+              要確認(確度が低め・自動では入れていません):
+              <ul className="mt-0.5 list-disc pl-4">
+                {summary.skipped.map((s, i) => (
+                  <li key={i}>
+                    {s.type}
+                    {s.name ? `「${s.name}」` : ""} {yen(s.value)}（{s.confidence}）
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 export function FinancePage({ onBack }: { onBack: () => void }) {
   const q = useQuery({ queryKey: ["finance"], queryFn: api.finance, retry: false });
   return (
@@ -675,6 +741,7 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
       ) : (
         <>
           <AdvisorSection data={q.data} />
+          <MFScreenshotImport />
           <CashflowSection data={q.data} />
           <RebalanceSection data={q.data} />
           <RoiSection data={q.data} />

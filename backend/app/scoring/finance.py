@@ -288,7 +288,8 @@ def life_profile_to_dict(lp: LifeProfile) -> dict[str, Any]:
     return {
         "partner": lp.partner, "children": lp.children, "dependents": lp.dependents,
         "housing": lp.housing, "housing_cost_jpy": lp.housing_cost_jpy,
-        "monthly_income_jpy": lp.monthly_income_jpy, "income_type": lp.income_type,
+        "monthly_income_jpy": lp.monthly_income_jpy, "monthly_expense_jpy": lp.monthly_expense_jpy,
+        "income_type": lp.income_type,
         "debt_balance_jpy": lp.debt_balance_jpy, "debt_rate_pct": lp.debt_rate_pct,
         "nisa_monthly_jpy": lp.nisa_monthly_jpy, "ideco_monthly_jpy": lp.ideco_monthly_jpy,
         "note": lp.note,
@@ -304,16 +305,23 @@ def compute_advisor(
     s = get_settings()
     lp = get_life_profile(session)
     has_cf = bool(cf.get("has_data"))
+    # 収入・支出は cashflow(CSV) 優先、無ければ profile(スクショ/手動) をフォールバック
     avg_income = cf.get("avg_monthly_income") if has_cf else None
     if not avg_income and lp.monthly_income_jpy:
         avg_income = lp.monthly_income_jpy
+    avg_expense = cf.get("avg_monthly_expense") if has_cf else None
+    if not avg_expense and lp.monthly_expense_jpy:
+        avg_expense = lp.monthly_expense_jpy
+    avg_net = cf.get("avg_monthly_net") if has_cf else None
+    if avg_net is None and avg_income is not None and avg_expense is not None:
+        avg_net = avg_income - avg_expense
     inp = AdvisorInputs(
         gross=reb.get("total") or 0.0,
         debt=lp.debt_balance_jpy or 0.0,
         debt_rate_pct=lp.debt_rate_pct,
         avg_income=avg_income,
-        avg_expense=cf.get("avg_monthly_expense") if has_cf else None,
-        avg_net=cf.get("avg_monthly_net") if has_cf else None,
+        avg_expense=avg_expense,
+        avg_net=avg_net,
         unallocated=reb.get("unallocated") or 0.0,
         reserve=reb.get("reserve") or 0.0,
         suggested_reserve=cf.get("suggested_reserve") if has_cf else None,

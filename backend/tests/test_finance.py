@@ -414,3 +414,44 @@ def test_profile_put_get_roundtrip(app_client):
     assert body["advisor"]["leverage"] == "good"  # 1% は低利=良い借金
     g = app_client.get("/api/finance/profile").json()
     assert g["housing_cost_jpy"] == 120000 and g["debt_rate_pct"] == 1.0
+
+
+# ===== MoneyForward 何でもスクショ取込 =====
+
+
+def test_import_screenshots_routes_and_confidence(app_client, monkeypatch):
+    import app.api.finance as fin
+
+    async def fake(*, image_b64, media_type="image/png"):
+        return {
+            "assets": [{"name": "UFJ 普通", "value": 1_000_000, "confidence": "high"},
+                       {"name": "怪しい口座", "value": 999, "confidence": "low"}],
+            "debts": [{"name": "住宅ローン", "value": 20_000_000, "confidence": "high"}],
+            "income_monthly": 500_000, "expense_monthly": 300_000, "flow_confidence": "high",
+        }
+    monkeypatch.setattr(fin, "extract_finance", fake)
+
+    r = app_client.post("/api/finance/import-screenshots",
+                        json={"images": [{"image_base64": "x", "media_type": "image/png"}]})
+    assert r.status_code == 200
+    body = r.json()
+    summ = body["import_summary"]
+    assert summ["entered"]["assets"] == 1  # high のみ確定
+    assert summ["entered"]["debts"] == 1
+    assert summ["entered"]["income"] == 500_000 and summ["entered"]["expense"] == 300_000
+    assert any(s["name"] == "怪しい口座" for s in summ["skipped"])  # low は要確認
+    assert body["advisor"]["debt"] == 20_000_000  # 負債が純資産に反映
+    assert body["profile"]["monthly_income_jpy"] == 500_000
+
+
+def test_advisor_uses_profile_income_expense_fallback(db_engine):
+    from app.scoring.finance import get_life_profile
+
+    with session_scope() as session:
+        session.add(AssetHolding(name="現金", category="cash", value_jpy=1_000_000, target_weight=0))
+        lp = get_life_profile(session)
+        lp.monthly_income_jpy = 400_000
+        lp.monthly_expense_jpy = 380_000  # 貯蓄率 5% (<15%)
+    with session_scope() as session:
+        adv = compute_finance(session)["advisor"]
+    assert any(d["key"] == "savings_rate" for d in adv["diagnosis"])

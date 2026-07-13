@@ -121,6 +121,7 @@ def _apply_lightweight_migrations() -> None:
             ("risk_tolerance", "INTEGER DEFAULT 3"),
         ],
         "asset_holding": [("risk_tier", "INTEGER")],
+        "life_profile": [("monthly_expense_jpy", "REAL")],
         "user_profile": [
             ("birth_date", "DATE"),
             ("age", "INTEGER"),
