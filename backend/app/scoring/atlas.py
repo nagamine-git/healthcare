@@ -71,6 +71,26 @@ def _score_from(
     return round(_clamp(100.0 - abs(current - ref) / ref * 100.0), 1)
 
 
+# 全体マップの「世の中(中央値)」推定値。公表統計・健診基準の目安(30-40代 男性中心)。
+# あくまで推定(欠測を埋めるため)。population を明示した葉(percentile 等)には適用しない。
+_MEDIAN_ESTIMATES: dict[str, float] = {
+    # コンディション(0-100 スコアの母集団目安)
+    "sleep": 65.0, "hrv": 55.0, "energy": 60.0, "load": 60.0,
+    # 体型(30-40代 男性の目安)
+    "weight": 64.0, "skeletal_muscle": 28.0, "visceral_fat": 9.0, "bmr": 1500.0,
+    # 頭痛(鎮痛薬 使用日数/30日)
+    "med_days": 1.0,
+    # 学習・活動
+    "learning": 50.0, "steps": 6500.0,
+    # 健康診断(日本人成人 中央値の目安)
+    "bmi": 22.5, "sbp": 120.0, "dbp": 75.0, "ldl_c": 120.0, "hdl_c": 58.0,
+    "tg": 100.0, "fasting_glucose": 92.0, "hba1c": 5.5, "ast": 22.0, "alt": 22.0,
+    "ggt": 30.0, "egfr": 80.0, "uric_acid": 5.8, "hemoglobin": 15.0,
+}
+# 目標が無い葉の推定目標(筋量増の方向)
+_TARGET_ESTIMATES: dict[str, float] = {"skeletal_muscle": 32.0, "bmr": 1600.0}
+
+
 def _leaf(
     key: str,
     label: str,
@@ -84,6 +104,12 @@ def _leaf(
     series: list[dict] | None = None,
     median: float | None = None,
 ) -> dict[str, Any]:
+    # 世の中・目標が未提供の葉は推定テーブルで補完(欠測を全て埋める)。
+    # population を明示済み(percentile 等)の葉は尊重してスキップ。
+    if population is None and median is None and key in _MEDIAN_ESTIMATES:
+        population = {"median": _MEDIAN_ESTIMATES[key], "estimated": True}
+    if target is None and key in _TARGET_ESTIMATES:
+        target = _TARGET_ESTIMATES[key]
     # median はスコア計算用の中央値(表示は population)。明示が無ければ population から。
     median_v = median if median is not None else (population.get("median") if population else None)
     explicit_target = target  # 中央値フォールバック前の実目標
