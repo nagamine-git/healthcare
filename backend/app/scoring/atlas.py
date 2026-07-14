@@ -146,6 +146,11 @@ def _branch(key: str, label: str, children: list[dict], *, direction: str = "non
         score = round(sum(vals) / len(vals), 1) if vals else None
     pops = [c["score_pop"] for c in children if c.get("score_pop") is not None]
     score_pop = round(sum(pops) / len(pops), 1) if pops else None
+    # 伸びしろ順(スコア昇順=目標から遠い順)に子を並べる。score None は末尾。
+    children = sorted(
+        children,
+        key=lambda c: (c.get("score") is None, c.get("score") if c.get("score") is not None else 0.0),
+    )
     return {
         "key": key, "label": label, "unit": "", "direction": direction,
         "current": _r(current), "population": None, "target": _r(target),
