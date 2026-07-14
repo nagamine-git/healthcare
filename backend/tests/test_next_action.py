@@ -224,3 +224,18 @@ def test_sleep_experiment_suppressed_when_already_logged():
         intervention_logged=True,
     )
     assert "sleep_experiment" not in _keys(build_candidates(inp, _at(21)))
+
+
+# ===== いまコレを達成度×重みで (atlas_focus) =====
+
+
+def test_atlas_focus_rises_with_weight_and_gap():
+    inp = Inputs(atlas_focus={"label": "資産", "score": 15, "weight": 3.0, "key": "economy", "pri": 255})
+    c = next(x for x in build_candidates(inp, _at(14)) if x["key"] == "atlas_focus")
+    assert "資産" in c["title"] and "×3.0" in c["title"]
+
+
+def test_atlas_focus_quiet_when_high_achievement_low_weight():
+    # 達成98・重み1 → pri 小 → 出さない
+    inp = Inputs(atlas_focus={"label": "健診", "score": 98, "weight": 1.0, "key": "checkup", "pri": 2})
+    assert all(x["key"] != "atlas_focus" for x in build_candidates(inp, _at(14)))

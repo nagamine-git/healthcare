@@ -52,6 +52,7 @@ class Inputs:
     last_night_min: float | None = None         # 前夜 (target 付け) の総睡眠分。睡眠負債の算定に使う
     target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
     sleep_experiment: dict[str, Any] | None = None  # 今夜の睡眠実験 (探索/活用/交絡崩し) の提案
+    atlas_focus: dict[str, Any] | None = None  # 全体マップで「達成度低×重み高」の最優先領域
 
 
 # --- 仮眠の科学ベース設計パラメータ ---
@@ -218,6 +219,15 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             add("caffeine_cutoff", 58, f"カフェインは {cutoff.strftime('%H:%M')} {when}",
                 "就寝6時間前ルール (半減期): 以降の摂取は深睡眠を削る", None)
 
+    # --- 6.4 全体マップの主戦場: 達成度が低く優先(重み)が高い領域を「いまコレ」に ---
+    af = inp.atlas_focus
+    if af and af.get("pri", 0) >= 30:
+        # 優先度 = 45 + スケール (weight×gap が大きいほど上げる。最大 ~80)
+        pri = 45 + min(35.0, af["pri"] / 500 * 35)
+        add("atlas_focus", round(pri),
+            f"『{af['label']}』に一手を割く (達成 {int(af['score'])} / 優先 ×{af['weight']:.1f})",
+            "達成度が低く優先の高い領域。伸びしろ×重みが最大 — ここが一番効く", "#tab-summary")
+
     # --- 6.5 就寝前: 今夜の睡眠実験 (何で寝るべきか / データ取得のための探索+活用) ---
     se = inp.sleep_experiment
     if se and hour >= 19 and not inp.intervention_logged:
@@ -379,7 +389,23 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
         from app.scoring.sleep_interventions import analyze as analyze_interventions
         inp.sleep_experiment = analyze_interventions(target).get("suggestion")
 
-    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training, _sleep_exp):
+    def _atlas():
+        # 全体マップの第1階層で「伸びしろ(100-score)×重み」が最大の領域を拾う
+        from app.scoring.atlas import build_atlas
+        with session_scope() as db:
+            tree = build_atlas(db)
+        best = None
+        for c in tree.get("children", []):
+            sc = c.get("score")
+            w = c.get("weight", 1.0)
+            if sc is None or w <= 0:
+                continue
+            pri = max(0.0, 100 - sc) * w
+            if best is None or pri > best["pri"]:
+                best = {"label": c["label"], "score": sc, "weight": w, "key": c["key"], "pri": pri}
+        inp.atlas_focus = best
+
+    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training, _sleep_exp, _atlas):
         safe(fn)
     return inp, now
 
