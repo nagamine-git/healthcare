@@ -349,10 +349,18 @@ def _economy_branch(session: Session) -> dict[str, Any]:
     inc = cf.get("avg_monthly_income")
     net_m = cf.get("avg_monthly_net")
     savings_rate = (net_m / inc * 100) if (inc and inc > 0 and net_m is not None) else None
+    s = get_settings()
+    nw_med = s.finance_net_worth_median_jpy      # 世の中(中央値)の推定
+    nw_tgt = s.finance_net_worth_target_jpy       # 目標(マイルストーン)
     children = [
-        _leaf("wealth_index", "√(総資産×純資産)", current=wealth_index, unit="円", direction="up"),
-        _leaf("net_worth", "純資産", current=net, unit="円", direction="up"),
-        _leaf("savings_rate", "貯蓄率", current=savings_rate, unit="%", direction="up", target=15.0),
+        # √(総資産×純資産) のベンチマークは gross≈net の目安として純資産と同スケールで推定
+        _leaf("wealth_index", "√(総資産×純資産)", current=wealth_index, unit="円", direction="up",
+              population={"median": nw_med}, target=nw_tgt),
+        _leaf("net_worth", "純資産", current=net, unit="円", direction="up",
+              population={"median": nw_med}, target=nw_tgt),
+        _leaf("savings_rate", "貯蓄率", current=savings_rate, unit="%", direction="up",
+              population={"median": s.finance_savings_rate_median_pct},
+              target=s.finance_savings_rate_target_pct),
     ]
     return _branch("economy", "資産", children, direction="up")
 
@@ -365,9 +373,11 @@ def _identity_branch(session: Session) -> dict[str, Any]:
     dims = rep.get("dimensions", [])
 
     def sub(layer: str, key: str, label: str) -> dict[str, Any] | None:
+        # 世の中は 0-100 尺度の中立値 50 を推定中央値として置く(母集団の目安)
         leaves = [
             _leaf(str(d.get("id")), str(d.get("name") or d.get("id")),
-                  current=d.get("current"), target=d.get("target"), direction="up")
+                  current=d.get("current"), target=d.get("target"), direction="up",
+                  population={"median": 50.0})
             for d in dims
             if d.get("layer") == layer and d.get("current") is not None
         ]
