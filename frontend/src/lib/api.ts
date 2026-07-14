@@ -415,6 +415,40 @@ export type CheckinUpdate = {
   from_suggested?: string[];
 };
 
+// ---- メンタルチェック (PHQ-2 + GAD-2) ----
+export type MentalItem = { id: string; layer: "depression" | "anxiety"; text: string };
+export type MentalScaleOption = { value: number; label: string };
+export type MentalResult = {
+  id: number;
+  date: string;
+  ts: string | null;
+  phq2: number;
+  gad2: number;
+  phq4: number;
+  depression_positive: boolean;
+  anxiety_positive: boolean;
+  severity: "none" | "mild" | "moderate" | "severe";
+  severity_label: string;
+  note: string | null;
+};
+export type MentalStatus = {
+  due: boolean;
+  reason: string;
+  urgency: "none" | "normal" | "elevated";
+  days_since_last: number | null;
+  latest: MentalResult | null;
+  history: MentalResult[];
+  items: MentalItem[];
+  scale: MentalScaleOption[];
+};
+export type MentalScreenIn = {
+  phq2_1: number;
+  phq2_2: number;
+  gad2_1: number;
+  gad2_2: number;
+  note?: string;
+};
+
 export type UserProfileDto = {
   height_cm: number;
   sex: "male" | "female";
@@ -1768,6 +1802,9 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
+  mental: () => request<MentalStatus>("/api/mental"),
+  mentalScreen: (body: MentalScreenIn) =>
+    request<MentalStatus>("/api/mental/screen", { method: "POST", body: JSON.stringify(body) }),
   timeline: (opts?: { date?: string; window?: "day" | "24h" }) =>
     request<DayTimelineData>(`/api/timeline?${new URLSearchParams({ ...(opts?.date ? { date: opts.date } : {}), window: opts?.window ?? "day" }).toString()}`),
   dayStory: (opts?: { date?: string; window?: "day" | "24h" }) =>

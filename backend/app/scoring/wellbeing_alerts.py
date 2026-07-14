@@ -94,12 +94,13 @@ def evaluate_alerts(
     # 気圧×片頭痛リスクは forecast の片頭痛バナー (MigraineRiskBanner) に集約済み。
     # ここでは扱わない (旧 pressure_migraine_trigger を廃止)。
 
-    # ルール 8-11: 生理指標 (sleep raw_json / Training Readiness 由来)
+    # ルール 8-12: 生理指標 (sleep raw_json / Training Readiness 由来) + メンタル
     for check in (
         _check_sleep_spo2_low,
         _check_respiration_elevated,
         _check_readiness_low_streak,
         _check_sleep_irregular,
+        _check_mental_screen,
     ):
         a = check(session, target)
         if a:
@@ -497,6 +498,45 @@ def _check_sleep_irregular(session: Session, target: date) -> WellbeingAlert | N
             action="今夜はいつもの就寝時刻 ±30 分以内を目標に",
         )
     return None
+
+
+def _check_mental_screen(session: Session, target: date) -> WellbeingAlert | None:
+    """直近 14 日の PHQ-2/GAD-2 が中等度以上、またはサブスケール陽性なら注意喚起。
+
+    一次スクリーニング陽性は「診断」ではなく受診検討の目安。重度 (PHQ-4 9-12) は
+    critical、中等度 (6-8) や PHQ-2/GAD-2≥3 は warning。保守的に専門家相談へ導く。
+    """
+    from app.scoring.mental import latest_screening, score_screening
+
+    row = latest_screening(session, target, within_days=14)
+    if row is None:
+        return None
+    r = score_screening(row.phq2_1, row.phq2_2, row.gad2_1, row.gad2_2)
+    positive = r.depression_positive or r.anxiety_positive
+    if r.severity == "severe":
+        sev = "critical"
+    elif r.severity == "moderate" or positive:
+        sev = "warning"
+    else:
+        return None
+    flags = []
+    if r.depression_positive:
+        flags.append(f"抑うつ傾向 (PHQ-2 {r.phq2}/6)")
+    if r.anxiety_positive:
+        flags.append(f"不安傾向 (GAD-2 {r.gad2}/6)")
+    detail = (
+        f"心の健康チェックが{r.severity_label} (PHQ-4 {r.phq4}/12"
+        + (f"・{'、'.join(flags)}" if flags else "") + ")。"
+        "スクリーニングであって診断ではないが、続くなら相談を検討する水準"
+    )
+    return WellbeingAlert(
+        code="mental_distress",
+        severity=sev,
+        title="心の健康チェックが" + r.severity_label,
+        detail=detail,
+        action=("産業医・かかりつけ・相談窓口など専門家への相談を検討"
+                if sev == "critical" else "睡眠・運動・休養を優先し、数日後に再チェック"),
+    )
 
 
 def to_dict(a: WellbeingAlert) -> dict[str, Any]:

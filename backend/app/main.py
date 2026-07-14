@@ -31,6 +31,7 @@ from app.api import imputation as imputation_api
 from app.api import journal as journal_api
 from app.api import learning as learning_api
 from app.api import life as life_api
+from app.api import mental as mental_api
 from app.api import migraine as migraine_api
 from app.api import next_action as next_action_api
 from app.api import perf as perf_api
@@ -102,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(workout_review_api.router)
     app.include_router(imputation_api.router)
     app.include_router(checkin_api.router)
+    app.include_router(mental_api.router)
     app.include_router(advice_feedback_api.router)
     app.include_router(migraine_api.router)
     app.include_router(profile_api.router)

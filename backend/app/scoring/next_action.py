@@ -53,6 +53,7 @@ class Inputs:
     target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
     sleep_experiment: dict[str, Any] | None = None  # 今夜の睡眠実験 (探索/活用/交絡崩し) の提案
     atlas_focus: dict[str, Any] | None = None  # 全体マップで「達成度低×重み高」の最優先領域
+    mental_prompt: dict[str, Any] | None = None  # 心の健康チェックを促すか {due,reason,urgency}
 
 
 # --- 仮眠の科学ベース設計パラメータ ---
@@ -252,6 +253,13 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
         add("protein", 50, "プロテイン (or タンパク質20-30g) を摂る",
             f"タンパク質が目標まであと {int(gap)}g — 夕方以降は分割摂取が有利", "#tab-health")
 
+    # --- 7.5 心の健康チェック (不調サイン時は高め、定期は低め) ---
+    mp = inp.mental_prompt
+    if mp and mp.get("due"):
+        pri = 66 if mp.get("urgency") == "elevated" else 40
+        add("mental_check", pri, "心の健康チェック (PHQ-2/GAD-2・4問2分)",
+            str(mp.get("reason") or "心の状態を確認する"), "#tab-summary")
+
     # --- 8. 記録衛生 (分析の質を保つ日次ログ) ---
     if not inp.checkin_done and hour >= 10:
         add("checkin", 45, "体調チェックイン (気分/活力/ストレス 4タップ)",
@@ -410,7 +418,13 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
                 best = {"label": c["label"], "score": sc, "weight": w, "key": c["key"], "pri": pri}
         inp.atlas_focus = best
 
-    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training, _sleep_exp, _atlas):
+    def _mental():
+        from app.scoring.mental import prompt_status
+        with session_scope() as db:
+            inp.mental_prompt = prompt_status(db, target)
+
+    for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training,
+               _sleep_exp, _atlas, _mental):
         safe(fn)
     return inp, now
 

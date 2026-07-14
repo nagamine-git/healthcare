@@ -406,6 +406,30 @@ class SubjectiveCheckin(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class MentalScreening(Base):
+    """PHQ-2 + GAD-2 の超短縮メンタルスクリーニング (1 回 = 1 行)。
+
+    臨床検証済みの4項目 (各 0-3、過去2週間の頻度)。PHQ-2 はうつ、GAD-2 は不安の
+    一次スクリーニング。合算 PHQ-4 (0-12) で全体の苦痛度を段階化する。
+    医療機器ではなく、専門家受診の目安を示す保守的な自己観察ツール。
+    """
+
+    __tablename__ = "mental_screening"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)  # JST 日付 (間隔判定用)
+    # PHQ-2 (うつ): 興味喪失 / 抑うつ気分。GAD-2 (不安): 神経過敏 / 心配制御不能。各 0-3。
+    phq2_1: Mapped[int] = mapped_column(Integer)
+    phq2_2: Mapped[int] = mapped_column(Integer)
+    gad2_1: Mapped[int] = mapped_column(Integer)
+    gad2_2: Mapped[int] = mapped_column(Integer)
+    phq2: Mapped[int] = mapped_column(Integer)  # 0-6
+    gad2: Mapped[int] = mapped_column(Integer)  # 0-6
+    phq4: Mapped[int] = mapped_column(Integer)  # 0-12
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
 class SleepInterventionLog(Base):
     """就寝前の介入 (耳栓/アイマスク/鼻ストリップ/口テープ) の夜次ログ。
 

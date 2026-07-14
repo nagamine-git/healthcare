@@ -49,7 +49,7 @@ LIFE_TREE: list[dict] = [
         {"label": "回復(自律神経)", "signal": "atlas:hrv"},
     ]},
     {"key": "mind", "label": "精神状態", "leaves": [
-        {"label": "ストレス・情動", "signal": "none"},
+        {"label": "心の健康 (PHQ-4)", "signal": "mental"},
         {"label": "内省", "signal": "garden:meditation,journaling,reflection,gratitude"},
     ]},
     {"key": "intellect", "label": "知的資本", "leaves": [
@@ -152,6 +152,11 @@ def leaf_achievement(
 ) -> float | None:
     if signal == "none":
         return None
+    if signal == "mental":
+        # 直近14日の PHQ-4 を苦痛度→達成度に反転 (未実施は未計測)。
+        from app.scoring.mental import distress_achievement, latest_screening
+        row = latest_screening(session, target, within_days=14)
+        return distress_achievement(row.phq4 if row else None)
     if signal.startswith("atlas:"):
         # 全体マップの実データ score をそのまま採用(欠測/未知キーは未計測=None)。
         key = signal.split(":", 1)[1]
