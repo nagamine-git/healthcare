@@ -105,9 +105,11 @@ def _leaf(
     median: float | None = None,
 ) -> dict[str, Any]:
     # 世の中・目標が未提供の葉は推定テーブルで補完(欠測を全て埋める)。
-    # population を明示済み(percentile 等)の葉は尊重してスキップ。
-    if population is None and median is None and key in _MEDIAN_ESTIMATES:
-        population = {"median": _MEDIAN_ESTIMATES[key], "estimated": True}
+    # 既存 population(健診の基準 band 等)は保持しつつ、median/percentile が無い時だけ推定中央値を足す。
+    if median is None and key in _MEDIAN_ESTIMATES:
+        _pop = population or {}
+        if _pop.get("median") is None and _pop.get("percentile") is None:
+            population = {**_pop, "median": _MEDIAN_ESTIMATES[key], "estimated": True}
     if target is None and key in _TARGET_ESTIMATES:
         target = _TARGET_ESTIMATES[key]
     # median はスコア計算用の中央値(表示は population)。明示が無ければ population から。
