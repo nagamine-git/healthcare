@@ -114,6 +114,9 @@ def _leaf(
         target = _TARGET_ESTIMATES[key]
     # median はスコア計算用の中央値(表示は population)。明示が無ければ population から。
     median_v = median if median is not None else (population.get("median") if population else None)
+    # スコア用 median があるのに表示 population が無い葉は、median を世の中として表示に載せる。
+    if population is None and median_v is not None:
+        population = {"median": median_v}
     explicit_target = target  # 中央値フォールバック前の実目標
     # スコアは「実目標(明示/推定)」基準で算出(目標が無い時は中央値=50点扱い)。
     if score is None:
