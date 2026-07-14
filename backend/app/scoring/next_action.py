@@ -289,12 +289,16 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
             logger.info("next_action_gather_failed", error=str(exc))
 
     def _alerts():
+        from app.scoring.profile import resolve_profile
         from app.scoring.wellbeing_alerts import evaluate_alerts, to_dict
+        # 低体重下限は身長ベースの BMI18.5 で(dashboard と統一)。目標−1 は誤り(偽陽性の原因)。
+        prof = resolve_profile()
+        bmi_floor = round(18.5 * (prof.height_cm / 100) ** 2, 1)
         with session_scope() as db:
             inp.alerts = [to_dict(a) for a in evaluate_alerts(
                 db, target,
-                target_weight_kg=s.target_weight_kg,
-                weight_lower_kg=getattr(s, "weight_lower_kg", s.target_weight_kg - 1.0),
+                target_weight_kg=prof.target_weight_kg,
+                weight_lower_kg=bmi_floor,
             )]
 
     def _advice():
