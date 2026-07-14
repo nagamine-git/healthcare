@@ -428,14 +428,23 @@ def _identity_branch(session: Session) -> dict[str, Any]:
     return _branch("identity", "羅針盤 (理想)", children, direction="up")
 
 
+def _attach_weights(node: dict[str, Any], weights: dict[str, float]) -> None:
+    """各ノードに優先の重み(既定1.0)を付与。末端まで再帰。"""
+    node["weight"] = weights.get(node["key"], 1.0)
+    for c in node["children"]:
+        _attach_weights(c, weights)
+
+
 def build_atlas(session: Session) -> dict[str, Any]:
-    """総合点を根に、各ドメイン→指標を 現状/世の中/目標 + series/score 付きで組み立てる。"""
+    """総合点を根に、各ドメイン→指標を 現状/世の中/目標 + series/score/weight 付きで組み立てる。"""
+    from app.models.health import DomainWeight
+
     prof = resolve_profile()
     target = app_today()
     score = session.execute(
         select(DailyScore).order_by(DailyScore.date.desc()).limit(1)
     ).scalars().first()
-    return _branch(
+    tree = _branch(
         "total", "総合点",
         [
             _economy_branch(session),
@@ -451,3 +460,6 @@ def build_atlas(session: Session) -> dict[str, Any]:
         current=score.total if score else None,
         target=100.0,
     ) | {"series": _ds_series(session, target, DailyScore.total)}
+    weights = {r.domain: r.weight for r in session.execute(select(DomainWeight)).scalars()}
+    _attach_weights(tree, weights)
+    return tree

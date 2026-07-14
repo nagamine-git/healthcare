@@ -135,3 +135,15 @@ def test_atlas_includes_economy_and_identity(db_engine):
     wi = keys.get("wealth_index")
     assert wi is not None and wi["current"] is not None and wi["current"] > 0  # √(総資産×純資産)
     assert keys["net_worth"]["current"] == 2_000_000
+
+
+def test_atlas_attaches_weight(db_engine):
+    from app.models.health import DomainWeight
+
+    with session_scope() as session:
+        session.add(DomainWeight(domain="economy", weight=3.0))
+    with session_scope() as session:
+        tree = build_atlas(session)
+    assert tree["weight"] == 1.0  # 既定
+    econ = next(c for c in tree["children"] if c["key"] == "economy")
+    assert econ["weight"] == 3.0  # 設定が反映

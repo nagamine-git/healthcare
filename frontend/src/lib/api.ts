@@ -1541,6 +1541,7 @@ export type AtlasNode = {
   score: number | null;
   score_pop: number | null;
   series: { date: string; value: number }[];
+  weight?: number;
   children: AtlasNode[];
 };
 export type BodyCompDraft = {
@@ -2000,6 +2001,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   atlas: () => request<{ tree: AtlasNode }>("/api/atlas"),
+  atlasSetWeight: (key: string, weight: number) =>
+    request<{ tree: AtlasNode }>("/api/atlas/weight", {
+      method: "PUT",
+      body: JSON.stringify({ key, weight }),
+    }),
   adminPerf: () => request<PerfResponse>("/api/admin/perf"),
   finance: () => request<FinanceResponse>("/api/finance"),
   financeImportScreenshots: (images: { image_base64: string; media_type: string }[]) =>

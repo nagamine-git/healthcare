@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Legend,
   Line,
@@ -61,7 +61,25 @@ function Sparkline({ n }: { n: AtlasNode }) {
   );
 }
 
-function MetricRow({ n }: { n: AtlasNode }) {
+type OnWeight = (key: string, weight: number) => void;
+
+/** 優先の重み ×0〜×5 (0.5刻み)。既定 ×1.0。末端まで設定可。 */
+function WeightStepper({ w, onSet }: { w: number; onSet: (v: number) => void }) {
+  const clamp = (v: number) => Math.max(0, Math.min(5, Math.round(v * 2) / 2));
+  const tone = w === 1 ? "text-ink-faint" : w > 1 ? "text-act-300" : "text-ink-dim";
+  return (
+    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <span className="text-[9px] text-ink-faint">優先</span>
+      <button onClick={() => onSet(clamp(w - 0.5))}
+        className="grid h-5 w-5 place-items-center rounded bg-panel text-ink-dim active:scale-95">−</button>
+      <span className={`w-9 text-center text-[11px] tabular-nums ${tone}`}>×{w.toFixed(1)}</span>
+      <button onClick={() => onSet(clamp(w + 0.5))}
+        className="grid h-5 w-5 place-items-center rounded bg-panel text-ink-dim active:scale-95">＋</button>
+    </div>
+  );
+}
+
+function MetricRow({ n, onWeight }: { n: AtlasNode; onWeight?: OnWeight }) {
   return (
     <div className="py-1.5">
       <div className="flex items-center gap-2">
@@ -82,6 +100,11 @@ function MetricRow({ n }: { n: AtlasNode }) {
         </div>
       </div>
       {n.series.length >= 2 && <Sparkline n={n} />}
+      {onWeight && (
+        <div className="mt-0.5 flex justify-end">
+          <WeightStepper w={n.weight ?? 1} onSet={(v) => onWeight(n.key, v)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -120,25 +143,30 @@ function DomainRadar({ children }: { children: AtlasNode[] }) {
   );
 }
 
-function DomainSection({ n }: { n: AtlasNode }) {
+function DomainSection({ n, onWeight }: { n: AtlasNode; onWeight?: OnWeight }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-t border-hairline first:border-t-0">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 py-2 text-left">
-        <span className="text-ink-faint">{open ? "▾" : "▸"}</span>
-        <span className="flex-1 text-sm font-semibold text-ink">{n.label}</span>
-        {n.score != null && (
-          <span className="telemetry-num text-sm font-bold text-prog-300" title="ドメイン総合点 (0-100)">
-            {Math.round(n.score)}
-          </span>
-        )}
-        <span className="telemetry-label w-6 text-right text-[10px] text-ink-faint">{n.children.length}</span>
-      </button>
+      {/* ネストボタン回避: トグルは label 部のみ、重みステッパーは兄弟 */}
+      <div className="flex w-full items-center gap-2 py-2">
+        <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <span className="text-ink-faint">{open ? "▾" : "▸"}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{n.label}</span>
+          {n.score != null && (
+            <span className="telemetry-num text-sm font-bold text-prog-300" title="ドメイン総合点 (0-100)">
+              {Math.round(n.score)}
+            </span>
+          )}
+        </button>
+        {onWeight && <WeightStepper w={n.weight ?? 1} onSet={(v) => onWeight(n.key, v)} />}
+      </div>
       {open && (
         <div className="ml-4 border-l border-hairline pl-2">
           <DomainRadar children={n.children} />
           {n.children.map((c) =>
-            c.children.length > 0 ? <DomainSection key={c.key} n={c} /> : <MetricRow key={c.key} n={c} />,
+            c.children.length > 0
+              ? <DomainSection key={c.key} n={c} onWeight={onWeight} />
+              : <MetricRow key={c.key} n={c} onWeight={onWeight} />,
           )}
         </div>
       )}
@@ -148,7 +176,13 @@ function DomainSection({ n }: { n: AtlasNode }) {
 
 /** 全体マップ: 総合点→ドメイン→指標。現状/世の中/目標 + レーダー(バランス)+ 折れ線(推移)。 */
 export function AtlasTree() {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ["atlas"], queryFn: api.atlas, retry: false });
+  const weightMut = useMutation({
+    mutationFn: ({ key, weight }: { key: string; weight: number }) => api.atlasSetWeight(key, weight),
+    onSuccess: (d) => qc.setQueryData(["atlas"], d),
+  });
+  const onWeight: OnWeight = (key, weight) => weightMut.mutate({ key, weight });
   if (!q.data) return <Skeleton className="h-64" />;
   const root = q.data.tree;
   return (
@@ -165,7 +199,7 @@ export function AtlasTree() {
       <DomainRadar children={root.children} />
       <div className="mt-1">
         {root.children.map((c) => (
-          <DomainSection key={c.key} n={c} />
+          <DomainSection key={c.key} n={c} onWeight={onWeight} />
         ))}
       </div>
       <p className="mt-2 text-[10px] text-ink-faint">
