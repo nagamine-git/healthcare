@@ -34,7 +34,6 @@ import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
-import { PyramidHome } from "../components/PyramidHome";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
@@ -313,16 +312,14 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 総合 (サマリー) ============ */}
       {tab === "summary" && (
       <div className="space-y-3">
-      {/* 全体マップ(現状/世の中/目標・伸びしろ順)を最上部に。旧「全体」タブを統合 */}
-      <AtlasTree />
-      {/* 幸せに生きる — 4本柱の Apple 級シンプルな俯瞰(タップで段階展開) */}
-      <PyramidHome />
-      {/* アラート一覧(攻めどき等の計器ランプ)を最上部に */}
+      {/* 状態ダッシュボード(赤黄緑ランプ)を最上部に */}
       <StatusLamps
         alerts={data.alerts}
         pressure={data.pressure}
         igniteSignal={data.last_data_update_at ?? data.date}
       />
+      {/* 全体マップ(現状/世の中/目標・伸びしろ順)。旧「全体」タブを統合 */}
+      <AtlasTree />
 
       <StaleBanner
         lastUpdateIso={data.last_data_update_at}

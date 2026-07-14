@@ -222,8 +222,9 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
     # --- 6.4 全体マップの主戦場: 達成度が低く優先(重み)が高い領域を「いまコレ」に ---
     af = inp.atlas_focus
     if af and af.get("pri", 0) >= 30:
-        # 優先度 = 45 + スケール (weight×gap が大きいほど上げる。最大 ~80)
-        pri = 45 + min(35.0, af["pri"] / 500 * 35)
+        # 優先度 = 55 + スケール。伸びしろ(100-score)×重み が大きいほど上げ、ルーティン
+        # (水/プロテイン/学習)より前に出す。安全網(アラート)より下に収める(最大 ~90)。
+        pri = 55 + min(35.0, af["pri"] * 0.18)
         add("atlas_focus", round(pri),
             f"『{af['label']}』に一手を割く (達成 {int(af['score'])} / 優先 ×{af['weight']:.1f})",
             "達成度が低く優先の高い領域。伸びしろ×重みが最大 — ここが一番効く", "#tab-summary")
