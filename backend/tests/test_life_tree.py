@@ -10,7 +10,9 @@ from app.models.health import Base, GardenDaily, Goal
 from app.scoring.life.tree import (
     active_goal,
     aggregate_tree,
+    flatten_atlas_scores,
     freq_achievement,
+    leaf_achievement,
     recommend_allocation,
 )
 
@@ -87,6 +89,39 @@ def test_freq_achievement_zero_when_tracking_but_kind_absent(mem_session):
     mem_session.flush()
     a = freq_achievement(mem_session, ["reading"], t, window=14, target_days=7)
     assert a == 0.0
+
+
+def test_flatten_atlas_scores_recurses():
+    tree = {
+        "key": "total", "score": 60.0, "children": [
+            {"key": "economy", "score": 40.0, "children": [
+                {"key": "wealth_index", "score": 15.0, "children": []},
+                {"key": "savings_rate", "score": None, "children": []},
+            ]},
+            {"key": "condition", "score": 80.0, "children": [
+                {"key": "sleep", "score": 90.0, "children": []},
+            ]},
+        ],
+    }
+    flat = flatten_atlas_scores(tree)
+    assert flat["total"] == 60.0
+    assert flat["wealth_index"] == 15.0
+    assert flat["savings_rate"] is None  # 実データ欠測 → 未計測(None)
+    assert flat["sleep"] == 90.0
+
+
+def test_leaf_achievement_atlas_signal_pulls_real_score(mem_session):
+    atlas = {"wealth_index": 15.0, "savings_rate": None, "load": 72.0}
+    # atlas:<key> は全体マップの実データ score をそのまま返す。
+    assert leaf_achievement(mem_session, "atlas:wealth_index", date(2026, 6, 26),
+                            14, 7, None, atlas) == 15.0
+    assert leaf_achievement(mem_session, "atlas:load", date(2026, 6, 26),
+                            14, 7, None, atlas) == 72.0
+    # 欠測(None)や未知キーは未計測。
+    assert leaf_achievement(mem_session, "atlas:savings_rate", date(2026, 6, 26),
+                            14, 7, None, atlas) is None
+    assert leaf_achievement(mem_session, "atlas:unknown", date(2026, 6, 26),
+                            14, 7, None, atlas) is None
 
 
 def test_active_goal_seeds_default_when_none(mem_session):

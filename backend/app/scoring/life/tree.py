@@ -35,21 +35,25 @@ DOMAIN_EDGES: list[dict] = [
 ]
 
 # MECE な capital と葉。各葉は signal(達成度の出し方)を持つ。
-# signal: "score:<field>" = DailyScore 由来 / "garden:k1,k2" = 行動頻度 / "none" = 未計測(null)
+# signal: "atlas:<key>" = 全体マップの実データ score(0-100)/ "score:<field>" = DailyScore 由来
+#         "garden:k1,k2" = 行動頻度(自己申告)/ "media" = 作品インプット / "none" = 未計測(null)
+# 実センサー/実データがある葉は atlas: を優先(全体マップと同じ現実を映す)。
+# 行動系(内省・発信・関係など)はセンサーが無いため garden: のまま。
 LIFE_TREE: list[dict] = [
     {"key": "body", "label": "身体資本", "leaves": [
-        {"label": "睡眠", "signal": "score:sleep"},
-        {"label": "運動", "signal": "garden:aerobic,strength"},
+        {"label": "睡眠", "signal": "atlas:sleep"},
+        {"label": "運動(負荷)", "signal": "atlas:load"},
+        {"label": "体力(測定)", "signal": "atlas:fitness"},
         {"label": "栄養", "signal": "garden:healthy_meal"},
-        {"label": "体組成", "signal": "score:bodycomp"},
-        {"label": "回復(自律神経)", "signal": "score:recovery"},
+        {"label": "体組成", "signal": "atlas:body"},
+        {"label": "回復(自律神経)", "signal": "atlas:hrv"},
     ]},
     {"key": "mind", "label": "精神状態", "leaves": [
         {"label": "ストレス・情動", "signal": "none"},
         {"label": "内省", "signal": "garden:meditation,journaling,reflection,gratitude"},
     ]},
     {"key": "intellect", "label": "知的資本", "leaves": [
-        {"label": "学習", "signal": "garden:learning"},
+        {"label": "学習", "signal": "atlas:learning"},
         {"label": "読書", "signal": "garden:reading"},
         {"label": "作品インプット", "signal": "media"},
     ]},
@@ -63,8 +67,8 @@ LIFE_TREE: list[dict] = [
         {"label": "友人・人脈", "signal": "garden:social"},
     ]},
     {"key": "economy", "label": "経済資本", "leaves": [
-        {"label": "家計", "signal": "garden:finance"},
-        {"label": "投資・資産", "signal": "none"},
+        {"label": "純資産(資産形成)", "signal": "atlas:wealth_index"},
+        {"label": "家計(貯蓄率)", "signal": "atlas:savings_rate"},
     ]},
 ]
 
@@ -131,12 +135,27 @@ def freq_achievement(
     return round(upper_achievement(days, 0.0, float(target_days)), 1)
 
 
-def _leaf_achievement(
+def flatten_atlas_scores(node: dict) -> dict[str, float | None]:
+    """全体マップ(atlas)ツリーを {key: score(0-100)} に平坦化(純関数)。
+
+    目的・領域の葉は、この実データ score を `atlas:<key>` シグナルで参照する。
+    """
+    out: dict[str, float | None] = {node["key"]: node.get("score")}
+    for c in node.get("children", []):
+        out.update(flatten_atlas_scores(c))
+    return out
+
+
+def leaf_achievement(
     session: Session, signal: str, target: date, window: int, target_days: int,
-    score: DailyScore | None,
+    score: DailyScore | None, atlas_scores: dict[str, float | None] | None = None,
 ) -> float | None:
     if signal == "none":
         return None
+    if signal.startswith("atlas:"):
+        # 全体マップの実データ score をそのまま採用(欠測/未知キーは未計測=None)。
+        key = signal.split(":", 1)[1]
+        return (atlas_scores or {}).get(key)
     if signal.startswith("score:"):
         if score is None:
             return None
@@ -216,11 +235,15 @@ def compute_life_tree(session: Session, target: date) -> dict:
     win, tgt = s.life_freq_window_days, s.life_freq_target_days
     score = session.get(DailyScore, target)
 
+    # 全体マップ(実データ)を1回組んで {key: score} に平坦化。atlas: シグナルの葉が参照する。
+    from app.scoring.atlas import build_atlas
+    atlas_scores = flatten_atlas_scores(build_atlas(session))
+
     capitals_in = []
     for node in LIFE_TREE:
         leaves = []
         for leaf in node["leaves"]:
-            a = _leaf_achievement(session, leaf["signal"], target, win, tgt, score)
+            a = leaf_achievement(session, leaf["signal"], target, win, tgt, score, atlas_scores)
             leaves.append({"label": leaf["label"], "achievement": a})
         capital_ach = _mean([leaf["achievement"] for leaf in leaves])
         capitals_in.append({
