@@ -415,6 +415,23 @@ export type CheckinUpdate = {
   from_suggested?: string[];
 };
 
+// ---- 今日の予定 (Google Calendar 読み取り) ----
+export type ScheduleEvent = {
+  id: string | null;
+  title: string;
+  start: string | null;
+  end: string | null;
+  is_busy: boolean;
+  is_hc_managed: boolean;
+  past: boolean;
+};
+export type ScheduleToday = {
+  configured: boolean;
+  date: string;
+  now: string;
+  events: ScheduleEvent[];
+};
+
 // ---- メンタルチェック (PHQ-2 + GAD-2) ----
 export type MentalItem = { id: string; layer: "depression" | "anxiety"; text: string };
 export type MentalScaleOption = { value: number; label: string };
@@ -1802,6 +1819,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
+  scheduleToday: () => request<ScheduleToday>("/api/schedule/today"),
   mental: () => request<MentalStatus>("/api/mental"),
   mentalScreen: (body: MentalScreenIn) =>
     request<MentalStatus>("/api/mental/screen", { method: "POST", body: JSON.stringify(body) }),

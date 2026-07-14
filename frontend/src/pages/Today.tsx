@@ -33,6 +33,7 @@ import { MealPlanner } from "../components/MealPlanner";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
 import { MentalCheckCard } from "../components/MentalCheckCard";
+import { ScheduleCard } from "../components/ScheduleCard";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
@@ -292,10 +293,14 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== 最上部: いまコレ(全選択肢の最優先1手) + 今すぐ効くアラート(安全網)===== */}
-      <NextActionCard />
-      {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
-      <MigraineRiskBanner />
+      {/* ===== 最上部「今日」: いまコレ+やること / 今日の予定 / アラート(安全網) を1面に統合 ===== */}
+      <div className="space-y-3">
+        <SectionHeader label="今日" hint="いまコレ + やること + 予定 + アラート" />
+        <NextActionCard />
+        <ScheduleCard />
+        {(data.alerts?.length ?? 0) > 0 && <WellbeingAlertsBanner alerts={data.alerts} />}
+        <MigraineRiskBanner />
+      </div>
 
       {/* ===== メニュー: セクション切替を最上部に固定(横スクロールのセグメント)===== */}
       <div className="sticky top-0 z-20 -mx-5 bg-void/75 px-5 py-2 backdrop-blur-xl">

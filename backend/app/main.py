@@ -37,6 +37,7 @@ from app.api import next_action as next_action_api
 from app.api import perf as perf_api
 from app.api import profile as profile_api
 from app.api import push as push_api
+from app.api import schedule as schedule_api
 from app.api import screentime as screentime_api
 from app.api import sleep_drivers as sleep_drivers_api
 from app.api import sleep_intervention as sleep_intervention_api
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(sleep_intervention_api.router)
     app.include_router(next_action_api.router)
     app.include_router(equipment_api.router)
+    app.include_router(schedule_api.router)
     app.include_router(screentime_api.router)
     app.include_router(highlight_review_api.router)
     app.include_router(workout_review_api.router)
