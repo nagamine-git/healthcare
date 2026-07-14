@@ -12,11 +12,12 @@ import { QuickLogSheet } from "./components/QuickLogSheet";
 type View = "home" | "debug" | "compass" | "checkup" | "journal" | "finance" | "consult";
 
 // 旧ハッシュ(#identity/#life/#becoming/#garden)は統合された羅針盤の各セグメントへ着地させる。
+// #becoming(歩み・到達予測)は廃止 → 目的・領域へ着地。
 const COMPASS_HASHES: Record<string, CompassSegment> = {
   "#compass": "values",
   "#identity": "values",
   "#life": "purpose",
-  "#becoming": "path",
+  "#becoming": "purpose",
   "#garden": "garden",
 };
 

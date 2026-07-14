@@ -65,7 +65,6 @@ export function IdentityPage({ onBack, embedded }: Props) {
           <RadarPanel data={q.data} layer="values" title="価値観層" />
           <GapList dims={q.data.report.dimensions} weakest={q.data.report.weakest} />
           <SjtPanel />
-          <DecisionLogPanel recent={q.data.recent_logs} />
           <RecommendationsPanel
             recs={q.data.recommendations}
             onReflect={(r) => setReflectTarget(r)}
@@ -300,59 +299,6 @@ function SjtPanel() {
           )}
         </div>
       )}
-    </Card>
-  );
-}
-
-function DecisionLogPanel({
-  recent,
-}: {
-  recent: IdentityResponse["recent_logs"];
-}) {
-  const qc = useQueryClient();
-  const [text, setText] = useState("");
-  const post = useMutation({
-    mutationFn: (t: string) => api.identityDecisionLog(t),
-    onSuccess: () => {
-      setText("");
-      qc.invalidateQueries({ queryKey: ["identity"] });
-    },
-  });
-  return (
-    <Card title="意思決定ログ" subtitle="今日こう動いた、を一言">
-      <div className="flex gap-2">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="例: 担当外だが障害対応を引き受けた"
-          className="flex-1 rounded-lg border border-hairline bg-panel px-3 py-2 text-sm outline-none focus:border-prog-500"
-        />
-        <button
-          onClick={() => text.trim() && post.mutate(text.trim())}
-          disabled={post.isPending || !text.trim()}
-          className="rounded-lg bg-prog-700 px-3 py-2 text-sm hover:bg-prog-500 disabled:opacity-50"
-        >
-          記録
-        </button>
-      </div>
-      <div className="space-y-2">
-        {recent.map((r) => (
-          <div key={r.id} className="rounded-lg bg-panel px-3 py-2">
-            <div className="text-xs text-ink-dim">{r.text}</div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {r.inferred.map((s, i) => (
-                <span
-                  key={i}
-                  className="rounded-full bg-panel px-2 py-0.5 text-[10px] text-ink-dim"
-                  title={s.rationale}
-                >
-                  {s.dimension_id} {s.signal > 0 ? "+" : ""}{s.signal.toFixed(1)}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
     </Card>
   );
 }

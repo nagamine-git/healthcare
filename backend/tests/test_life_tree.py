@@ -72,6 +72,23 @@ def test_freq_achievement_counts_action_days(mem_session):
     assert a == round(3 / 7 * 100, 1)
 
 
+def test_freq_achievement_none_when_no_garden_logging(mem_session):
+    # 庭ログが窓内に全く無い期間は「未計測」(None)。0=サボりと区別する。
+    t = date(2026, 6, 26)
+    a = freq_achievement(mem_session, ["reading"], t, window=14, target_days=7)
+    assert a is None
+
+
+def test_freq_achievement_zero_when_tracking_but_kind_absent(mem_session):
+    # 庭ログはあるが当該 kind が無い → 0.0(記録している上でやっていない=実データ)。
+    t = date(2026, 6, 26)
+    mem_session.add(GardenDaily(date=date(2026, 6, 25), intensity=1.0, level=1,
+                                contributions={"coding": 2.0}, streak_len=1))
+    mem_session.flush()
+    a = freq_achievement(mem_session, ["reading"], t, window=14, target_days=7)
+    assert a == 0.0
+
+
 def test_active_goal_seeds_default_when_none(mem_session):
     g = active_goal(mem_session)
     assert g["title"]

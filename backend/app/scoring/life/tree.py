@@ -110,16 +110,24 @@ def aggregate_tree(
 
 def freq_achievement(
     session: Session, kinds: list[str], target: date, window: int, target_days: int
-) -> float:
-    """直近 window 日で当該 kind が観測された日数 / target_days の upper 達成度。"""
+) -> float | None:
+    """直近 window 日で当該 kind が観測された日数 / target_days の upper 達成度。
+
+    窓内に庭ログが1件も無ければ「未計測」(None)を返す。自己申告の行動頻度は
+    "記録なし=やっていない" ではないため、0(サボり/要立て直し)と区別する。
+    庭ログはあるが当該 kind が無い場合のみ 0.0(記録した上でやっていない=実データ)。
+    """
     start = target - timedelta(days=window - 1)
     rows = (
         session.query(GardenDaily)
         .filter(GardenDaily.date >= start, GardenDaily.date <= target)
         .all()
     )
+    logged = [r for r in rows if r.contributions]
+    if not logged:
+        return None
     kindset = set(kinds)
-    days = sum(1 for r in rows if r.contributions and (kindset & set(r.contributions.keys())))
+    days = sum(1 for r in logged if kindset & set(r.contributions.keys()))
     return round(upper_achievement(days, 0.0, float(target_days)), 1)
 
 
