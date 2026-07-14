@@ -235,7 +235,7 @@ def _check_weight_loss(
     """
     seven_days_ago = jst_window_start(7, target)
     rows = session.execute(
-        select(WeightSample.weight_kg)
+        select(WeightSample.weight_kg, WeightSample.body_fat_pct)
         .where(
             WeightSample.ts >= seven_days_ago,
             WeightSample.weight_kg.is_not(None),
@@ -246,18 +246,33 @@ def _check_weight_loss(
         return None
     n = len(values)
     median = values[n // 2] if n % 2 == 1 else (values[n // 2 - 1] + values[n // 2]) / 2
-    if median < lower_kg:
-        return WellbeingAlert(
-            code="weight_loss",
-            severity="critical",
-            title=f"低体重域 (BMI 18.5 相当 {lower_kg:.1f}kg) を下回る",
-            detail=(
-                f"直近 7 日中央値 {median:.1f}kg は健康下限を {lower_kg - median:.1f}kg 下回る。"
-                "睡眠不足 × 食事不規則時の筋肉減少サインの可能性"
-            ),
-            action="今日タンパク質を +20g (夜のプロテイン or 鶏むね 100g 追加)",
-        )
-    return None
+    if median >= lower_kg:
+        return None
+    # 重症度を実リスクに合わせる: BMI は筋肉質だと粗いので体脂肪も見る。
+    # critical = BMI<17.5 相当 or 体脂肪が必須域(男性~6%)未満。それ以外の BMI<18.5 は warning。
+    critical_kg = lower_kg * (17.5 / 18.5)
+    bf = sorted(float(r[1]) for r in rows if r[1] is not None)
+    bf_median = (
+        (bf[len(bf) // 2] if len(bf) % 2 == 1 else (bf[len(bf) // 2 - 1] + bf[len(bf) // 2]) / 2)
+        if bf else None
+    )
+    danger = median < critical_kg or (bf_median is not None and bf_median < 6.0)
+    bf_txt = f"体脂肪中央値 {bf_median:.0f}%。" if bf_median is not None else ""
+    return WellbeingAlert(
+        code="weight_loss",
+        severity="critical" if danger else "warning",
+        title=(
+            "要注意の低体重 (BMI 17.5 相当/必須脂肪域を下回る)" if danger
+            else f"低体重域 (BMI 18.5 相当 {lower_kg:.1f}kg) を下回る"
+        ),
+        detail=(
+            f"直近 7 日中央値 {median:.1f}kg。{bf_txt}"
+            + ("明確な低体重/必須脂肪域 — 医学的に注意し、増量・受診を検討"
+               if danger else
+               "健康下限を下回る。意図的に細身なら経過観察でよいが、急な減少・体調変化は要注意")
+        ),
+        action="今日タンパク質を +20g (夜のプロテイン or 鶏むね 100g 追加)",
+    )
 
 
 def _check_moh_risk(session: Session, target: date) -> WellbeingAlert | None:
