@@ -366,8 +366,8 @@ def _identity_branch(session: Session) -> dict[str, Any]:
 
     def sub(layer: str, key: str, label: str) -> dict[str, Any] | None:
         leaves = [
-            _leaf(d["dimension_id"], d["label"], current=d.get("current"),
-                  target=d.get("target"), direction="up")
+            _leaf(str(d.get("id")), str(d.get("name") or d.get("id")),
+                  current=d.get("current"), target=d.get("target"), direction="up")
             for d in dims
             if d.get("layer") == layer and d.get("current") is not None
         ]
