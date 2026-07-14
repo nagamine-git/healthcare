@@ -118,3 +118,20 @@ def test_checkup_leaf_has_range(db_engine):
     ldl = leaves["ldl_c"]
     assert ldl["current"] == 110
     assert ldl["population"] and "range" in ldl["population"]
+
+
+def test_atlas_includes_economy_and_identity(db_engine):
+    from app.models.health import AssetHolding
+    from app.scoring.finance import get_life_profile
+
+    with session_scope() as session:
+        session.add(AssetHolding(name="現金", category="cash", value_jpy=3_000_000, target_weight=0))
+        lp = get_life_profile(session)
+        lp.debt_balance_jpy = 1_000_000  # 純資産 = 300万 - 100万 = 200万
+    with session_scope() as session:
+        tree = build_atlas(session)
+    keys = _leaves(tree)
+    assert "economy" in keys and "identity" in keys  # 資産・羅針盤ブランチが統合
+    wi = keys.get("wealth_index")
+    assert wi is not None and wi["current"] is not None and wi["current"] > 0  # √(総資産×純資産)
+    assert keys["net_worth"]["current"] == 2_000_000
