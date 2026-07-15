@@ -61,3 +61,34 @@ def test_ingest_and_upsert(app_client):
         assert row is not None
         assert row.score == 88
         assert row.waste_min == 20
+
+
+def test_airgap_feeds_atlas_and_life_tree(app_client):
+    # 今日の日付で push → 全体マップの leaf と 精神状態「デジタル節制」に載る
+    from app.scoring.timewindow import app_today
+
+    today = app_today().isoformat()
+    h = {"Authorization": "Bearer test-token"}
+    r = app_client.post("/ingest/airgap", json={**PAYLOAD, "date": today, "score": 77},
+                        headers=h)
+    assert r.status_code == 202
+
+    atlas = app_client.get("/api/atlas").json()["tree"]
+
+    def find(node, key):
+        if node["key"] == key:
+            return node
+        for c in node.get("children", []):
+            if (hit := find(c, key)) is not None:
+                return hit
+        return None
+
+    leaf = find(atlas, "airgap")
+    assert leaf is not None
+    assert leaf["current"] == 77
+    assert leaf["score"] == 77
+
+    life = app_client.get("/api/life/tree").json()
+    mind = next(c for c in life["capitals"] if c["key"] == "mind")
+    digital = next(x for x in mind["leaves"] if "デジタル節制" in x["label"])
+    assert digital["achievement"] == 77

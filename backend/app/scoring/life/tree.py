@@ -50,6 +50,7 @@ LIFE_TREE: list[dict] = [
     ]},
     {"key": "mind", "label": "精神状態", "leaves": [
         {"label": "心の健康 (PHQ-4)", "signal": "mental"},
+        {"label": "デジタル節制 (Airgap)", "signal": "atlas:airgap"},
         {"label": "内省", "signal": "garden:meditation,journaling,reflection,gratitude"},
     ]},
     {"key": "intellect", "label": "知的資本", "leaves": [

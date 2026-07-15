@@ -337,7 +337,33 @@ def _learning_activity_branch(session: Session, target: date_type) -> dict[str, 
         _learning_leaf(target),
         _leaf("steps", "歩数 (直近)", unit="歩", current=steps,
               target=float(get_settings().garden_steps_goal), direction="up", series=step_series),
+        _airgap_leaf(session, target),
     ], direction="up")
+
+
+def _airgap_leaf(session: Session, target: date_type) -> dict[str, Any]:
+    """スマホ遮断 (Airgap アプリからの日次 push)。score は 0-100 なのでそのまま採用。
+
+    直近3日以内の最新行を「現状」に。無ければ未計測 (None)。
+    LIFE_TREE 精神状態の「デジタル節制」が atlas:airgap で参照する。
+    """
+    from app.models import AirgapDaily
+
+    row = session.execute(
+        select(AirgapDaily)
+        .where(AirgapDaily.date > target - timedelta(days=3), AirgapDaily.date <= target)
+        .order_by(AirgapDaily.date.desc())
+        .limit(1)
+    ).scalars().first()
+    srows = session.execute(
+        select(AirgapDaily.date, AirgapDaily.score)
+        .where(AirgapDaily.date >= target - timedelta(days=30), AirgapDaily.date <= target)
+        .order_by(AirgapDaily.date)
+    ).all()
+    series = [{"date": d.isoformat(), "value": float(v)} for d, v in srows]
+    cur = float(row.score) if row else None
+    return _leaf("airgap", "スマホ遮断 (Airgap)", unit="", current=cur,
+                 target=100.0, direction="up", score=cur, series=series)
 
 
 def _checkup_branch(session: Session) -> dict[str, Any]:
