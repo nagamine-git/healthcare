@@ -1,5 +1,6 @@
 from app.models.health import (
     AdviceFeedback,
+    AirgapDaily,
     AlcoholIntake,
     BodyBattery,
     BodyBatteryDaily,
@@ -43,6 +44,7 @@ from app.models.health import (
 
 __all__ = [
     "AdviceFeedback",
+    "AirgapDaily",
     "AlcoholIntake",
     "BodyBattery",
     "BodyBatteryDaily",

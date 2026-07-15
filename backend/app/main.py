@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import activity as activity_api
 from app.api import admin as admin_api
 from app.api import advice_feedback as advice_feedback_api
+from app.api import airgap as airgap_api
 from app.api import alcohol as alcohol_api
 from app.api import atlas as atlas_api
 from app.api import becoming as becoming_api
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(health_export.router)
+    app.include_router(airgap_api.router)
     app.include_router(dashboard.router)
     app.include_router(life_api.router)
     app.include_router(domain_api.router)

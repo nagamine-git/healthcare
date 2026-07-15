@@ -149,6 +149,26 @@ class ScreenTimeSample(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class AirgapDaily(Base):
+    """Airgap アプリ (スマホデトックス) からの日次 push (1日=1行 upsert)。
+
+    score はセッション実績 + 浪費分から Airgap 側で算出した 0-100。
+    waste_min は FamilyControls 計測が有効なときのみ (nil=未計測)。
+    """
+
+    __tablename__ = "airgap_daily"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    score: Mapped[int] = mapped_column(Integer)
+    completed_min: Mapped[int] = mapped_column(Integer, default=0)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    goal_min: Mapped[int] = mapped_column(Integer, default=60)
+    waste_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    waste_limit_min: Mapped[int] = mapped_column(Integer, default=60)
+    sessions: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WorkoutReview(Base):
     """ワークアウトへの AI 一言評価 (ユーザーのタップで生成し、以後は保存済みを表示)。
 
