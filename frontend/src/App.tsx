@@ -40,11 +40,22 @@ export default function App() {
   const [quickLogOpen, setQuickLogOpen] = useState(false);
 
   useEffect(() => {
+    // #quicklog はクイック記録シートを開く特殊ルート (ネイティブシェルのショートカット用)
+    const maybeOpenQuickLog = () => {
+      if (window.location.hash === "#quicklog") {
+        window.location.hash = "";
+        setQuickLogOpen(true);
+        return true;
+      }
+      return false;
+    };
     const handler = () => {
+      if (maybeOpenQuickLog()) return;
       setView(viewFromHash());
       setCompassSeg(COMPASS_HASHES[window.location.hash] ?? "values");
       setQuickLogOpen(false); // 画面遷移でシートは閉じる
     };
+    maybeOpenQuickLog(); // 初回ロード分
     window.addEventListener("hashchange", handler);
     // 「いまコレ」等の任意コンポーネントからクイック記録シートを開けるイベント
     const openQuickLog = () => setQuickLogOpen(true);
