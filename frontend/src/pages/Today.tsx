@@ -32,6 +32,7 @@ import { ScreenTimePanel } from "../components/ScreenTimePanel";
 import { MealPlanner } from "../components/MealPlanner";
 import { BodyLoadCard } from "../components/BodyLoadCard";
 import { ImputedNotice } from "../components/ImputedNotice";
+import { AirgapInsightCard } from "../components/AirgapInsightCard";
 import { MentalCheckCard } from "../components/MentalCheckCard";
 import { ScheduleCard } from "../components/ScheduleCard";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
@@ -360,6 +361,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       <SectionHeader label="いまの状態" hint="主観の調子 + 心の健康 + 集中力 + 環境" />
       <CheckinCard />
       <MentalCheckCard />
+      <AirgapInsightCard />
       <FocusPanel focus={data.focus} />
       <EnvironmentPanel
         pressure={data.pressure}

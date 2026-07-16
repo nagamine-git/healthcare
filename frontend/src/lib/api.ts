@@ -432,6 +432,22 @@ export type ScheduleToday = {
   events: ScheduleEvent[];
 };
 
+// ---- Airgap 浪費 × 睡眠/HRV の自己内相関インサイト ----
+export type AirgapInsight = {
+  available: boolean;
+  days_analyzed: number;
+  days_needed_per_group?: number;
+  days_per_group?: number;
+  low_waste_avg_min?: number;
+  high_waste_avg_min?: number;
+  sleep_low?: number | null;
+  sleep_high?: number | null;
+  sleep_diff?: number | null;
+  hrv_low?: number | null;
+  hrv_high?: number | null;
+  hrv_diff?: number | null;
+};
+
 // ---- メンタルチェック (PHQ-2 + GAD-2) ----
 export type MentalItem = { id: string; layer: "depression" | "anxiety"; text: string };
 export type MentalScaleOption = { value: number; label: string };
@@ -1820,6 +1836,7 @@ export const api = {
     }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
   scheduleToday: () => request<ScheduleToday>("/api/schedule/today"),
+  airgapInsight: () => request<AirgapInsight>("/api/airgap/insight"),
   mental: () => request<MentalStatus>("/api/mental"),
   mentalScreen: (body: MentalScreenIn) =>
     request<MentalStatus>("/api/mental/screen", { method: "POST", body: JSON.stringify(body) }),
