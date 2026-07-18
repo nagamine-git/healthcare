@@ -72,25 +72,53 @@ def test_hrv_decline_triggers_warning(session):
     assert "hrv_chronic_decline" in codes
 
 
-def test_recovery_failure_triggers_warning(session):
-    from app.models import BodyBatteryDaily
+def test_recovery_failure_triggers_when_bb_depleted_and_sleep_short(session):
+    from app.models import BodyBatteryDaily, SleepSession
 
     today = date(2026, 5, 23)
     for i in range(3):
         session.add(
             BodyBatteryDaily(
                 date=today - timedelta(days=i),
-                morning_value=22.0,
-                max_value=30,
-                min_value=18,
-                end_of_day=20,
+                morning_value=3.0,  # ほぼ枯渇 (<5)
+                max_value=8,
+                min_value=1,
+                end_of_day=4,
             )
+        )
+        session.add(  # 睡眠も目標 (480) 未満 = 裏付け
+            SleepSession(date=today - timedelta(days=i), source="garmin", total_min=360)
         )
     session.flush()
 
     alerts = evaluate_alerts(session, today)
     codes = [a.code for a in alerts]
     assert "recovery_failure" in codes
+
+
+def test_recovery_failure_not_fired_on_bb_alone(session):
+    # BB がほぼ枯渇でも睡眠が足りていれば BB 単独では発火しない (弱い補助信号)
+    from app.models import BodyBatteryDaily, SleepSession
+
+    today = date(2026, 5, 23)
+    for i in range(3):
+        session.add(
+            BodyBatteryDaily(
+                date=today - timedelta(days=i),
+                morning_value=3.0,
+                max_value=8,
+                min_value=1,
+                end_of_day=4,
+            )
+        )
+        session.add(  # 睡眠は目標達成 → 裏付けなし
+            SleepSession(date=today - timedelta(days=i), source="garmin", total_min=500)
+        )
+    session.flush()
+
+    alerts = evaluate_alerts(session, today)
+    codes = [a.code for a in alerts]
+    assert "recovery_failure" not in codes
 
 
 def test_weight_loss_triggers_when_underweight(session):

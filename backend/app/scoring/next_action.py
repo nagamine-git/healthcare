@@ -47,7 +47,7 @@ class Inputs:
     cashflow_days_old: int | None = None        # 入出金データの鮮度 (日)。None=データなし
     days_since_strength: int | None = None      # 最後の筋トレからの日数。None=記録なし
     trained_today: bool = False                 # 今日すでに何かトレーニング済みか
-    morning_bb: float | None = None             # 今朝の Body Battery (6時固定・回復状態の代理)
+    morning_bb: float | None = None             # 今朝の Body Battery (夜間回復ピーク・弱い補助信号)
     strength_days_14: int = 0                   # 直近14日の筋トレ日数 (週頻度の判定)
     last_night_min: float | None = None         # 前夜 (target 付け) の総睡眠分。睡眠負債の算定に使う
     target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
@@ -176,15 +176,16 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             f"直近30分のストレス平均 {int(inp.stress_recent)} — 高止まり中", None)
 
     # --- 4.5 トレーニングギャップ (筋トレ/HIIT/ラッキング) ---
-    # 可否は「今のBB」ではなく「今朝のBB (回復状態の代理)」で見る。夜は誰でもBBが自然に
-    # 下がるので、それで抑制すると under-training を助長する (鶏卵)。週の筋トレ頻度が
-    # 目標 (週3回=14日6回) 未満なら積極的に背中を押す。
+    # トレ可否は睡眠を主軸に見る (夜トレ前提。BBは朝ピーク→日中で下がる指標なので判断軸に
+    # すると朝トレを強要する)。BB は「弱い補助信号」に格下げ: 極端低 (<5=ほぼ枯渇) の朝だけ
+    # 背中押しを止める程度で、単独では休養を決めない。強度可否は前夜の睡眠で判断する。
     behind = inp.strength_days_14 < 6  # 週3回=14日6回 未満なら頻度不足
+    bb_depleted = inp.morning_bb is not None and inp.morning_bb < 5  # 極端低のみ
     if (
         inp.days_since_strength is not None and inp.days_since_strength >= 2
         and not inp.trained_today
         and 8 <= hour < 21
-        and (inp.morning_bb is None or inp.morning_bb >= 30)  # 本当に低回復の朝だけ休む
+        and not bb_depleted  # 朝BBがほぼ枯渇 (<5) の日だけ push を控える
     ):
         n = inp.days_since_strength
         pri = 56
@@ -192,7 +193,9 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
             pri = 70 if n >= 5 else 66  # 頻度不足なら底上げ (water/protein より上)
         elif n >= 5:
             pri = 65
-        can_high = (inp.morning_bb or 0) >= 60
+        # 強度可否は前夜睡眠で判断 (BB非依存)。目標比 -90分以内なら高強度可。
+        slept = inp.last_night_min
+        can_high = slept is None or slept >= inp.target_sleep_min - 90
         menu = "筋トレ / HIIT / ラッキング" if can_high else "筋トレ (短時間でも可)"
         week_n = inp.strength_days_14  # 直近14日だが「今週」の体感として提示
         why = f"前回の筋トレから{n}日 / 直近2週で{week_n}回"

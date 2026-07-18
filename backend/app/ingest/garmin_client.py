@@ -262,27 +262,31 @@ def _normalise_body_battery(raw: list | dict) -> dict[str, Any]:
 
     # 「朝の値」は実運用タイムゾーン (app_tz) で判定する。OS のローカル TZ に
     # 依存させると、サーバ/CI の TZ 次第で朝の時刻判定がズレる。
-    tz = ZoneInfo(get_settings().app_tz)
+    settings = get_settings()
+    tz = ZoneInfo(settings.app_tz)
+    try:
+        wake_hour = int(str(settings.target_wake_time).split(":")[0])
+    except (ValueError, AttributeError, IndexError):
+        wake_hour = 6
 
-    morning = None
-    for point in series:
-        local = point["ts"].astimezone(tz) if point["ts"].tzinfo else point["ts"]
-        if local.hour == 6:
-            morning = point["value"]
-            break
-
-    if morning is None:
-        # 6時台のサンプルがまだ無い早朝同期では series[0] (= 深夜0時直後、
-        # 夜間充電「前」の最低値) を朝の値にしない。08時までの最後の
-        # サンプル = 起床時点の近似を使う
-        for point in series:
-            local = point["ts"].astimezone(tz) if point["ts"].tzinfo else point["ts"]
-            if local.hour >= 8:
-                break
-            morning = point["value"]
-
-    if morning is None and series:
-        morning = series[0]["value"]
+    # 朝の値 = 夜間回復のピーク。BB は睡眠中に回復し起床時にピークを打つので、
+    # 「6時ちょうどの1点」ではなく起床帯 [0時..起床+3h] の最大値を採る。
+    #   - 特定サンプルが回復途中の低い値でも、窓内ピークで拾うので過小評価しない
+    #     (旧ロジックは hour==6 の1点/直近値を掴み、回復前の低値で「毎朝疲労困憊」判定を誘発した)
+    #   - 昼のナップ充電は窓外なので混入しない (全日 max とは別物)
+    # データガード: 夜間データが「起床2h前」にすら届いていない同期遅延時は、
+    #   届いている低い途中値を朝の値に固定せず None (未確定) を返す。
+    #   → 下流 (bb_sub/回復不全アラート/next_action) は None を安全に無視する実装。
+    window_end_hour = wake_hour + 3
+    locals_ = [
+        ((p["ts"].astimezone(tz) if p["ts"].tzinfo else p["ts"]).hour, p["value"])
+        for p in series
+    ]
+    window_vals = [v for (h, v) in locals_ if 0 <= h <= window_end_hour]
+    reached_recovery = any(
+        h >= wake_hour - 2 for (h, _v) in locals_ if h <= window_end_hour
+    )
+    morning = max(window_vals) if window_vals and reached_recovery else None
 
     values = [p["value"] for p in series]
     return {

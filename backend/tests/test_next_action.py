@@ -99,13 +99,29 @@ def test_training_gap_lower_priority_when_frequency_met():
     assert tg["priority"] == 56
 
 
-def test_training_gap_suppressed_only_on_low_morning_bb():
-    # 朝BBが本当に低い日 (回復不良) は休む
+def test_training_gap_suppressed_only_on_depleted_morning_bb():
+    # BB は弱い補助信号: 朝BBがほぼ枯渇 (<5) の極端な日だけ push を控える
+    depleted = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=3.0)
+    assert all(c["key"] != "training_gap" for c in build_candidates(depleted, _at(15)))
+    # 朝BBが 25 程度 (低め) でも枯渇ではないので push は止めない (BB非依存化)
     low = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=25.0)
-    assert all(c["key"] != "training_gap" for c in build_candidates(low, _at(15)))
+    assert any(c["key"] == "training_gap" for c in build_candidates(low, _at(15)))
     # 夜の bb_current が低くても朝BBが高ければ出す (鶏卵回避)
     ok = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=70.0, bb_current=12.0)
     assert any(c["key"] == "training_gap" for c in build_candidates(ok, _at(20)))
+
+
+def test_training_gap_intensity_gated_by_sleep_not_bb():
+    # 強度可否は前夜睡眠で判断 (BB非依存)。目標比 -90分超の寝不足なら高強度メニューを出さない
+    short = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=70.0,
+                   last_night_min=300, target_sleep_min=480)
+    tg = next(c for c in build_candidates(short, _at(15)) if c["key"] == "training_gap")
+    assert "HIIT" not in tg["title"]
+    # 十分眠れていれば朝BBに関係なく高強度も提示
+    rested = Inputs(days_since_strength=4, strength_days_14=2, morning_bb=20.0,
+                    last_night_min=470, target_sleep_min=480)
+    tg2 = next(c for c in build_candidates(rested, _at(15)) if c["key"] == "training_gap")
+    assert "HIIT" in tg2["title"]
 
 
 def test_training_gap_suppressed_when_trained_today():

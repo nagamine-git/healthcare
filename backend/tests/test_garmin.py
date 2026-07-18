@@ -80,6 +80,38 @@ def test_normalise_body_battery_early_sync_uses_wakeup_not_midnight():
     assert n["morning"] == 82
 
 
+def test_normalise_body_battery_morning_is_recovery_peak_not_six_oclock():
+    """朝の値は「6時ちょうどの1点」ではなく起床帯の回復ピーク。
+    6時にたまたま回復途中の低値(40)でも、7時=91を拾い過小評価しない。"""
+    raw = [
+        {
+            "bodyBatteryValuesArray": [
+                [int(datetime(2026, 6, 11, 6, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 40],
+                [int(datetime(2026, 6, 11, 7, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 91],
+                [int(datetime(2026, 6, 11, 15, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 55],
+            ]
+        }
+    ]
+    n = _normalise_body_battery(raw)
+    assert n["morning"] == 91  # 全日maxではなく起床帯[0..9h]のピーク
+    assert n["max"] == 91
+
+
+def test_normalise_body_battery_returns_none_when_overnight_data_missing():
+    """夜間データが起床2h前(=4時台)にすら届いていない同期遅延時は、
+    途中の低値を朝の値に固定せず None (未確定) を返す。"""
+    raw = [
+        {
+            "bodyBatteryValuesArray": [
+                [int(datetime(2026, 6, 12, 0, 30, tzinfo=JST).timestamp() * 1000), "MEASURED", 20],
+                [int(datetime(2026, 6, 12, 3, 0, tzinfo=JST).timestamp() * 1000), "MEASURED", 33],
+            ]
+        }
+    ]
+    n = _normalise_body_battery(raw)
+    assert n["morning"] is None
+
+
 def test_normalise_workout_extracts_fields():
     activity = {
         "activityId": 12345,
@@ -137,16 +169,22 @@ class FakeGarminAPI:
         }
 
     def get_body_battery(self, startdate: str, enddate: str | None = None):
+        # app_tz (JST) の起床帯に回復ピーク(90)、日中は自然低下。朝の値=起床帯ピーク。
         return [
             {
                 "bodyBatteryValuesArray": [
                     [
-                        int(datetime(2026, 5, 1, 6, 0, tzinfo=UTC).timestamp() * 1000),
+                        int(datetime(2026, 5, 1, 6, 30, tzinfo=JST).timestamp() * 1000),
                         "MEASURED",
                         90,
                     ],
                     [
-                        int(datetime(2026, 5, 1, 22, 0, tzinfo=UTC).timestamp() * 1000),
+                        int(datetime(2026, 5, 1, 15, 0, tzinfo=JST).timestamp() * 1000),
+                        "MEASURED",
+                        60,
+                    ],
+                    [
+                        int(datetime(2026, 5, 1, 22, 0, tzinfo=JST).timestamp() * 1000),
                         "MEASURED",
                         20,
                     ],
@@ -310,7 +348,7 @@ def test_garmin_body_battery_series_persisted_to_metric_sample(db_engine, sessio
     # body_battery time-series should be persisted to BodyBattery table
     rows = select(BodyBattery)
     rows = session.execute(rows).scalars().all()
-    assert len(rows) == 2
+    assert len(rows) == 3
 
 
 def test_upsert_body_battery_dedupes_within_batch(db_engine, session):

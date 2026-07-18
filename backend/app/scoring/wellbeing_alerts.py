@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import (
     BodyBatteryDaily,
     CaffeineIntake,
@@ -198,7 +199,12 @@ def _check_hrv_decline(session: Session, target: date) -> WellbeingAlert | None:
 def _check_recovery_failure(
     session: Session, target: date
 ) -> WellbeingAlert | None:
-    """朝 Body Battery < 30 が 3 日連続。"""
+    """朝 Body Battery が 3 日連続でほぼ枯渇 (<5) かつ睡眠も不足。
+
+    BB は「弱い補助信号」— 朝ピークを取っても 3 日連続 <5 は異常だが、センサ欠測や
+    グリッチ単独で警告を出さないよう、同期間の睡眠不足 (平均 < 目標) を裏付けに要求する。
+    トレ可否の主軸は睡眠/HRV/負荷であり、この警告も休養の強制ではなく「負荷を落とす」示唆。
+    """
     rows = session.execute(
         select(BodyBatteryDaily.morning_value)
         .where(
@@ -208,18 +214,30 @@ def _check_recovery_failure(
         .order_by(BodyBatteryDaily.date.desc())
     ).all()
     values = [float(r[0]) for r in rows if r[0] is not None]
-    if len(values) >= 3 and all(v < 30 for v in values):
-        return WellbeingAlert(
-            code="recovery_failure",
-            severity="warning",
-            title="朝の回復が 3 日続けて不十分",
-            detail=(
-                f"朝 BB が {len(values)} 日連続で 30 未満 (平均 {sum(values)/len(values):.0f})。"
-                "睡眠で回復しきれていない"
-            ),
-            action="今日はトレ予定があれば完全休息に振替、夜は通常より 1 時間早く就寝",
+    if not (len(values) >= 3 and all(v < 5 for v in values)):
+        return None
+    # 睡眠での裏付け: 同期間の睡眠が目標を下回っていなければ BB 単独では発火しない
+    sleep_rows = session.execute(
+        select(SleepSession.total_min)
+        .where(
+            SleepSession.date <= target,
+            SleepSession.date > target - timedelta(days=3),
         )
-    return None
+    ).all()
+    slept = [float(r[0]) for r in sleep_rows if r[0] is not None]
+    target_sleep = get_settings().target_sleep_min
+    if not slept or sum(slept) / len(slept) >= target_sleep:
+        return None
+    return WellbeingAlert(
+        code="recovery_failure",
+        severity="warning",
+        title="朝の回復が 3 日続けて不十分",
+        detail=(
+            f"朝 BB が {len(values)} 日連続でほぼ枯渇 (平均 {sum(values)/len(values):.0f})、"
+            f"睡眠も目標未満 (平均 {sum(slept)/len(slept)/60:.1f}h)。累積疲労の兆候"
+        ),
+        action="今日は高強度を避けて負荷を落とし、夜は通常より 1 時間早く就寝",
+    )
 
 
 def _check_weight_loss(
