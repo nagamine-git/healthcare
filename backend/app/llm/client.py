@@ -242,6 +242,19 @@ def _strength_days_in_window(target: date_type, days: int = 14) -> int:
     return len({start.date() for start, wtype in rows if _is_strength_type(wtype)})
 
 
+def _cardio_days_in_window(target: date_type, days: int = 7) -> int:
+    """直近 N 日で有酸素系 (筋トレ以外のワークアウト) をした日数。週次配分の判定用。"""
+    from app.models import Workout
+
+    since = datetime.combine(target - timedelta(days=days - 1), datetime.min.time())
+    end = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    with session_scope() as session:
+        rows = session.execute(
+            select(Workout.start, Workout.type).where(Workout.start >= since, Workout.start < end)
+        ).all()
+    return len({start.date() for start, wtype in rows if not _is_strength_type(wtype)})
+
+
 def _gather_recent_training_prescriptions(
     target: date_type, days: int = 21
 ) -> list[dict[str, Any]]:
@@ -1081,6 +1094,20 @@ async def generate_advice_for_date(target: date_type, *, force: bool = False) ->
     except Exception as exc:
         logger.info("load_suggestions_failed", error=str(exc))
         today_payload["load_suggestions"] = None
+    # 週次トレーニング・フレームワーク: 今日のモダリティ (筋トレ押/引/脚 or HIIT/素振り/Z2) を
+    # 週の不足から決め、筋トレなら主種目固定+補助日替わりの split を与える (単調さ回避・漸進性維持)。
+    try:
+        from app.scoring.training_split import compute_today_training
+
+        today_payload["training_framework"] = compute_today_training(
+            strength_7d=_strength_days_in_window(target, days=7),
+            cardio_7d=_cardio_days_in_window(target, days=7),
+            strength_total=_strength_days_in_window(target, days=90),
+            day_ordinal=target.toordinal(),
+        )
+    except Exception as exc:
+        logger.info("training_framework_failed", error=str(exc))
+        today_payload["training_framework"] = None
     today_payload["recent_training_prescriptions_21d"] = _gather_recent_training_prescriptions(target)
     today_payload["previous_advice_today"] = _gather_previous_advice_today(target)
     today_payload.update(_gather_today_activity(target))
