@@ -5,14 +5,26 @@ from __future__ import annotations
 from app.scoring.finance_ingest import consolidate_finance_ocr
 
 
-def test_dedup_assets_by_name_across_images():
+def test_dedup_exact_same_row_across_images():
+    # 同じ行が別画像に写った重複 (名前・金額とも一致、大小無視) → 1 つに集約し高確度を採用
     results = [
-        {"assets": [{"name": "UFJ 普通", "value": 100, "confidence": "high"}]},
-        {"assets": [{"name": "ufj 普通", "value": 120, "confidence": "high"}]},  # 同名(大小無視)
+        {"assets": [{"name": "UFJ 普通", "value": 120, "confidence": "low"}]},
+        {"assets": [{"name": "ufj 普通", "value": 120, "confidence": "high"}]},
     ]
     out = consolidate_finance_ocr(results)
     assert len(out["committed"]["assets"]) == 1  # 重複除去
-    assert out["committed"]["assets"][0]["value"] == 120  # 同確度なら大きい値
+    assert out["committed"]["assets"][0]["confidence"] == "high"
+
+
+def test_same_name_different_value_kept_separate():
+    # 同名でも金額が違えば別保有 (NISA / 特定口座 等) → 潰さず両方残す (バグ修正)
+    results = [
+        {"assets": [{"name": "eMAXIS Slim S&P500", "value": 500000, "confidence": "high"}]},
+        {"assets": [{"name": "eMAXIS Slim S&P500", "value": 300000, "confidence": "high"}]},
+    ]
+    out = consolidate_finance_ocr(results)
+    assert len(out["committed"]["assets"]) == 2
+    assert {a["value"] for a in out["committed"]["assets"]} == {500000, 300000}
 
 
 def test_only_high_confidence_is_committed():

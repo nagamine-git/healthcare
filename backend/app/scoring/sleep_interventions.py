@@ -193,6 +193,15 @@ def _analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "verdict": verdict, "primary": primary, "outcomes": outcomes,
         })
 
+    # 介入を確度高い順に並べる: 主指標の q 昇順 (有意なものを先頭)。
+    # primary 無し / q 未確定 (preliminary) は末尾に寄せる。
+    base["interventions"].sort(key=lambda iv: (
+        iv.get("primary") is None,
+        iv["primary"]["q"]
+        if iv.get("primary") and iv["primary"].get("q") is not None
+        else 1.0,
+    ))
+
     base["suggestion"] = _tonight_plan(rows, base["interventions"])
 
     prelim_any = any(

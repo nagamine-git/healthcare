@@ -239,8 +239,13 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
 
     anchors = _anchors(rows)
     base["anchors"] = anchors
-    base["quality"].sort(key=lambda f: (f["q"] if f["q"] is not None else 1.0, f["p"]))
-    base["next_day"].sort(key=lambda f: (f["q"] if f["q"] is not None else 1.0, f["p"]))
+    # 確度高い順: tier (strong>suggestive>trend>weak) 降順 → 同 tier 内は q 昇順。
+    def _conf_key(f: dict[str, Any]) -> tuple[int, float, float]:
+        return (-_TIER_RANK.get(f.get("tier"), 0),
+                f["q"] if f["q"] is not None else 1.0,
+                f["p"] if f.get("p") is not None else 1.0)
+    base["quality"].sort(key=_conf_key)
+    base["next_day"].sort(key=_conf_key)
     base["recommendations"] = _recommendations(base["quality"] + base["next_day"], anchors)
     base["reliability"] = "high" if n >= 45 else ("medium" if n >= 21 else "low")
     if powered_tests:

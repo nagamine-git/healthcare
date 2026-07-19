@@ -13,19 +13,29 @@ _CONF = {"high": 3, "medium": 2, "low": 1}
 
 
 def _dedup(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """name(大小・前後空白無視)で重複除去。最高確度を採用、同確度なら大きい値。"""
-    best: dict[str, dict[str, Any]] = {}
+    """(name, 金額) で重複除去 — **複数画像に同じ行が写った重なりだけ**を排除する。
+
+    重要: name **だけ** でキー化すると、同名でも金額が違う別保有 (特定口座 / NISA / つみたて 等で
+    MoneyForward が同名表示するケース) を 1 つに潰してしまう。金額もキーに含めることで、
+    同名異額は両方残し (後段の merge_asset_items が「名前 (2)」の連番で別行にする)、
+    同名同額 (=同じ行が別画像に重複) だけを最高確度側に集約する。
+    """
+    best: dict[tuple[str, int], dict[str, Any]] = {}
+    order: list[tuple[str, int]] = []
     for it in items:
         name = str(it.get("name") or "").strip()
         if not name or it.get("value") is None:
             continue
-        key = name.lower()
+        value = float(it["value"])
+        key = (name.lower(), round(value))
         c = _CONF.get(it.get("confidence"), 0)
         cur = best.get(key)
+        if cur is None:
+            order.append(key)
         cur_c = _CONF.get(cur.get("confidence"), 0) if cur else -1
-        if cur is None or c > cur_c or (c == cur_c and float(it["value"]) > cur["value"]):
-            best[key] = {"name": name, "value": float(it["value"]), "confidence": it.get("confidence") or "low"}
-    return list(best.values())
+        if cur is None or c > cur_c:
+            best[key] = {"name": name, "value": value, "confidence": it.get("confidence") or "low"}
+    return [best[k] for k in order]
 
 
 def consolidate_finance_ocr(results: list[dict[str, Any]]) -> dict[str, Any]:
