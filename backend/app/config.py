@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     hae_ingest_token: str | None = None
 
+    # ExerciseDB (RapidAPI): 種目デモ GIF 用。env EXERCISEDB_API_KEY (本番は .env.runtime)。
+    exercisedb_api_key: str | None = None
+    exercisedb_host: str = "exercisedb.p.rapidapi.com"
+
     baseline_window_days: int = 28
 
     score_weight_sleep: float = 3.0

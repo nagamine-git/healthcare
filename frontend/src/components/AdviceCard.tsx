@@ -367,10 +367,30 @@ function ActionFeedback({
   );
 }
 
-/** 種目名から YouTube 検索 URL を作る (括弧内の詳細は除いてヒット率を上げる)。 */
-function howToUrl(name: string): string {
-  const base = name.replace(/[（(].*$/s, "").trim() || name;
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(base + " やり方 フォーム")}`;
+/** 種目デモ GIF (ExerciseDB プロキシ)。タップで表示。デモが無い種目は自動で隠す。 */
+function ExerciseGif({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (failed) return null; // デモ非対応 (剣道/有酸素等)
+  return (
+    <div className="basis-full mt-1">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-[11px] text-info hover:underline"
+      >
+        {open ? "デモを隠す" : "▶ デモを見る"}
+      </button>
+      {open && (
+        <img
+          src={`/api/exercise-gif?name=${encodeURIComponent(name)}`}
+          alt={`${name} のデモ`}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="mt-1 max-h-60 w-full rounded-md border border-hairline object-contain bg-hull"
+        />
+      )}
+    </div>
+  );
 }
 
 function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exercises"]> }) {
@@ -383,17 +403,7 @@ function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exer
             className="rounded-lg border border-panel bg-hull/50 px-3 py-2"
           >
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-              <span className="flex items-baseline gap-2">
-                <span className="text-sm text-ink">{e.name}</span>
-                <a
-                  href={howToUrl(e.name)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="whitespace-nowrap text-[11px] text-info hover:underline"
-                >
-                  ▶ やり方
-                </a>
-              </span>
+              <span className="text-sm text-ink">{e.name}</span>
               {e.weight && (
                 <span className="telemetry-num text-sm tabular-nums text-prog-300">
                   {e.weight}
@@ -433,6 +443,7 @@ function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exer
                 {e.notes}
               </div>
             )}
+            <ExerciseGif name={e.name} />
           </li>
         ))}
       </ul>

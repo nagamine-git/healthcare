@@ -23,6 +23,7 @@ from app.api import consult as consult_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
 from app.api import equipment as equipment_api
+from app.api import exercise as exercise_api
 from app.api import finance as finance_api
 from app.api import fitness as fitness_api
 from app.api import food as food_api
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(body_distribution_api.router)
     app.include_router(body_comp_api.router)
     app.include_router(atlas_api.router)
+    app.include_router(exercise_api.router)
     app.include_router(consult_api.router)
     app.include_router(finance_api.router)
     app.include_router(perf_api.router)
