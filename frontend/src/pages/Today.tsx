@@ -1,14 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings as SettingsIcon } from "lucide-react";
 import { api } from "../lib/api";
-import { SubScoreRadar } from "../components/SubScoreRadar";
+import { OverallScoreHero } from "../components/OverallScoreHero";
 import { DayStory } from "../components/DayStory";
 import { AdviceCard } from "../components/AdviceCard";
 import { CheckinCard } from "../components/CheckinCard";
 import { TrendsSection } from "../components/TrendsSection";
 import { NutritionPanel } from "../components/NutritionPanel";
 import { TonightPlanPanel } from "../components/TonightPlanPanel";
-import { FocusPanel } from "../components/FocusPanel";
 import { CaffeinePanel } from "../components/CaffeinePanel";
 import { MigrainePanel } from "../components/MigrainePanel";
 import { MedQuickLog } from "../components/MedQuickLog";
@@ -47,17 +46,6 @@ import { useEffect, useRef, useState } from "react";
 import { SectionHeader, Skeleton } from "../components/ui/cockpit";
 import { relativeMinutes, useTickingNow } from "../lib/relativeTime";
 import { useGeolocation } from "../lib/geolocation";
-
-function formatMinutes(min: number | null): string {
-  if (min == null) return "--";
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}時間${m.toString().padStart(2, "0")}分`;
-}
-
-function fmtNum(v: number | null | undefined): string {
-  return v == null ? "--" : String(Math.round(v));
-}
 
 
 type Props = {
@@ -178,41 +166,6 @@ export function TodayPage({ onOpenDebug }: Props) {
   }
 
   const data = today.data;
-  const score = data.score;
-  const reasons = data.sub_reasons ?? {};
-  // ideal = そのサブスコアが最大に到達したときの値 (採点ロジックの上限)
-  const ctx = data.sub_context ?? {};
-  const fmtSleep = ctx.sleep && ctx.sleep.current != null
-    ? `${formatMinutes(ctx.sleep.current)} (推奨 ${formatMinutes(ctx.sleep.target.min ?? 420)}–${formatMinutes(ctx.sleep.target.max ?? 540)})`
-    : undefined;
-  const hrvRefApple = data.metrics.hrv?.reference_apple_sdnn ?? null;
-  const fmtHrv = ctx.hrv?.current != null
-    ? `${Math.round(ctx.hrv.current)} ms`
-    : hrvRefApple != null
-      ? `参考 ${Math.round(hrvRefApple)} ms (Apple/SDNN)`
-      : undefined;
-  const fmtBb =
-    ctx.body_battery && (ctx.body_battery.current != null || ctx.body_battery.morning != null)
-      ? `現在 ${fmtNum(ctx.body_battery.current)} (朝 ${fmtNum(ctx.body_battery.morning)})`
-      : undefined;
-  const fmtLoad = ctx.load?.acwr != null
-    ? `ACWR ${ctx.load.acwr.toFixed(2)} (推奨 ${ctx.load.target.min}–${ctx.load.target.max})`
-    : undefined;
-  const fmtWeight = ctx.weight && ctx.weight.current != null
-    ? `${ctx.weight.current.toFixed(1)} kg / 推奨 ${(ctx.weight.target.min ?? 0).toFixed(1)}–${(ctx.weight.target.max ?? 0).toFixed(1)} kg`
-    : undefined;
-  const fmtBf = ctx.body_fat && ctx.body_fat.current != null
-    ? `${ctx.body_fat.current.toFixed(1)}% / 推奨 ${(ctx.body_fat.target.min ?? 0).toFixed(1)}–${(ctx.body_fat.target.max ?? 0).toFixed(1)}%`
-    : undefined;
-
-  const subs = [
-    { label: "睡眠", value: score?.sleep ?? null, ideal: 100, reason: reasons.sleep ?? undefined, realWorld: fmtSleep },
-    { label: "自律神経", value: score?.hrv ?? null, ideal: 100, reason: reasons.hrv ?? undefined, realWorld: fmtHrv },
-    { label: "エネルギー", value: score?.body_battery ?? null, ideal: 100, reason: reasons.body_battery ?? undefined, realWorld: fmtBb },
-    { label: "運動負荷", value: score?.load ?? null, ideal: 85, reason: reasons.load ?? undefined, realWorld: fmtLoad },
-    { label: "体重", value: score?.weight ?? null, ideal: 80, reason: reasons.weight ?? undefined, realWorld: fmtWeight },
-    { label: "体脂肪率", value: score?.body_fat ?? null, ideal: 90, reason: reasons.body_fat ?? undefined, realWorld: fmtBf },
-  ];
 
   const sleep = data.metrics.sleep;
   const hrv = data.metrics.hrv;
@@ -294,7 +247,10 @@ export function TodayPage({ onOpenDebug }: Props) {
         </div>
       </header>
 
-      {/* ===== 最上部「今日」: いまコレ+やること / 今日の予定 / アラート(安全網) を1面に統合 ===== */}
+      {/* ===== 最上部: 総合点ヒーロー (全体マップ総合点に一本化・目標とセット) ===== */}
+      <OverallScoreHero focus={data.focus} />
+
+      {/* ===== 「今日」: いまコレ+やること / 今日の予定 / アラート(安全網) を1面に統合 ===== */}
       <div className="space-y-3">
         <SectionHeader label="今日" hint="いまコレ + やること + 予定 + アラート" />
         <NextActionCard />
@@ -358,11 +314,11 @@ export function TodayPage({ onOpenDebug }: Props) {
         <DayStory />
       </div>
 
-      <SectionHeader label="いまの状態" hint="主観の調子 + 心の健康 + 集中力 + 環境" />
+      {/* 集中力はトップの総合点ヒーローにチップとして集約 (単独の大パネルは廃止) */}
+      <SectionHeader label="いまの状態" hint="主観の調子 + 心の健康 + 環境" />
       <CheckinCard />
       <MentalCheckCard />
       <AirgapInsightCard />
-      <FocusPanel focus={data.focus} />
       <EnvironmentPanel
         pressure={data.pressure}
         airQuality={data.air_quality}
@@ -377,9 +333,9 @@ export function TodayPage({ onOpenDebug }: Props) {
         }}
       />
 
-      <SectionHeader label="今日のスコア" hint="24 時間の振り返り + トレンド" />
+      {/* 総合スコア(24hレーダー)は総合点ヒーロー + 各指標トレンドに一本化して廃止 */}
+      <SectionHeader label="今日のスコア" hint="各指標のトレンド" />
       <ImputedNotice imputed={data.imputed} />
-      <SubScoreRadar subs={subs} total={score?.total ?? null} />
       <div id="trends-section">
       <TrendsSection
         hints={{
