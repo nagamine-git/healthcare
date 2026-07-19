@@ -50,7 +50,12 @@ _JA_TO_EN: dict[str, str] = {
     "ダンベルシュラッグ": "dumbbell incline shrug",
     "カーフレイズ": "dumbbell seated one leg calf raise",
     "ダンベルステップアップ": "dumbbell step up",
-    "ヒップスラスト": "hip thrust",
+    # "hip thrust" 単独検索は ExerciseDB 上でバンド種目 (resistance band hip thrusts on
+    # knees) しかヒットせず不一致になる → ベンチに肩甲骨を乗せ骨盤に負荷を乗せて押し上げる
+    # 動作として一致する "barbell glute bridge two legs on bench" に寄せる (ダンベル版も
+    # フォームは同じ)。
+    "ダンベルヒップスラスト": "barbell glute bridge two legs on bench",
+    "ヒップスラスト": "barbell glute bridge two legs on bench",
     "プランク": "front plank with twist",
     "レッグレイズ": "hanging leg raise",
     "ダンベルサイドベンド": "dumbbell side bend",

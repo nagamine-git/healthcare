@@ -12,6 +12,14 @@ def test_search_term_maps_framework_exercises():
     assert search_term("ダンベルゴブレットスクワット") == "dumbbell goblet squat"
 
 
+def test_search_term_hip_thrust_matches_bench_bridge_not_band():
+    # "hip thrust" 単独検索は ExerciseDB 上でバンド種目しかヒットせず、種目(ベンチに
+    # 肩甲骨を乗せて骨盤を押し上げる動き)と画像が食い違っていた。
+    # ベンチ・ブリッジ系種目に寄せて一致させる。
+    assert search_term("ダンベルヒップスラスト") == "barbell glute bridge two legs on bench"
+    assert search_term("ヒップスラスト") == "barbell glute bridge two legs on bench"
+
+
 def test_search_term_none_for_non_gym_moves():
     # 剣道素振り/シャドー/ジョグ/タバタ は ExerciseDB に無い → None (GIF 無し)
     assert search_term("木刀素振り連続 (心拍135)") is None
