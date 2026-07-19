@@ -25,7 +25,7 @@ def test_strength_split_alternates_dumbbell_and_bodyweight():
     assert db["mode"] == "dumbbell"
     assert bw["mode"] == "bodyweight"
     assert any("ダンベル" in m for m in db["main_lifts"])
-    assert any(("懸垂" in m or "インバーテッド" in m) for m in bw["main_lifts"])
+    assert any("スーパーマン" in m for m in bw["main_lifts"])  # 自重pull(懸垂バー無し)
     # 自重 push も出る (total=3 → push・自重)
     bw_push = strength_split(strength_total=3, day_ordinal=0)
     assert bw_push["pattern"] == "push" and bw_push["mode"] == "bodyweight"

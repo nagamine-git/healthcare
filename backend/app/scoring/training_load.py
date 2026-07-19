@@ -12,7 +12,9 @@ from datetime import date as date_type
 from datetime import datetime, timedelta
 from typing import Any
 
-AVAILABLE_DUMBBELLS = [2.0, 4.0, 8.0, 12.0, 16.0, 20.0]  # 手持ち (中間なし)
+# 固定式ダンベル (2/4/8/12/16/20kg のみ・中間なし)。8→12 の飛びは避けられない。
+# 別途プレート (1kg×4, 2kg×16) はゴブレット等の "プレート保持" 種目でのみ細かく使える。
+AVAILABLE_DUMBBELLS = [2.0, 4.0, 8.0, 12.0, 16.0, 20.0]
 LEVEL_FACTOR = {"beginner": 1.0, "intermediate": 1.25, "advanced": 1.5}
 _TARGET_REPS = 10        # double progression の上限 rep
 _PROGRESS_SESSIONS = 2   # 同重量でこれだけ達成したら昇量
