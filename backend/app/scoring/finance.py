@@ -216,8 +216,24 @@ def compute_roi_ranking(session: Session, investable: float, wage: float) -> dic
     return {"candidates": rows, "budget": _r(budget), "earmarked": _r(spent)}
 
 
+# 固定費とみなすカテゴリのキーワード (major_category に対する部分一致)。
+# 家賃・光熱・通信・保険・サブスク・税・教育など「毎月ほぼ一定で発生」する費目。
+_FIXED_CAT_KEYWORDS = (
+    "家賃", "住居", "住宅", "ローン", "光熱", "電気", "ガス", "水道", "通信", "携帯",
+    "スマホ", "ネット", "インターネット", "保険", "サブスク", "定期", "会費", "年会費",
+    "税", "住民税", "年金", "教育", "学費", "保育", "習い事",
+)
+
+
+def _is_fixed_cat(name: str | None) -> bool:
+    """カテゴリ名が固定費に該当するか (キーワード部分一致)。"""
+    if not name:
+        return False
+    return any(k in name for k in _FIXED_CAT_KEYWORDS)
+
+
 def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, Any]:
-    """入出金履歴から月支出/収入・カテゴリ別・推奨防衛資金・ランウェイを算出。"""
+    """入出金履歴から月支出/収入・カテゴリ別・固定/変動費・推奨防衛資金・ランウェイを算出。"""
     st = get_state(session)
     txs = list(
         session.execute(
@@ -229,6 +245,8 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
 
     by_month_exp: dict[str, float] = defaultdict(float)
     by_month_inc: dict[str, float] = defaultdict(float)
+    by_month_fixed: dict[str, float] = defaultdict(float)
+    by_month_var: dict[str, float] = defaultdict(float)
     by_cat: dict[str, float] = defaultdict(float)
     today = app_today()
     cur_ym = f"{today.year:04d}-{today.month:02d}"
@@ -237,9 +255,14 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
     for t in txs:
         ym = f"{t.date.year:04d}-{t.date.month:02d}"
         if t.amount_jpy < 0:
-            by_month_exp[ym] += -t.amount_jpy
+            amt = -t.amount_jpy
+            by_month_exp[ym] += amt
+            if _is_fixed_cat(t.major_category):
+                by_month_fixed[ym] += amt
+            else:
+                by_month_var[ym] += amt
             if (t.date.year * 12 + t.date.month) >= cat_lo:
-                by_cat[t.major_category or "未分類"] += -t.amount_jpy
+                by_cat[t.major_category or "未分類"] += amt
         else:
             by_month_inc[ym] += t.amount_jpy
 
@@ -254,6 +277,8 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
     sample = full[-6:] if full else all_months
     avg_exp = sum(by_month_exp.get(m, 0) for m in sample) / len(sample) if sample else 0.0
     avg_inc = sum(by_month_inc.get(m, 0) for m in sample) / len(sample) if sample else 0.0
+    avg_fixed = sum(by_month_fixed.get(m, 0) for m in sample) / len(sample) if sample else 0.0
+    avg_var = sum(by_month_var.get(m, 0) for m in sample) / len(sample) if sample else 0.0
 
     suggested_reserve = avg_exp * st.reserve_months
     runway = (total_assets / avg_exp) if avg_exp > 0 else None
@@ -265,6 +290,8 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
         "avg_monthly_expense": _r(avg_exp),
         "avg_monthly_income": _r(avg_inc),
         "avg_monthly_net": _r(avg_inc - avg_exp),
+        "avg_monthly_fixed": _r(avg_fixed),      # 固定費 (家賃・光熱・通信・保険・サブスク等)
+        "avg_monthly_variable": _r(avg_var),     # 変動費 (裁量支出の母集団)
         "reserve_months": st.reserve_months,
         "suggested_reserve": _r(suggested_reserve),
         "runway_months": _r(runway, 1) if runway is not None else None,

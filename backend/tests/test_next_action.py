@@ -135,12 +135,13 @@ def test_atlas_focus_concrete_action_for_economy():
 
 
 def test_atlas_focus_economy_uses_dynamic_threshold():
-    # 実データ由来の閾値 (hold_jpy) を 1 円単位でそのまま出す
+    # 実データ由来の閾値 (hold_jpy) を 1 円単位でそのまま出す。根拠も why に載る。
     inp = Inputs(atlas_focus={"key": "economy", "label": "資産", "score": 12,
-                              "weight": 1.5, "pri": 132, "hold_jpy": 2847})
+                              "weight": 1.5, "pri": 132, "hold_jpy": 2847,
+                              "hold_basis": "固定費控除後の1日あたり裁量費(貯蓄目標ベース)"})
     c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
     assert "2,847 円" in c["title"]
-    assert "貯蓄目標" in c["why"]
+    assert "裁量費" in c["why"]
 
 
 def test_atlas_focus_condition_routes_to_sleep_tab():

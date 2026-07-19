@@ -121,11 +121,13 @@ def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
         return None
 
 
-def _dynamic_impulse_hold(session: Any) -> int | None:
-    """衝動買い保留の閾値を実データから 1 円単位で算出する。
+def _dynamic_impulse_hold(session: Any) -> tuple[int, str] | None:
+    """衝動買い保留の閾値を実データから 1 円単位で算出する。返り値 = (円, 根拠ラベル)。
 
-    「貯蓄目標を満たす 1 日あたり許容支出」= 月収 ×(1−貯蓄率目標)÷30。1 回の購入が
-    これを超えるなら一晩保留に値する。月収が無ければ月支出÷30 で代替。データが無ければ None。
+    衝動買いは **変動費 (裁量支出)** の話なので、固定費 (家賃・光熱・通信・保険・サブスク等)
+    を除いた「1 日あたり裁量予算」を閾値にする:
+        月収 ×(1−貯蓄率目標) − 固定費 = 月あたり裁量予算 → ÷30 で 1 日あたり。
+    月収/貯蓄目標が無ければ実際の変動費 ÷30、それも無ければ月支出 ÷30 で代替。
     """
     from app.scoring.finance import compute_cashflow, compute_rebalance
 
@@ -136,12 +138,18 @@ def _dynamic_impulse_hold(session: Any) -> int | None:
     except Exception:
         return None
     inc = cf.get("avg_monthly_income")
+    fixed = cf.get("avg_monthly_fixed") or 0.0
     tgt = s.finance_savings_rate_target_pct
     if inc and inc > 0 and tgt is not None:
-        return max(500, round(inc * (1 - tgt / 100.0) / 30.0))
+        discretionary = inc * (1 - tgt / 100.0) - fixed
+        if discretionary > 0:
+            return max(500, round(discretionary / 30.0)), "固定費控除後の1日あたり裁量費(貯蓄目標ベース)"
+    var = cf.get("avg_monthly_variable")
+    if var and var > 0:
+        return max(500, round(var / 30.0)), "実際の変動費÷30 (1日あたり)"
     exp = cf.get("avg_monthly_expense")
     if exp and exp > 0:
-        return max(500, round(exp / 30.0))
+        return max(500, round(exp / 30.0)), "月支出÷30 (固定費未分類)"
     return None
 
 
@@ -158,7 +166,7 @@ def _atlas_concrete_action(af: dict[str, Any]) -> tuple[str, str, str]:
     ctx = f"『{label}』達成 {score} / 優先 ×{weight:.1f} — 伸びしろ×重みが最大"
     # 資産の閾値は実データ由来 (af['hold_jpy']) を優先。無ければ設定の既定値。
     hold = af.get("hold_jpy") or get_settings().impulse_hold_jpy
-    hold_basis = "1日あたり許容支出 (貯蓄目標ベース)" if af.get("hold_jpy") else "既定値"
+    hold_basis = af.get("hold_basis") or "既定値 (家計データ未反映)"
     table: dict[str, tuple[str, str, str]] = {
         "economy": (
             f"今日は {hold:,} 円以上の買い物を一晩保留にする",
@@ -510,7 +518,9 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
                             "key": c["key"], "pri": pri}
             # 資産が最優先なら衝動買い保留の閾値を実データから 1 円単位で計算して付与
             if best and best["key"] == "economy":
-                best["hold_jpy"] = _dynamic_impulse_hold(db)
+                hb = _dynamic_impulse_hold(db)
+                if hb:
+                    best["hold_jpy"], best["hold_basis"] = hb
         inp.atlas_focus = best
 
     def _mental():

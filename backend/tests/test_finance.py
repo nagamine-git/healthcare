@@ -455,3 +455,14 @@ def test_advisor_uses_profile_income_expense_fallback(db_engine):
     with session_scope() as session:
         adv = compute_finance(session)["advisor"]
     assert any(d["key"] == "savings_rate" for d in adv["diagnosis"])
+
+
+def test_is_fixed_cat_classifies_fixed_vs_variable():
+    from app.scoring.finance import _is_fixed_cat
+
+    # 固定費 (毎月ほぼ一定)
+    for name in ["家賃", "住宅ローン", "光熱費", "通信費", "生命保険", "サブスク", "住民税"]:
+        assert _is_fixed_cat(name), name
+    # 変動費 (裁量支出)
+    for name in ["食費", "娯楽", "交際費", "買い物", "趣味", "衣服", None, "未分類"]:
+        assert not _is_fixed_cat(name), name
