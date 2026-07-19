@@ -109,13 +109,18 @@ def get_gif(name: str) -> bytes | None:
             data = r.json()
             if not isinstance(data, list) or not data:
                 return None
-            gif_url = data[0].get("gifUrl")
-            if not gif_url:
+            ex_id = data[0].get("id")
+            if not ex_id:
                 return None
-            # gifUrl は ExerciseDB の公開 CDN。**キーは付けない** (URL に秘密を載せない/
-            # 無関係ホストにヘッダで漏らさない)。認証必須の版なら取得失敗 → GIF 無しで継続。
-            g = client.get(gif_url)
+            # GIF は id 指定の画像エンドポイントで取得 (この版は gifUrl フィールドを持たない)。
+            # キーは RapidAPI ホストへの **ヘッダのみ** (URL に秘密を載せない)。
+            g = client.get(
+                f"https://{s.exercisedb_host}/image",
+                headers=headers, params={"exerciseId": ex_id, "resolution": "180"},
+            )
             g.raise_for_status()
+            if not g.headers.get("content-type", "").startswith("image"):
+                return None
             gif = g.content
     except Exception as exc:  # 取得失敗は None (画面は GIF 無しで継続)
         logger.warning("exercisedb_fetch_failed", name=name, term=term, error=str(exc))
