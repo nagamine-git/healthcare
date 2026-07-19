@@ -84,3 +84,36 @@ def test_rhr_night_achievement():
     assert ach.rhr_night_achievement(46.0) == 100.0
     assert ach.rhr_night_achievement(55.0) == 100.0
     assert ach.rhr_night_achievement(70.0) < 50.0
+
+
+def test_wake_earliness_achievement_gates():
+    from app.scoring import achievement as ach
+
+    kw = dict(target_wake_hour=6.5, target_sleep_min=480)
+    # 目標どおりに起床・十分睡眠・朝の光あり → 50 (中心)
+    assert ach.wake_earliness_achievement(6.5, 470, 70.0, **kw) == 50.0
+    # 1h 早い → +20
+    assert ach.wake_earliness_achievement(5.5, 470, 70.0, **kw) == 70.0
+    # 1h 遅い → −20
+    assert ach.wake_earliness_achievement(7.5, 470, 70.0, **kw) == 30.0
+    # 睡眠を削っての早起き (目標480-30=450 未満) → 加点しない
+    assert ach.wake_earliness_achievement(5.0, 400, 90.0, **kw) is None
+    # 朝の光を浴びていない (proxy 低い) → 加点しない
+    assert ach.wake_earliness_achievement(5.5, 470, 10.0, **kw) is None
+    # 朝の光 proxy 不明 → 加点しない
+    assert ach.wake_earliness_achievement(5.5, 470, None, **kw) is None
+    # 起床時刻不明 → None
+    assert ach.wake_earliness_achievement(None, 470, 70.0, **kw) is None
+
+
+def test_sleep_timing_achievement_regularity_dominant():
+    from app.scoring import achievement as ach
+
+    # 規則性が主役: reg=100 / early=0 → 0.85*100 = 85 (早起きの寄与は僅か)
+    assert abs(ach.sleep_timing_achievement(100.0, 0.0) - 85.0) < 0.01
+    # reg=100 / early=100 → 100
+    assert abs(ach.sleep_timing_achievement(100.0, 100.0) - 100.0) < 0.01
+    # 片方のみ: 早起き不明なら規則性のみ / 規則性不明なら早起きのみ
+    assert ach.sleep_timing_achievement(80.0, None) == 80.0
+    assert ach.sleep_timing_achievement(None, 70.0) == 70.0
+    assert ach.sleep_timing_achievement(None, None) is None

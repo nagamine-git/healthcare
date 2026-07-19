@@ -38,8 +38,66 @@ DOMAIN_WEIGHT_PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+def _hhmm_to_hour(hhmm: str) -> float:
+    """'06:30' → 6.5。"""
+    h, _, m = hhmm.partition(":")
+    return int(h) + (int(m) / 60.0 if m else 0.0)
+
+
+def _sleep_timing_achievement(target: date_type, total_min: int | None) -> float | None:
+    """睡眠タイミング達成度 = 規則性(主役) + 早起き(僅少・門番つき)。
+
+    規則性 = 直近14日の睡眠中点 SD。早起き = 目標起床時刻との差 (睡眠を削らず・朝の光を
+    浴びた日だけ加点)。詳細は achievement.wake_earliness_achievement / sleep_timing_achievement。
+    """
+    from datetime import datetime, timedelta
+
+    from app.scoring import achievement as ach
+    from app.scoring.circadian import circular_sd_hours
+    from app.scoring.morning_light import compute_morning_light_score
+
+    s = get_settings()
+    try:
+        target_wake_hour = _hhmm_to_hour(str(s.target_wake_time))
+    except (ValueError, AttributeError):
+        target_wake_hour = 6.5
+
+    # MetricSample.ts は naive UTC。JST 日付は +9h で得る (sleep_drivers と同じ)。
+    # 14 日窓 + JST オフセット分の余白を UTC で確保して取得後に JST 日付へ写す。
+    lo = datetime.combine(target - timedelta(days=15), datetime.min.time())
+    hi = datetime.combine(target + timedelta(days=1), datetime.min.time())
+    with session_scope() as session:
+        midpoint: dict[date_type, float] = {}
+        for ts, v in session.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.metric_key == "sleep_midpoint_hour",
+                MetricSample.ts >= lo,
+                MetricSample.ts < hi,
+                MetricSample.value.is_not(None),
+            )
+        ):
+            d = (ts + timedelta(hours=9)).date()
+            if target - timedelta(days=13) <= d <= target:
+                midpoint[d] = float(v)
+        light = compute_morning_light_score(
+            session, target, wake_hhmm=str(s.target_wake_time)
+        ).get("score")
+
+    regularity = ach.sleep_regularity_achievement(circular_sd_hours(list(midpoint.values())))
+    # 起床時刻 ≈ 中点 + 睡眠の半分 (中点は睡眠区間の中央)
+    today_mid = midpoint.get(target)
+    wake_hour = (
+        (today_mid + total_min / 120.0) if (today_mid is not None and total_min) else None
+    )
+    earliness = ach.wake_earliness_achievement(
+        wake_hour, total_min, light,
+        target_wake_hour=target_wake_hour, target_sleep_min=s.target_sleep_min,
+    )
+    return ach.sleep_timing_achievement(regularity, earliness)
+
+
 def health_achievement(target: date_type) -> float | None:
-    """既存トレンド6指標 (sleep/hrv/energy/load/weight/body_fat) の最新達成度の平均。"""
+    """既存トレンド指標 (sleep/timing/hrv/energy/load/weight/body_fat) の最新達成度の平均。"""
     from app.scoring import achievement as ach
     from app.scoring import trend_sources
     from app.scoring.profile import resolve_profile
@@ -57,6 +115,10 @@ def health_achievement(target: date_type) -> float | None:
         )
         if a is not None:
             vals.append(a)
+        # 睡眠タイミング (規則性 + 早起き僅少) を独立指標として加える
+        timing = _sleep_timing_achievement(target, r[1])
+        if timing is not None:
+            vals.append(timing)
     if bundle["hrv"]:
         a = ach.hrv_achievement(bundle["hrv"][-1][1], bundle["hrv_baseline"])
         if a is not None:

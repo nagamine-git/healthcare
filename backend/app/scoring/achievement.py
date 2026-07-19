@@ -45,6 +45,18 @@ RHR_NIGHT_BAND_SOFTNESS = 8.0
 REGULARITY_SD_GOOD = 0.5
 REGULARITY_SD_BAD = 2.0
 
+# 睡眠タイミング達成度の内訳: 規則性を主役に、早起きはごく僅か。
+# 根拠: 死亡・代謝リスクとの相関は 規則性(SRI) > 睡眠時間 > 起床の早さ の順 (Windred 2023/24)。
+# 早起き自体の便益はクロノタイプ整合と朝の光を経由するため、単独では小さく扱う。
+TIMING_REGULARITY_WEIGHT = 0.85
+TIMING_EARLINESS_WEIGHT = 0.15
+# 早起き達成度: 目標起床時刻を 50 点の中心とし、1h 早い/遅いで ±この点数。
+EARLINESS_POINTS_PER_HOUR = 20.0
+# 早起き加点の門番: これ未満の睡眠 (目標比) では「削っての早起き」を加点しない。
+EARLINESS_SLEEP_BUFFER_MIN = 30
+# 朝の光 proxy がこの達成度未満なら早起きを加点しない (早い×光を実際に浴びた、に限定)。
+EARLINESS_MORNING_LIGHT_MIN = 40.0
+
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
@@ -173,4 +185,48 @@ def sleep_regularity_achievement(sd_hour: float | None) -> float | None:
         return 0.0
     return _clamp(
         (REGULARITY_SD_BAD - sd) / (REGULARITY_SD_BAD - REGULARITY_SD_GOOD) * 100.0
+    )
+
+
+def wake_earliness_achievement(
+    wake_hour: float | None,
+    total_min: int | None,
+    morning_light: float | None,
+    *,
+    target_wake_hour: float,
+    target_sleep_min: int,
+) -> float | None:
+    """起床の早さの達成度 (ごく僅かな加点要素)。
+
+    「早いほど良い」ではない: 便益はクロノタイプ整合と朝の光を経由するため、
+    以下を満たした日だけ加点する (満たさなければ None = その日は評価しない)。
+    - 睡眠時間が目標を大きく削っていない (削っての早起きは睡眠負債で逆効果)
+    - その朝に実際に光を浴びている (morning_light proxy が一定以上)
+    目標起床時刻を 50 点の中心に、1h 早い/遅いで ±EARLINESS_POINTS_PER_HOUR。
+    """
+    if wake_hour is None or total_min is None:
+        return None
+    if total_min < target_sleep_min - EARLINESS_SLEEP_BUFFER_MIN:
+        return None  # 睡眠を削っての早起きは加点しない
+    if morning_light is None or morning_light < EARLINESS_MORNING_LIGHT_MIN:
+        return None  # 朝の光を浴びていない (or 不明) 日は加点しない
+    earlier_hours = target_wake_hour - float(wake_hour)  # 早い=正
+    return _clamp(50.0 + earlier_hours * EARLINESS_POINTS_PER_HOUR)
+
+
+def sleep_timing_achievement(
+    regularity: float | None, earliness: float | None
+) -> float | None:
+    """睡眠タイミングの合成達成度 = 規則性(主役) + 早起き(僅少)。
+
+    規則性が最重要 (SRI 研究)。早起きは補助的で、どちらか一方しか無ければそれを返す。
+    """
+    if regularity is None and earliness is None:
+        return None
+    if earliness is None:
+        return regularity
+    if regularity is None:
+        return earliness
+    return _clamp(
+        TIMING_REGULARITY_WEIGHT * regularity + TIMING_EARLINESS_WEIGHT * earliness
     )
