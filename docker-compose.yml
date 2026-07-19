@@ -42,6 +42,7 @@ services:
       GARMIN_EMAIL: ${GARMIN_EMAIL:?GARMIN_EMAIL is required}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD:?GARMIN_PASSWORD is required}
       HAE_INGEST_TOKEN: ${HAE_INGEST_TOKEN:?HAE_INGEST_TOKEN is required}
+      EXERCISEDB_API_KEY: ${EXERCISEDB_API_KEY:-}
       # 個人プロファイル (例の既定値。実値は gitignore したローカル env で上書き)
       USER_AGE: ${USER_AGE:-30}
       USER_SEX: ${USER_SEX:-male}
