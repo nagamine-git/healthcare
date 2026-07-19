@@ -42,12 +42,26 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // API レスポンスはキャッシュしない (常に最新を取りに行く)
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/(api|admin|healthz|ingest)/],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         // Web Push のハンドラを生成 SW に取り込む (public/push-sw.js)
         importScripts: ["push-sw.js"],
+        // GET /api/* は stale-while-revalidate: 起動でキャッシュから即描画し、裏で更新。
+        // Tailscale 外/圏外でも「最後に取れたデータ」が見える (オフライン対応)。
+        // runtimeCaching の既定 method は GET なので、POST 系ミューテーションは対象外。
+        // (ストリーミング/SSE エンドポイントは存在しないため全 GET を対象にして安全)
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\/.*$/,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "ascend-api",
+              expiration: { maxEntries: 300, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
