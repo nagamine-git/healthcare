@@ -121,6 +121,30 @@ def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
         return None
 
 
+def _dynamic_impulse_hold(session: Any) -> int | None:
+    """衝動買い保留の閾値を実データから 1 円単位で算出する。
+
+    「貯蓄目標を満たす 1 日あたり許容支出」= 月収 ×(1−貯蓄率目標)÷30。1 回の購入が
+    これを超えるなら一晩保留に値する。月収が無ければ月支出÷30 で代替。データが無ければ None。
+    """
+    from app.scoring.finance import compute_cashflow, compute_rebalance
+
+    s = get_settings()
+    try:
+        reb = compute_rebalance(session)
+        cf = compute_cashflow(session, reb.get("total") or 0.0)
+    except Exception:
+        return None
+    inc = cf.get("avg_monthly_income")
+    tgt = s.finance_savings_rate_target_pct
+    if inc and inc > 0 and tgt is not None:
+        return max(500, round(inc * (1 - tgt / 100.0) / 30.0))
+    exp = cf.get("avg_monthly_expense")
+    if exp and exp > 0:
+        return max(500, round(exp / 30.0))
+    return None
+
+
 def _atlas_concrete_action(af: dict[str, Any]) -> tuple[str, str, str]:
     """全体マップ最優先領域を「今すぐできる具体アクション」に変換する。
 
@@ -132,11 +156,13 @@ def _atlas_concrete_action(af: dict[str, Any]) -> tuple[str, str, str]:
     score = int(af.get("score", 0))
     weight = float(af.get("weight", 1.0))
     ctx = f"『{label}』達成 {score} / 優先 ×{weight:.1f} — 伸びしろ×重みが最大"
-    hold = get_settings().impulse_hold_jpy
+    # 資産の閾値は実データ由来 (af['hold_jpy']) を優先。無ければ設定の既定値。
+    hold = af.get("hold_jpy") or get_settings().impulse_hold_jpy
+    hold_basis = "1日あたり許容支出 (貯蓄目標ベース)" if af.get("hold_jpy") else "既定値"
     table: dict[str, tuple[str, str, str]] = {
         "economy": (
             f"今日は {hold:,} 円以上の買い物を一晩保留にする",
-            f"衝動買いの抑制が純資産に一番効く。24h ルールで即決を減らす。{ctx}",
+            f"衝動買いの抑制が純資産に一番効く。閾値={hold:,}円({hold_basis})。{ctx}",
             "#tab-summary",
         ),
         "life": (
@@ -472,15 +498,19 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
         from app.scoring.atlas import build_atlas
         with session_scope() as db:
             tree = build_atlas(db)
-        best = None
-        for c in tree.get("children", []):
-            sc = c.get("score")
-            w = c.get("weight", 1.0)
-            if sc is None or w <= 0:
-                continue
-            pri = max(0.0, 100 - sc) * w
-            if best is None or pri > best["pri"]:
-                best = {"label": c["label"], "score": sc, "weight": w, "key": c["key"], "pri": pri}
+            best = None
+            for c in tree.get("children", []):
+                sc = c.get("score")
+                w = c.get("weight", 1.0)
+                if sc is None or w <= 0:
+                    continue
+                pri = max(0.0, 100 - sc) * w
+                if best is None or pri > best["pri"]:
+                    best = {"label": c["label"], "score": sc, "weight": w,
+                            "key": c["key"], "pri": pri}
+            # 資産が最優先なら衝動買い保留の閾値を実データから 1 円単位で計算して付与
+            if best and best["key"] == "economy":
+                best["hold_jpy"] = _dynamic_impulse_hold(db)
         inp.atlas_focus = best
 
     def _mental():

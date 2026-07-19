@@ -126,11 +126,21 @@ def test_training_gap_intensity_gated_by_sleep_not_bb():
 
 def test_atlas_focus_concrete_action_for_economy():
     # 抽象的な「一手を割く」ではなく、今日できる具体アクションを title に出す
+    # hold_jpy 無し → 設定既定値 (3,000) にフォールバック
     inp = Inputs(atlas_focus={"key": "economy", "label": "資産",
                               "score": 12, "weight": 1.5, "pri": 132})
     c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
     assert "円以上" in c["title"] and "保留" in c["title"]
     assert "資産" in c["why"]  # 達成度・重みの文脈は why に残す
+
+
+def test_atlas_focus_economy_uses_dynamic_threshold():
+    # 実データ由来の閾値 (hold_jpy) を 1 円単位でそのまま出す
+    inp = Inputs(atlas_focus={"key": "economy", "label": "資産", "score": 12,
+                              "weight": 1.5, "pri": 132, "hold_jpy": 2847})
+    c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
+    assert "2,847 円" in c["title"]
+    assert "貯蓄目標" in c["why"]
 
 
 def test_atlas_focus_condition_routes_to_sleep_tab():
