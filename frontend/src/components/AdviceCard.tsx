@@ -223,15 +223,16 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                       </div>
                     )}
                     {a.considered && a.considered.length > 0 && (
-                      <details className="basis-full mt-0.5 text-xs text-ink-faint">
-                        <summary className="cursor-pointer select-none text-ink-dim">
+                      <details open className="basis-full mt-1 text-xs">
+                        <summary className="cursor-pointer select-none font-medium text-ink-dim">
                           見送った候補 ({a.considered.length})
                         </summary>
-                        <ul className="mt-1 space-y-0.5 pl-1">
+                        <ul className="mt-1.5 space-y-1.5">
                           {a.considered.map((c, ci) => (
-                            <li key={ci}>
-                              <span className="text-ink-dim">{c.title}</span>
-                              <span className="text-ink-faint"> — {c.reason}</span>
+                            <li key={ci}
+                                className="rounded-md border border-hairline bg-hull/40 px-2 py-1.5">
+                              <div className="font-medium text-ink">{c.title}</div>
+                              <div className="mt-0.5 text-ink-faint">見送り理由: {c.reason}</div>
                             </li>
                           ))}
                         </ul>
