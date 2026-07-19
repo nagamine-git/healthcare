@@ -1072,6 +1072,18 @@ export type TrendsResponse = {
   metrics: Partial<Record<TrendMetricKey, TrendMetric>>;
 };
 
+export type ExerciseCandidate = {
+  id: string;
+  name: string | null;
+  equipment: string | null;
+  target: string | null;
+  selected: boolean;
+};
+export type ExerciseCandidatesResponse = {
+  selected: (Omit<ExerciseCandidate, "selected"> & { source: "override" | "curated" | "auto" }) | null;
+  candidates: ExerciseCandidate[];
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -1845,6 +1857,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  exerciseCandidates: (name: string) =>
+    request<ExerciseCandidatesResponse>(`/api/exercise-candidates?name=${encodeURIComponent(name)}`),
+  exerciseOverrideSave: (name: string, exercisedbId: string, exercisedbName: string) =>
+    request<{ ok: boolean }>("/api/exercise-override", {
+      method: "POST",
+      body: JSON.stringify({ name, exercisedb_id: exercisedbId, exercisedb_name: exercisedbName }),
+    }),
+  exerciseOverrideDelete: (name: string) =>
+    request<{ ok: boolean }>(`/api/exercise-override?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
   getCheckin: () => request<CheckinResponse>("/api/checkin"),
   scheduleToday: () => request<ScheduleToday>("/api/schedule/today"),
   airgapInsight: () => request<AirgapInsight>("/api/airgap/insight"),

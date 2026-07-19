@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Check, ThumbsDown, ThumbsUp } from "lucide-react";
-import type { Advice, AdviceAction, AdvicePriority, GcalScheduleResult } from "../lib/api";
+import { api } from "../lib/api";
+import type {
+  Advice,
+  AdviceAction,
+  AdvicePriority,
+  ExerciseCandidate,
+  ExerciseCandidatesResponse,
+  GcalScheduleResult,
+} from "../lib/api";
 
 type FeedbackPatch = { action_key: string; done?: boolean; rating?: number; category?: string };
 type Props = {
@@ -367,28 +375,159 @@ function ActionFeedback({
   );
 }
 
-/** 種目デモ GIF (ExerciseDB プロキシ)。タップで表示。デモが無い種目は自動で隠す。 */
+/** 種目デモ GIF (ExerciseDB プロキシ)。タップで表示。画像が違う時は候補から選び直せる。 */
 function ExerciseGif({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (failed) return null; // デモ非対応 (剣道/有酸素等)
+  const [picking, setPicking] = useState(false);
+  const [candidates, setCandidates] = useState<ExerciseCandidatesResponse | null>(null);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [gifKey, setGifKey] = useState(0); // 画像確定後にキャッシュを割ってリロードさせる
+
+  const openPicker = () => {
+    setPicking((p) => !p);
+    if (!candidates && !loadingCandidates) {
+      setLoadingCandidates(true);
+      api
+        .exerciseCandidates(name)
+        .then(setCandidates)
+        .catch(() => setCandidates({ selected: null, candidates: [] }))
+        .finally(() => setLoadingCandidates(false));
+    }
+  };
+
+  const choose = async (c: ExerciseCandidate) => {
+    if (!c.name) return;
+    await api.exerciseOverrideSave(name, c.id, c.name);
+    setCandidates((prev) =>
+      prev
+        ? {
+            selected: { id: c.id, name: c.name, equipment: c.equipment, target: c.target, source: "override" },
+            candidates: prev.candidates.map((x) => ({ ...x, selected: x.id === c.id })),
+          }
+        : prev,
+    );
+    setFailed(false);
+    setOpen(true);
+    setGifKey((k) => k + 1);
+  };
+
+  if (failed && !picking) {
+    // デモが見つからない種目でも「候補から探す」は出す (自動一致が0件でも手動なら見つかることがある)
+    return (
+      <div className="basis-full mt-1">
+        <button onClick={openPicker} className="text-[11px] text-ink-faint hover:text-info hover:underline">
+          画像候補を探す
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="basis-full mt-1">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="text-[11px] text-info hover:underline"
-      >
-        {open ? "デモを隠す" : "▶ デモを見る"}
-      </button>
+      <div className="flex flex-wrap items-center gap-x-3">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-[11px] text-info hover:underline"
+        >
+          {open ? "デモを隠す" : "▶ デモを見る"}
+        </button>
+        {open && (
+          <button onClick={openPicker} className="text-[11px] text-ink-faint hover:text-info hover:underline">
+            違う画像?
+          </button>
+        )}
+      </div>
       {open && (
         <img
-          src={`/api/exercise-gif?name=${encodeURIComponent(name)}`}
+          key={gifKey}
+          src={`/api/exercise-gif?name=${encodeURIComponent(name)}${gifKey ? `&v=${gifKey}` : ""}`}
           alt={`${name} のデモ`}
           loading="lazy"
           onError={() => setFailed(true)}
           className="mt-1 max-h-60 w-full rounded-md border border-hairline object-contain bg-hull"
         />
       )}
+      {picking && (
+        <ExerciseGifPicker
+          name={name}
+          data={candidates}
+          loading={loadingCandidates}
+          onChoose={choose}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ExerciseGifPicker({
+  name,
+  data,
+  loading,
+  onChoose,
+  onClose,
+}: {
+  name: string;
+  data: ExerciseCandidatesResponse | null;
+  loading: boolean;
+  onChoose: (c: ExerciseCandidate) => void;
+  onClose: () => void;
+}) {
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  return (
+    <div className="mt-2 rounded-md border border-hairline bg-hull/60 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[10px] text-ink-faint">画像候補 (器具限定・一致度順)</span>
+        <button onClick={onClose} className="text-[10px] text-ink-faint hover:text-ink-dim">
+          閉じる
+        </button>
+      </div>
+      {loading && <p className="text-[11px] text-ink-faint">検索中…</p>}
+      {!loading && data && data.candidates.length === 0 && (
+        <p className="text-[11px] text-ink-faint">候補が見つかりませんでした。</p>
+      )}
+      <ul className="space-y-1">
+        {data?.candidates.map((c) => (
+          <li
+            key={c.id}
+            className={`rounded border px-2 py-1 ${
+              c.selected ? "border-prog-300/60 bg-prog-300/10" : "border-hairline"
+            }`}
+          >
+            <button
+              className="w-full text-left"
+              onClick={() => setPreviewId((p) => (p === c.id ? null : c.id))}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-ink">
+                  {c.name}
+                  {c.selected && <span className="ml-1 text-prog-300">(現在)</span>}
+                </span>
+                <span className="text-[10px] text-ink-faint">{c.equipment}</span>
+              </div>
+            </button>
+            {previewId === c.id && (
+              <div className="mt-1">
+                <img
+                  src={`/api/exercise-gif?name=${encodeURIComponent(name)}&id=${c.id}`}
+                  alt={c.name ?? ""}
+                  loading="lazy"
+                  className="max-h-48 w-full rounded border border-hairline object-contain bg-hull"
+                />
+                {!c.selected && (
+                  <button
+                    onClick={() => onChoose(c)}
+                    className="mt-1 rounded bg-prog-300/20 px-2 py-1 text-[11px] text-prog-300 hover:bg-prog-300/30"
+                  >
+                    この画像に決定
+                  </button>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

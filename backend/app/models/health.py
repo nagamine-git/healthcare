@@ -964,5 +964,20 @@ class BecomingSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ExerciseGifOverride(Base):
+    """種目デモ GIF の手動確定 (候補ピッカーでの選択を永続化)。
+
+    exercise_key は種目名の正規化キー (exercisedb.exercise_key)。以後この種目は
+    自動キュレーション/自動検索より優先してこの ExerciseDB ID を使う。
+    """
+
+    __tablename__ = "exercise_gif_override"
+
+    exercise_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    exercisedb_id: Mapped[str] = mapped_column(String(16))
+    exercisedb_name: Mapped[str] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere
