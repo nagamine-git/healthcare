@@ -207,6 +207,10 @@ class Settings(BaseSettings):
     med_min_interval_h: float = 4.0
     med_max_doses_per_day: int = 3
 
+    # 衝動買い抑制のしきい値 (円)。「いまコレ」で資産領域の具体アクションに使う。
+    # 24h ルール (これ以上の即決購入を一晩保留) は衝動購入の削減に有効。
+    impulse_hold_jpy: int = 3000
+
     # --- 睡眠リズム目標 ---
     target_wake_time: str = "06:30"  # 平日想定の起床時刻 (HH:MM, JST)
     target_sleep_min: int = 480  # 8h を ideal とする (推奨 7-9h)

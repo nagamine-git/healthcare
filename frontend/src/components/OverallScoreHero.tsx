@@ -63,11 +63,11 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
         <Ring value={current} color={st.color} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-semibold" style={{ color: st.color }}>{st.label}</span>
+            <span className="shrink-0 whitespace-nowrap text-sm font-semibold"
+                  style={{ color: st.color }}>{st.label}</span>
             {focusScore != null && (
-              <span className="whitespace-nowrap rounded-full bg-hull px-2 py-0.5 text-[11px] text-ink-dim">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-hull px-2 py-0.5 text-[11px] text-ink-dim">
                 集中 {focusScore}
-                {peakLabel && <span className="text-ink-faint"> · ピーク {peakLabel}</span>}
               </span>
             )}
           </div>
@@ -88,13 +88,14 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
             </div>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-faint">
-            <span>目標(理想)まで あと {remain}</span>
+            <span>目標まで あと {remain}</span>
             {median != null && <span>世の中 {Math.round(median)}</span>}
             {dayDelta != null && dayDelta !== 0 && (
               <span style={{ color: dayDelta > 0 ? P.prog300 : P.act300 }}>
                 前日比 {dayDelta > 0 ? "+" : ""}{dayDelta}
               </span>
             )}
+            {peakLabel && <span>ピーク {peakLabel}</span>}
           </div>
         </div>
       </div>

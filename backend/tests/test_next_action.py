@@ -124,6 +124,30 @@ def test_training_gap_intensity_gated_by_sleep_not_bb():
     assert "HIIT" in tg2["title"]
 
 
+def test_atlas_focus_concrete_action_for_economy():
+    # 抽象的な「一手を割く」ではなく、今日できる具体アクションを title に出す
+    inp = Inputs(atlas_focus={"key": "economy", "label": "資産",
+                              "score": 12, "weight": 1.5, "pri": 132})
+    c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
+    assert "円以上" in c["title"] and "保留" in c["title"]
+    assert "資産" in c["why"]  # 達成度・重みの文脈は why に残す
+
+
+def test_atlas_focus_condition_routes_to_sleep_tab():
+    inp = Inputs(atlas_focus={"key": "condition", "label": "コンディション (日次)",
+                              "score": 40, "weight": 1.5, "pri": 90})
+    c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
+    assert "就寝" in c["title"]
+    assert c["link"] == "#tab-sleep"
+
+
+def test_atlas_focus_unknown_key_falls_back():
+    inp = Inputs(atlas_focus={"key": "mystery", "label": "謎",
+                              "score": 10, "weight": 1.0, "pri": 90})
+    c = next(c for c in build_candidates(inp, _at(15)) if c["key"] == "atlas_focus")
+    assert "一手を割く" in c["title"]
+
+
 def test_training_gap_suppressed_when_trained_today():
     inp = Inputs(days_since_strength=4, strength_days_14=2, trained_today=True, morning_bb=70.0)
     assert all(c["key"] != "training_gap" for c in build_candidates(inp, _at(15)))
@@ -248,7 +272,10 @@ def test_sleep_experiment_suppressed_when_already_logged():
 def test_atlas_focus_rises_with_weight_and_gap():
     inp = Inputs(atlas_focus={"label": "資産", "score": 15, "weight": 3.0, "key": "economy", "pri": 255})
     c = next(x for x in build_candidates(inp, _at(14)) if x["key"] == "atlas_focus")
-    assert "資産" in c["title"] and "×3.0" in c["title"]
+    # title は具体アクション、文脈(領域名・重み)は why 側に移動
+    assert "円以上" in c["title"]
+    assert "資産" in c["why"] and "×3.0" in c["why"]
+    assert c["priority"] >= 80  # 伸びしろ×重みが大きいので上位
 
 
 def test_atlas_focus_quiet_when_high_achievement_low_weight():

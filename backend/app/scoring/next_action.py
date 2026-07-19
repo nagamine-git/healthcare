@@ -121,6 +121,69 @@ def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
         return None
 
 
+def _atlas_concrete_action(af: dict[str, Any]) -> tuple[str, str, str]:
+    """全体マップ最優先領域を「今すぐできる具体アクション」に変換する。
+
+    抽象的な『資産に一手を割く』では動けないため、領域ごとに **今日 1 つ実行できる**
+    行動に落とす (ウィジェット/いまコレの title に出る)。达成度・重みは why に残す。
+    """
+    key = af.get("key")
+    label = af.get("label", "")
+    score = int(af.get("score", 0))
+    weight = float(af.get("weight", 1.0))
+    ctx = f"『{label}』達成 {score} / 優先 ×{weight:.1f} — 伸びしろ×重みが最大"
+    hold = get_settings().impulse_hold_jpy
+    table: dict[str, tuple[str, str, str]] = {
+        "economy": (
+            f"今日は {hold:,} 円以上の買い物を一晩保留にする",
+            f"衝動買いの抑制が純資産に一番効く。24h ルールで即決を減らす。{ctx}",
+            "#tab-summary",
+        ),
+        "life": (
+            "15 分だけ学習に着手する (積読か講座を 1 つ開く)",
+            f"小さく始めるのが継続の要。今日のノルマを 1 つ埋める。{ctx}",
+            "#tab-summary",
+        ),
+        "headache": (
+            "鎮痛薬に頼らない一手: 水 500ml + 首肩ストレッチ 3 分",
+            f"服薬日数を減らすと MOH (薬物乱用頭痛) リスクが下がる。{ctx}",
+            "#tab-headache",
+        ),
+        "fitness": (
+            "今日は 1 種目だけ測って記録する (握力/プランク等)",
+            f"測定は現状把握の起点。1 つでも記録すれば前進。{ctx}",
+            "#tab-summary",
+        ),
+        "condition": (
+            "回復を最優先 — 今夜は 30 分早く就寝準備に入る",
+            f"日次コンディションは睡眠が主因。1 つ整えるだけで効く。{ctx}",
+            "#tab-sleep",
+        ),
+        "body": (
+            "1 食にタンパク質を +20g、間食を 1 つ置き換える",
+            f"体組成は栄養の積み重ね。今日の 1 食から。{ctx}",
+            "#tab-physique",
+        ),
+        "checkup": (
+            "気になる数値を 1 つ確認 or 受診を予約する",
+            f"早期把握がリスクを下げる。{ctx}",
+            "#tab-health",
+        ),
+        "compass": (
+            "3 分だけ — 今大事にしたい価値を 1 つ書き出す",
+            f"指針が定まると他領域の判断が速くなる。{ctx}",
+            "#tab-summary",
+        ),
+    }
+    if key in table:
+        return table[key]
+    return (
+        f"『{label}』に一手を割く (達成 {score} / 優先 ×{weight:.1f})",
+        "達成度が低く優先の高い領域。伸びしろ×重みが最大 — ここが一番効く",
+        "#tab-summary",
+    )
+
+
 def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
     """優先度つき候補リスト (降順ソートは呼び出し側)。now は JST naive。"""
     c: list[dict[str, Any]] = []
@@ -229,9 +292,8 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
         # 優先度 = 55 + スケール。伸びしろ(100-score)×重み が大きいほど上げ、ルーティン
         # (水/プロテイン/学習)より前に出す。安全網(アラート)より下に収める(最大 ~90)。
         pri = 55 + min(35.0, af["pri"] * 0.18)
-        add("atlas_focus", round(pri),
-            f"『{af['label']}』に一手を割く (達成 {int(af['score'])} / 優先 ×{af['weight']:.1f})",
-            "達成度が低く優先の高い領域。伸びしろ×重みが最大 — ここが一番効く", "#tab-summary")
+        title, why, tab = _atlas_concrete_action(af)
+        add("atlas_focus", round(pri), title, why, tab)
 
     # --- 6.5 就寝前: 今夜の睡眠実験 (何で寝るべきか / データ取得のための探索+活用) ---
     se = inp.sleep_experiment
