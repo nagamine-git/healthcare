@@ -1614,6 +1614,7 @@ export type AtlasNode = {
   current: number | null;
   population: { median?: number; percentile?: number; range?: (number | null)[] } | null;
   target: number | null;
+  dynamic_goal?: number | null; // 「ギリギリ達成できる」動的な日次目標 (root のみ)
   score: number | null;
   score_pop: number | null;
   series: { date: string; value: number }[];

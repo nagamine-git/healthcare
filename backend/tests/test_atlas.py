@@ -147,3 +147,25 @@ def test_atlas_attaches_weight(db_engine):
     assert tree["weight"] == 1.0  # 既定
     econ = next(c for c in tree["children"] if c["key"] == "economy")
     assert econ["weight"] == 3.0  # 設定が反映
+
+
+def test_dynamic_daily_goal_is_attainable_stretch():
+    from app.scoring.atlas import dynamic_daily_goal
+
+    # 実績7日未満 → None (据え置き)
+    assert dynamic_daily_goal([{"value": 70} for _ in range(6)]) is None
+
+    # 直近が 60-80 に分布 → 目標は「中央値超〜直近最大以下」の stretch
+    series = [{"value": v} for v in [60, 65, 70, 62, 75, 68, 72, 80, 66, 74]]
+    g = dynamic_daily_goal(series)
+    median = 70  # 概ね
+    assert g is not None
+    assert median <= g <= 80          # 中央値以上・直近最大以下 (到達可能)
+    assert g <= 100
+
+    # 全て同じ → 中央値+1 の下限が効く (必ず少し上、ただし最大以下なので=最大)
+    flat = [{"value": 70} for _ in range(10)]
+    assert dynamic_daily_goal(flat) == 70  # min(median+1, max=70) = 70
+
+    # None 値は無視される
+    assert dynamic_daily_goal([{"value": None}] * 10) is None

@@ -19,10 +19,24 @@ function statusOf(v: number): { label: string; color: string } {
   return { label: "要ケア", color: P.risk };
 }
 
-function Ring({ value, color }: { value: number; color: string }) {
+function Ring({ value, goal, color }: { value: number; goal?: number | null; color: string }) {
   const r = 40;
   const c = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, value / 100));
+  // 目標ティック: リング上の goal/100 位置に刻み (達成すると本線色、未達は琥珀)
+  let tick = null;
+  if (goal != null) {
+    const a = (goal / 100) * 2 * Math.PI - Math.PI / 2;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    tick = (
+      <line
+        x1={52 + (r - 6) * cos} y1={52 + (r - 6) * sin}
+        x2={52 + (r + 6) * cos} y2={52 + (r + 6) * sin}
+        stroke={value >= goal ? color : P.act} strokeWidth="3" strokeLinecap="round"
+      />
+    );
+  }
   return (
     <svg width="104" height="104" viewBox="0 0 104 104" className="shrink-0">
       <circle cx="52" cy="52" r={r} fill="none" stroke={P.hairline} strokeWidth="8" />
@@ -30,6 +44,7 @@ function Ring({ value, color }: { value: number; color: string }) {
         cx="52" cy="52" r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
         strokeDasharray={`${c * frac} ${c}`} transform="rotate(-90 52 52)"
       />
+      {tick}
       <text x="52" y="50" textAnchor="middle" dominantBaseline="central"
             fill={P.ink} fontSize="30" fontWeight="700" className="telemetry-num">
         {Math.round(value)}
@@ -49,7 +64,10 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
   const st = statusOf(current);
   const median = root.population?.median ?? null;
   const series = root.series ?? [];
-  const remain = Math.max(0, 100 - Math.round(current));
+  const goal = root.dynamic_goal ?? null; // 「ギリギリ達成できる」動的目標
+  const goalVal = goal ?? 100;
+  const remain = Math.max(0, Math.round(goalVal) - Math.round(current));
+  const achieved = current >= goalVal;
   const prev = series.length >= 2 ? series[series.length - 2].value : null;
   const dayDelta = prev != null ? Math.round(current) - Math.round(prev) : null;
 
@@ -60,7 +78,7 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
   return (
     <Panel title="総合点 — 現状と目標">
       <div className="flex items-center gap-4">
-        <Ring value={current} color={st.color} />
+        <Ring value={current} goal={goal} color={st.color} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="shrink-0 whitespace-nowrap text-sm font-semibold"
@@ -88,7 +106,17 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
             </div>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-faint">
-            <span>目標まで あと {remain}</span>
+            {goal != null ? (
+              achieved ? (
+                <span style={{ color: P.prog300 }}>今日の目標 {Math.round(goal)} 達成 ✓</span>
+              ) : (
+                <span>
+                  <span className="text-ink-dim">今日の目標 {Math.round(goal)}</span> · あと {remain}
+                </span>
+              )
+            ) : (
+              <span>目標まで あと {remain}</span>
+            )}
             {median != null && <span>世の中 {Math.round(median)}</span>}
             {dayDelta != null && dayDelta !== 0 && (
               <span style={{ color: dayDelta > 0 ? P.prog300 : P.act300 }}>

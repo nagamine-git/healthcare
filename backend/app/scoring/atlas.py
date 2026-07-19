@@ -461,6 +461,24 @@ def _attach_weights(node: dict[str, Any], weights: dict[str, float]) -> None:
         _attach_weights(c, weights)
 
 
+def dynamic_daily_goal(series: list[dict[str, Any]]) -> float | None:
+    """総合点の「ギリギリ達成できるかできないか」の動的目標を直近実績から算出する。
+
+    根拠 (Locke & Latham "difficult but attainable" / 報酬予測誤差): 目標が確実でない
+    (~達成率 30-40%) とき遂行と満足が最大化する。直近 21 日の 65 パーセンタイル
+    (=約 35% の日で届く stretch) を採り、中央値+1 を下限 (必ず少し上)、直近最大を上限
+    (現実に到達可能) にクランプ。実績 7 日未満は None (据え置き)。
+    """
+    vals = sorted(s["value"] for s in series[-21:] if s.get("value") is not None)
+    if len(vals) < 7:
+        return None
+    p65 = vals[min(len(vals) - 1, math.ceil(0.65 * len(vals)) - 1)]
+    median = vals[len(vals) // 2]
+    goal = max(p65, median + 1)
+    goal = min(goal, vals[-1], 100.0)
+    return float(round(goal))
+
+
 def build_atlas(session: Session) -> dict[str, Any]:
     """総合点を根に、各ドメイン→指標を 現状/世の中/目標 + series/score/weight 付きで組み立てる。"""
     from app.models.health import DomainWeight
@@ -470,6 +488,7 @@ def build_atlas(session: Session) -> dict[str, Any]:
     score = session.execute(
         select(DailyScore).order_by(DailyScore.date.desc()).limit(1)
     ).scalars().first()
+    total_series = _ds_series(session, target, DailyScore.total)
     tree = _branch(
         "total", "総合点",
         [
@@ -485,7 +504,7 @@ def build_atlas(session: Session) -> dict[str, Any]:
         direction="up",
         current=score.total if score else None,
         target=100.0,
-    ) | {"series": _ds_series(session, target, DailyScore.total)}
+    ) | {"series": total_series, "dynamic_goal": dynamic_daily_goal(total_series)}
     weights = {r.domain: r.weight for r in session.execute(select(DomainWeight)).scalars()}
     _attach_weights(tree, weights)
     return tree
