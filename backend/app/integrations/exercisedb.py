@@ -55,7 +55,14 @@ _JA_TO_EN: dict[str, str] = {
     "レッグレイズ": "hanging leg raise",
     "ダンベルサイドベンド": "dumbbell side bend",
     "デッドバグ": "dead bug",
-    "ダンベルスラスター": "barbell thruster",
+    # HIIT 系 (ExerciseDB にダンベルGIFがある種目に寄せる)
+    "ダンベルプッシュプレス": "dumbbell push press",
+    "ダンベルスラスター": "dumbbell push press",   # ダンベル版スラスターGIF無し→近い押上げ動作
+    "ダンベルクリーン": "dumbbell clean",
+    "ダンベルバービー": "dumbbell burpee",
+    "バービー": "dumbbell burpee",
+    "バーピー": "dumbbell burpee",
+    "マウンテンクライマー": "mountain climber",
     "ダンベルスイング": "kettlebell swing",
     "ファーマーズマーチ": "farmers walk",
 }
