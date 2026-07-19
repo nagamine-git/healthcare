@@ -478,7 +478,7 @@ class Settings(BaseSettings):
 
     scheduler_enabled: bool = True
     scheduler_garmin_cron: str = "5 * * * *"
-    scheduler_recompute_cron: str = "15 * * * *"
+    scheduler_recompute_cron: str = "*/10 * * * *"  # 10分毎 (オンリード/取込時再計算のバックストップ)
     scheduler_morning_advice_cron: str = "30 6 * * *"
     scheduler_baseline_cron: str = "0 3 * * *"
     # 通知 tick: 毎分「今送るべき通知」を判定して Web Push を送る。

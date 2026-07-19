@@ -233,6 +233,36 @@ async def recompute_today_job() -> dict[str, Any]:
     return recompute_for_date(app_today())
 
 
+# オンデマンド再計算のプロセス内スロットル (date -> 最後に計算した monotonic 秒)。
+# 「開いた瞬間に最新」を実現しつつ、連打/SWR 再取得での過剰計算を防ぐ。
+_last_ondemand: dict[date_type, float] = {}
+ONDEMAND_MIN_INTERVAL_S = 120
+
+
+def ensure_today_fresh(min_interval_s: int = ONDEMAND_MIN_INTERVAL_S) -> bool:
+    """今日の総合点を必要なら即再計算する (直近 min_interval_s 秒以内なら省略)。
+
+    /api/atlas 等の読み取り時やデータ取り込み時に呼び、開いた瞬間にほぼリアルタイムな
+    スコアを見せる。返り値: 実際に再計算したら True。
+    """
+    import time
+
+    from app.scoring.timewindow import app_today
+
+    today = app_today()
+    now = time.monotonic()
+    last = _last_ondemand.get(today)
+    if last is not None and (now - last) < min_interval_s:
+        return False
+    _last_ondemand[today] = now
+    try:
+        recompute_for_date(today)
+        return True
+    except Exception as exc:  # 読み取りを止めない
+        logger.warning("ensure_today_fresh_failed", error=str(exc))
+        return False
+
+
 async def refresh_baselines_job() -> dict[str, Any]:
     """Currently a no-op placeholder; baselines are computed on demand."""
     logger.info("baseline_refresh_noop")

@@ -15,6 +15,10 @@ router = APIRouter()
 
 @router.get("/api/atlas")
 async def get_atlas() -> dict[str, Any]:
+    # 開いた瞬間にほぼリアルタイムな総合点を見せる (直近120秒以内なら省略)。
+    from app.scoring.recompute import ensure_today_fresh
+
+    ensure_today_fresh()
     with session_scope() as session:
         return {"tree": build_atlas(session)}
 
