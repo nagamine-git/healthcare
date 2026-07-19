@@ -60,6 +60,7 @@ def compute_tonight_plan(
     target: date_type,
     *,
     last_training_end_jst: datetime | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """target の「今夜→翌朝」のリズムを返す。
 
@@ -67,13 +68,18 @@ def compute_tonight_plan(
         target: 今日の日付 (JST)
         last_training_end_jst: 当日のトレーニング終了時刻 (JST aware datetime)。
             これより後の bath / bedtime しか取れない場合は調整する。
+        now: 現在時刻 (JST aware)。省略時は実時刻。日付が変わった直後〜起床前
+            (深夜0時台など) に呼ばれた場合、「昨夜からの続き」として扱い、
+            起床は target 自身の朝 (target+1 の翌朝ではなく) を指す。
 
     Returns:
         ``{wake, bedtime, bath, dinner_cutoff}`` 各 HH:MM 文字列、
-        + メタ情報 (compressed: 理想に届かない bool, sleep_min_estimate, notes)
+        + メタ情報 (compressed: 理想に届かない bool, sleep_min_estimate, notes,
+        sleep_now: 目安の就寝時刻をすでに過ぎている bool)
     """
     s = get_settings()
     tz = ZoneInfo(s.app_tz)
+    now_dt = now if now is not None else datetime.now(tz)
 
     # 起床時刻・必要睡眠量は個人設定 (resolve_profile) を優先
     from app.scoring.profile import resolve_profile
@@ -81,8 +87,12 @@ def compute_tonight_plan(
     target_sleep_min = prof.sleep_need_min
 
     wake_t = _parse_hhmm(prof.wake_time)
-    # wake は target + 1 day で作る (今日の夜→明朝)
-    wake_dt = datetime.combine(target + timedelta(days=1), wake_t, tz)
+    # 通常は wake = target + 1 day (今日の夜→明朝)。ただし日付境界が 00:00 な一方
+    # 起床は朝なので、深夜0時台〜起床前に呼ばれた時は「まだ target 自身の朝を迎えて
+    # いない」= 前夜からの継続中。その場合は target 自身の朝を wake にする。
+    today_wake_dt = datetime.combine(target, wake_t, tz)
+    in_progress_night = now_dt < today_wake_dt
+    wake_dt = today_wake_dt if in_progress_night else today_wake_dt + timedelta(days=1)
     ideal_bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
 
     notes: list[str] = []
@@ -93,10 +103,12 @@ def compute_tonight_plan(
     phase = _habitual_phase(target)
     if phase is not None:
         bh = phase["bedtime_h"]
-        if bh >= 0:  # 翌日未明 (例 01:15)
-            hab_bed = datetime.combine(target + timedelta(days=1), time(0, 0), tz) + timedelta(hours=bh)
-        else:  # 当日の夜 (例 23:00)
-            hab_bed = datetime.combine(target, time(0, 0), tz) + timedelta(hours=24 + bh)
+        # 日付は wake の日を基準にする (通常は target+1、in_progress_night 時は target 自身)。
+        wake_date = wake_dt.date()
+        if bh >= 0:  # 未明 (例 01:15) → wake と同じ日
+            hab_bed = datetime.combine(wake_date, time(0, 0), tz) + timedelta(hours=bh)
+        else:  # 前夜 (例 23:00) → wake の前日
+            hab_bed = datetime.combine(wake_date - timedelta(days=1), time(0, 0), tz) + timedelta(hours=24 + bh)
         habitual_bedtime_str = hab_bed.strftime("%H:%M")
         if hab_bed > ideal_bedtime_dt + timedelta(minutes=15):
             # 実就寝が理想より遅い → 一気にではなく最大 45 分だけ前倒し (概日前進の限界)
@@ -134,8 +146,21 @@ def compute_tonight_plan(
                         f"現実的には {sleep_min} 分程度。"
                     )
 
+    # 目安の就寝時刻をすでに過ぎていて、まだ起床前 (深夜に呼ばれた継続中の夜だけでなく、
+    # 単に就寝目標より夜更かししている場合も含む) は「これから今夜の予定を組む」のでは
+    # なく「今すぐ寝るべき」局面。目安睡眠を現在時刻起点で再計算し、最優先の note として
+    # 先頭に出す。
+    sleep_now = bedtime_dt <= now_dt < wake_dt
+    if sleep_now:
+        sleep_min = max(0, int((wake_dt - now_dt).total_seconds() / 60))
+        compressed = True
+        notes.insert(
+            0,
+            f"目安の就寝時刻 ({bedtime_dt.strftime('%H:%M')}) をすでに過ぎています。今すぐ寝てください。"
+            f"今から寝れば起床 {wake_dt.strftime('%H:%M')} まで約{sleep_min // 60}h{sleep_min % 60:02d}m 眠れます。",
+        )
+
     # 夕食: 就寝3h前 と「起床+13h(遅すぎない上限)」の早い方を食べ終わりに。遅い夕食を回避。
-    today_wake_dt = datetime.combine(target, wake_t, tz)
     healthy_latest = today_wake_dt + timedelta(hours=s.meal_last_h_after_wake)
     dinner_end_dt = min(bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min), healthy_latest)
     dinner_start_dt = dinner_end_dt - timedelta(minutes=s.dinner_eat_duration_min)
@@ -195,6 +220,7 @@ def compute_tonight_plan(
         "target_sleep_min": target_sleep_min,
         "estimated_sleep_min": sleep_min,
         "compressed": compressed,
+        "sleep_now": sleep_now,  # 目安の就寝時刻をすでに過ぎている (今すぐ寝るべき局面)
         "ideal_bedtime": ideal_bedtime_dt.strftime("%H:%M"),  # 最終目標 (起床−必要睡眠)
         "habitual_bedtime": habitual_bedtime_str,  # 実データの習慣就寝
         "notes": notes,

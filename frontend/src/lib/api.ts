@@ -754,6 +754,7 @@ export type TonightPlan = {
   target_sleep_min: number;
   estimated_sleep_min: number;
   compressed: boolean;
+  sleep_now?: boolean;
   windows?: { bedtime: SleepWindow; wake: SleepWindow };
   caffeine_cutoff_time?: string;
   dim_light_time?: string;

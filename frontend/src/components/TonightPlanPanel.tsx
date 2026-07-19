@@ -12,33 +12,42 @@ function fmtHm(min: number): string {
 
 export function TonightPlanPanel({ plan }: Props) {
   if (!plan) return null;
+  const sleepNow = plan.sleep_now === true;
   return (
-    <div className="rounded-xl bg-hull/70 p-4 sm:p-6">
+    <div className={`rounded-xl bg-hull/70 p-4 sm:p-6 ${sleepNow ? "ring-1 ring-rose-400/50" : ""}`}>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm tracking-wider text-ink-dim">今夜のリズム</h3>
         <span className="text-[10px] text-ink-faint">
           目安睡眠 {fmtHm(plan.estimated_sleep_min)} / 目標 {fmtHm(plan.target_sleep_min)}
         </span>
       </div>
+      {sleepNow && (
+        <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-950/30 px-3 py-2 text-sm text-rose-300">
+          🌙 就寝目安時刻を過ぎています。<b>今すぐ寝てください</b>
+          <span className="ml-1 text-rose-300/70">
+            (今から寝れば起床 {plan.wake} まで約 {fmtHm(plan.estimated_sleep_min)})
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Slot
           label="夕食"
           time={plan.dinner_start && plan.dinner_end ? `${plan.dinner_start}–${plan.dinner_end}` : plan.dinner_cutoff}
-          hint="食べ始め–食べ終わり・遅すぎない時間に"
+          hint={sleepNow ? "済 (昨夜)" : "食べ始め–食べ終わり・遅すぎない時間に"}
         />
         <Slot
           label="入浴"
           time={plan.bath_start && plan.bath_end ? `${plan.bath_start}–${plan.bath_end}` : plan.bath}
-          hint={`${plan.bath_method ?? "湯船"}${plan.bath_temp_c ? ` ${plan.bath_temp_c}℃` : ""}・就寝90分前に上がる`}
+          hint={sleepNow ? "済 (昨夜)" : `${plan.bath_method ?? "湯船"}${plan.bath_temp_c ? ` ${plan.bath_temp_c}℃` : ""}・就寝90分前に上がる`}
         />
         <Slot
           label="就寝"
-          time={plan.bedtime}
-          range={plan.windows?.bedtime}
-          hint={plan.compressed ? "圧縮中" : "目標"}
-          accent={plan.compressed ? "amber" : "emerald"}
+          time={sleepNow ? "今すぐ" : plan.bedtime}
+          range={sleepNow ? undefined : plan.windows?.bedtime}
+          hint={sleepNow ? `目安 ${plan.bedtime} 経過` : plan.compressed ? "圧縮中" : "目標"}
+          accent={sleepNow ? "rose" : plan.compressed ? "amber" : "emerald"}
         />
-        <Slot label="起床 (明朝)" time={plan.wake} range={plan.windows?.wake} hint="次の日" />
+        <Slot label="起床" time={plan.wake} range={plan.windows?.wake} hint={sleepNow ? "今日の朝" : "次の日"} />
       </div>
       {/* 科学的に大事な timing (厳選) */}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-dim">
@@ -55,11 +64,14 @@ export function TonightPlanPanel({ plan }: Props) {
             <span className="text-ink-faint"> 以降</span></span>
         )}
       </div>
-      {plan.notes.length > 0 && (
-        <p className="mt-3 text-[10px] leading-relaxed text-act-300/80">
-          {plan.notes.join(" / ")}
-        </p>
-      )}
+      {(() => {
+        const restNotes = sleepNow ? plan.notes.slice(1) : plan.notes;
+        return restNotes.length > 0 ? (
+          <p className="mt-3 text-[10px] leading-relaxed text-act-300/80">
+            {restNotes.join(" / ")}
+          </p>
+        ) : null;
+      })()}
     </div>
   );
 }
@@ -75,13 +87,15 @@ function Slot({
   time: string;
   range?: SleepWindow;
   hint?: string;
-  accent?: "slate" | "emerald" | "amber";
+  accent?: "slate" | "emerald" | "amber" | "rose";
 }) {
   const color =
     accent === "emerald"
       ? "text-prog-300"
       : accent === "amber"
       ? "text-act-300"
+      : accent === "rose"
+      ? "text-rose-300"
       : "text-ink";
   return (
     <div className="rounded-xl border border-panel bg-hull/40 px-3 py-2">
