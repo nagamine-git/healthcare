@@ -19,6 +19,19 @@ def test_strength_split_has_fixed_mains_and_rotating_accessory():
     assert a["accessory"] != b["accessory"]
 
 
+def test_strength_split_alternates_dumbbell_and_bodyweight():
+    db = strength_split(strength_total=0, day_ordinal=0)   # DB (push)
+    bw = strength_split(strength_total=1, day_ordinal=0)   # 自重 (pull)
+    assert db["mode"] == "dumbbell"
+    assert bw["mode"] == "bodyweight"
+    assert any("ダンベル" in m for m in db["main_lifts"])
+    assert any(("懸垂" in m or "インバーテッド" in m) for m in bw["main_lifts"])
+    # 自重 push も出る (total=3 → push・自重)
+    bw_push = strength_split(strength_total=3, day_ordinal=0)
+    assert bw_push["pattern"] == "push" and bw_push["mode"] == "bodyweight"
+    assert any("腕立て" in m for m in bw_push["main_lifts"])
+
+
 def test_today_picks_strength_when_strength_deficit_larger():
     # 筋トレ0/3・有酸素3/3 → 筋トレ不足が大 → strength
     t = compute_today_training(strength_7d=0, cardio_7d=3, strength_total=0, day_ordinal=0)

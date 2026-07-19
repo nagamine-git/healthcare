@@ -25,13 +25,21 @@ CARDIO_PER_WEEK = 3
 PATTERNS = ["push", "pull", "legs"]
 PATTERN_LABEL = {"push": "押す (胸・肩・三頭)", "pull": "引く (背中・二頭)", "legs": "脚・臀"}
 
-# 各パターンの主種目 (固定・漸進)。各日の第1種目はダンベル BIG3
-# (ベンチ / スクワット / RDL) を主軸に置く。
-MAIN_LIFTS = {
+# 各パターンの主種目 (固定・漸進)。各日の第1種目は BIG3 を主軸に置く。
+# ダンベル BIG3 (ベンチ / スクワット / RDL) と 自重 BIG3 (腕立て / 懸垂 / 自重スクワット) を
+# 強度日ごとに交互ローテ (mode) して両方を定期的に回す。自重は器具ゼロの日にも対応。
+MAIN_LIFTS_DB = {
     "push": ["ダンベルベンチプレス", "ダンベルショルダープレス"],
     "pull": ["ダンベルRDL (ルーマニアンデッドリフト)", "ダンベルロー (片手)"],
     "legs": ["ダンベルゴブレットスクワット", "ダンベルランジ"],
 }
+# 自重 BIG3。懸垂バー/マシンは無い前提 → pull は机/ドア/タオルで代替する no-bar 種目。
+MAIN_LIFTS_BW = {
+    "push": ["腕立て伏せ (デクライン/ダイヤモンド/ワイド)", "パイクプッシュアップ"],
+    "pull": ["インバーテッドロー (頑丈な机の下 or ドアにタオル)", "スーパーマン (背面伸展)"],
+    "legs": ["自重スクワット (スロー/ジャンプ)", "ブルガリアン or ピストルスクワット"],
+}
+MODE_LABEL = {"dumbbell": "ダンベル BIG3", "bodyweight": "自重 BIG3"}
 
 # 補助種目 (日替わりローテで単調さ回避)。
 ACCESSORIES = {
@@ -61,11 +69,16 @@ def strength_split(*, strength_total: int, day_ordinal: int) -> dict[str, Any]:
     - day_ordinal: 日付序数 (補助/体幹のローテ用・乱数不使用で決定論)
     """
     pattern = PATTERNS[strength_total % len(PATTERNS)]
+    # ダンベル ⇄ 自重 を強度セッションごとに交互 (各パターンが DB/自重 を定期的に回る)
+    mode = "bodyweight" if strength_total % 2 else "dumbbell"
+    mains = MAIN_LIFTS_BW if mode == "bodyweight" else MAIN_LIFTS_DB
     accs = ACCESSORIES[pattern]
     return {
         "pattern": pattern,
         "label": PATTERN_LABEL[pattern],
-        "main_lifts": list(MAIN_LIFTS[pattern]),
+        "mode": mode,
+        "mode_label": MODE_LABEL[mode],
+        "main_lifts": list(mains[pattern]),
         "accessory": accs[day_ordinal % len(accs)],
         "core": CORE[day_ordinal % len(CORE)],
     }

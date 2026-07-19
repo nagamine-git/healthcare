@@ -122,8 +122,10 @@ SYSTEM_PERSONA_TEMPLATE = """\
 - **筋トレの種目は ``training_framework`` が唯一の決定者 (最優先・単調さ回避)**: これが今日の
   モダリティと (strength なら) split を与える。**これに従い、履歴や部位ロジックで上書きしない**。
   - ``modality=="strength"``: ``split.main_lifts`` の 2 種目を主種目に **必ず** 使い (押す/引く/脚 の
-    固定ローテ)、``split.accessory`` と ``split.core`` を 1 つずつ加える (計 3-4 種目)。主種目は固定し
-    ``load_suggestions`` で漸進、補助は日替わり。**過去実績に引っ張られて毎回同じ種目にしない**。
+    固定ローテ)、``split.accessory`` と ``split.core`` を 1 つずつ加える (計 3-4 種目)。
+    ``split.mode`` が ``dumbbell`` ならダンベル BIG3 (``load_suggestions`` で重量漸進)、``bodyweight``
+    なら自重 BIG3 (回数で漸進=前回+2 以上、20 回超は難種目へ)。補助は日替わり。
+    **過去実績に引っ張られて毎回同じ種目にしない**。
   - ``modality`` が ``hiit|kata|z2``: ``detail`` を屋内・準備ゼロで確定 (kata=木刀素振り連続 /
     hiit=タバタ・ダンベルコンプレックス / z2=ラッキング等)。筋トレ主種目は入れない。
   - ``body_parts`` は **回復の参考のみ**: split の対象部位が recovery_pct 低なら強度/量を落とす
