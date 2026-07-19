@@ -112,10 +112,9 @@ def get_gif(name: str) -> bytes | None:
             gif_url = data[0].get("gifUrl")
             if not gif_url:
                 return None
-            g = client.get(gif_url, headers=headers)
-            if g.status_code == 401 or g.status_code == 403:
-                # gifUrl がキー必須の版ではクエリで再試行
-                g = client.get(gif_url, params={"rapidapi-key": s.exercisedb_api_key})
+            # gifUrl は ExerciseDB の公開 CDN。**キーは付けない** (URL に秘密を載せない/
+            # 無関係ホストにヘッダで漏らさない)。認証必須の版なら取得失敗 → GIF 無しで継続。
+            g = client.get(gif_url)
             g.raise_for_status()
             gif = g.content
     except Exception as exc:  # 取得失敗は None (画面は GIF 無しで継続)
