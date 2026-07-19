@@ -85,6 +85,15 @@ export type AdviceAction = {
   intensity?: string;
   why?: string;
   exercises?: ExercisePrescription[];
+  // 代替案 (B): 主案が状況的に無理なとき用の別軸メニュー
+  alternative?: {
+    title: string;
+    intensity?: string;
+    duration_min?: number;
+    why: string; // どんな時にこちらを選ぶか
+  };
+  // 候補に挙がったが今日は採らなかった案 + 理由
+  considered?: { title: string; reason: string }[];
 };
 
 export type AdvicePayload = {

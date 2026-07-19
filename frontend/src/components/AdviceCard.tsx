@@ -201,6 +201,42 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                     {a.exercises && a.exercises.length > 0 && (
                       <ExerciseList exercises={a.exercises} />
                     )}
+                    {a.alternative && (
+                      <div className="basis-full mt-1 rounded-md border border-hairline bg-hull/50 px-2 py-1.5">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="rounded bg-panel px-1.5 py-0.5 text-[10px] font-medium text-ink-dim">
+                            代替 B
+                          </span>
+                          <span className="text-xs text-ink">{a.alternative.title}</span>
+                          {a.alternative.duration_min != null && (
+                            <span className="text-[11px] text-ink-faint">
+                              {a.alternative.duration_min} 分
+                            </span>
+                          )}
+                          {a.alternative.intensity && (
+                            <span className="text-[11px] text-ink-dim">
+                              · {a.alternative.intensity}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-ink-faint">{a.alternative.why}</p>
+                      </div>
+                    )}
+                    {a.considered && a.considered.length > 0 && (
+                      <details className="basis-full mt-0.5 text-xs text-ink-faint">
+                        <summary className="cursor-pointer select-none text-ink-dim">
+                          見送った候補 ({a.considered.length})
+                        </summary>
+                        <ul className="mt-1 space-y-0.5 pl-1">
+                          {a.considered.map((c, ci) => (
+                            <li key={ci}>
+                              <span className="text-ink-dim">{c.title}</span>
+                              <span className="text-ink-faint"> — {c.reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                     {onFeedback && (
                       <ActionFeedback
                         fb={feedback[a.title]}

@@ -1000,6 +1000,18 @@ def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
             for k in ("title", "intensity", "why", "notes"):
                 if k in a:
                     a[k] = _scrub_text(a[k])
+            alt = a.get("alternative")
+            if isinstance(alt, dict):
+                for k in ("title", "intensity", "why"):
+                    if k in alt:
+                        alt[k] = _scrub_text(alt[k])
+            considered = a.get("considered")
+            if isinstance(considered, list):
+                for c in considered:
+                    if isinstance(c, dict):
+                        for k in ("title", "reason"):
+                            if k in c:
+                                c[k] = _scrub_text(c[k])
     return payload
 
 
