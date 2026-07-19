@@ -32,6 +32,23 @@ def test_stays_when_reps_not_yet_met():
     assert s["suggested_weight_kg"] == 8.0
 
 
+def test_gross_overshoot_escalates_immediately():
+    # 8kg×23回 は目標(10)を大幅超過 = 軽すぎ。1セッションでも即昇量する
+    # (据え置いて RIR2@8-10 のような達成不能指示を出さない)
+    hist = [{"date": date(2026, 7, 6), "weight_kg": 8.0, "reps": 23}]
+    s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
+    assert s["suggested_weight_kg"] == 12.0
+    assert "大幅超過" in s["basis"]
+
+
+def test_gross_overshoot_at_max_weight_switches_to_variation():
+    # 手持ち最大(20kg)で大幅超過 → 昇量できないので難種目/テンポで強度を上げる
+    hist = [{"date": date(2026, 7, 6), "weight_kg": 20.0, "reps": 20}]
+    s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
+    assert s["suggested_weight_kg"] == 20.0
+    assert "難種目" in s["basis"] or "テンポ" in s["basis"]
+
+
 def test_deload_after_long_gap():
     hist = [{"date": date(2026, 6, 20), "weight_kg": 12.0, "reps": 10}]
     s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
