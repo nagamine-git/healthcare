@@ -34,6 +34,45 @@ def test_authorize_url_includes_client_id_and_redirect_uri(temp_data_dir):
     assert "redirect_uri=https%3A%2F%2Fhealthcare.tailcda87f.ts.net" in url
 
 
+def test_authorize_url_includes_state_when_given(temp_data_dir):
+    s = _settings(temp_data_dir)
+    url = fc.authorize_url(s, state="xyz789")
+    assert "state=xyz789" in url
+
+
+def test_authorize_url_omits_state_param_when_not_given(temp_data_dir):
+    s = _settings(temp_data_dir)
+    assert "state=" not in fc.authorize_url(s)
+
+
+def test_generate_state_is_verifiable_once(temp_data_dir):
+    s = _settings(temp_data_dir)
+    state = fc.generate_state(settings=s)
+    assert fc.verify_state(state, settings=s) is True
+    # single-use: 2回目は既に消費済みなので拒否
+    assert fc.verify_state(state, settings=s) is False
+
+
+def test_verify_state_rejects_wrong_value(temp_data_dir):
+    s = _settings(temp_data_dir)
+    fc.generate_state(settings=s)
+    assert fc.verify_state("attacker-guessed-value", settings=s) is False
+
+
+def test_verify_state_rejects_when_never_issued(temp_data_dir):
+    s = _settings(temp_data_dir)
+    assert fc.verify_state("whatever", settings=s) is False
+
+
+def test_verify_state_rejects_when_expired(temp_data_dir):
+    s = _settings(temp_data_dir)
+    state = fc.generate_state(settings=s)
+    stale = json.loads(fc._state_path(s).read_text())
+    stale["created_at"] = time.time() - fc.STATE_TTL_SECONDS - 1
+    fc._state_path(s).write_text(json.dumps(stale))
+    assert fc.verify_state(state, settings=s) is False
+
+
 def test_has_token_false_when_never_authorized(temp_data_dir):
     s = _settings(temp_data_dir)
     with patch("app.integrations.freee_client.get_settings", return_value=s):

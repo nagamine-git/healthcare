@@ -12,6 +12,7 @@ code を access/refresh token に交換して ``/data/freee_tokens/token.json`` 
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ TOKEN_URL = "https://accounts.secure.freee.co.jp/public_api/token"
 API_BASE = "https://api.freee.co.jp"
 
 TOKEN_FILENAME = "token.json"
+STATE_FILENAME = "oauth_state.json"
+STATE_TTL_SECONDS = 600  # 10分以内にコールバックが来なければ無効
 
 
 def _token_dir(settings: Settings | None = None) -> Path:
@@ -51,7 +54,7 @@ def redirect_uri(settings: Settings | None = None) -> str:
     return f"{settings.freee_redirect_base}/admin/freee/oauth/callback"
 
 
-def authorize_url(settings: Settings | None = None) -> str:
+def authorize_url(settings: Settings | None = None, *, state: str | None = None) -> str:
     settings = settings or get_settings()
     params = {
         "client_id": settings.freee_client_id,
@@ -59,7 +62,38 @@ def authorize_url(settings: Settings | None = None) -> str:
         "response_type": "code",
         "prompt": "select_company",
     }
+    if state:
+        params["state"] = state
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
+
+
+def _state_path(settings: Settings | None = None) -> Path:
+    return _token_dir(settings) / STATE_FILENAME
+
+
+def generate_state(*, settings: Settings | None = None) -> str:
+    """CSRF 対策の state を生成し検証用に一時保存する (single-use、STATE_TTL_SECONDS で失効)。"""
+    state = secrets.token_urlsafe(32)
+    p = _state_path(settings)
+    p.write_text(json.dumps({"state": state, "created_at": time.time()}))
+    p.chmod(0o600)
+    return state
+
+
+def verify_state(state: str, *, settings: Settings | None = None) -> bool:
+    """コールバックの state を検証する。成功/失敗を問わず使い切り (再利用防止のため削除)。"""
+    p = _state_path(settings)
+    if not p.exists():
+        return False
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return False
+    finally:
+        p.unlink(missing_ok=True)
+    if time.time() - data.get("created_at", 0) > STATE_TTL_SECONDS:
+        return False
+    return secrets.compare_digest(data.get("state", ""), state)
 
 
 def _save_tokens(data: dict[str, Any], *, settings: Settings | None = None) -> None:

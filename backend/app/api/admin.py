@@ -144,16 +144,23 @@ async def freee_status() -> dict[str, Any]:
 
 @router.get("/admin/freee/oauth/start")
 async def freee_oauth_start() -> RedirectResponse:
-    from app.integrations.freee_client import authorize_url
+    from app.integrations.freee_client import authorize_url, generate_state
 
-    return RedirectResponse(authorize_url())
+    state = generate_state()
+    return RedirectResponse(authorize_url(state=state))
 
 
 @router.get("/admin/freee/oauth/callback")
-async def freee_oauth_callback(code: str) -> RedirectResponse:
+async def freee_oauth_callback(code: str, state: str) -> RedirectResponse:
     from app.ingest.freee_sync import sync_corporate_finance
-    from app.integrations.freee_client import exchange_code
+    from app.integrations.freee_client import exchange_code, verify_state
 
+    # CSRF 対策: /oauth/start で発行した state と一致しなければ拒否 (使い切りで再利用不可)。
+    if not verify_state(state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不正なリクエストです (state 不一致または期限切れ)。もう一度連携をやり直してください。",
+        )
     try:
         exchange_code(code)
     except Exception as exc:

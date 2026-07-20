@@ -68,18 +68,53 @@ def test_freee_status_reports_configured(app_client):
     assert r.json() == {"configured": True}
 
 
-def test_freee_oauth_start_redirects_to_authorize_url(app_client):
+def test_freee_oauth_start_redirects_to_authorize_url_with_state(app_client):
     r = app_client.get("/admin/freee/oauth/start", follow_redirects=False)
     assert r.status_code in (302, 307)
-    assert "accounts.secure.freee.co.jp" in r.headers["location"]
+    location = r.headers["location"]
+    assert "accounts.secure.freee.co.jp" in location
+    assert "state=" in location  # CSRF対策のstateが必ず付与される
 
 
 def test_freee_oauth_callback_exchanges_code_and_syncs(app_client):
+    start = app_client.get("/admin/freee/oauth/start", follow_redirects=False)
+    state = start.headers["location"].split("state=")[1].split("&")[0]
+
     with (
         patch("app.integrations.freee_client.exchange_code") as mock_exchange,
         patch("app.ingest.freee_sync.sync_corporate_finance") as mock_sync,
     ):
-        r = app_client.get("/admin/freee/oauth/callback", params={"code": "abc"}, follow_redirects=False)
+        r = app_client.get(
+            "/admin/freee/oauth/callback", params={"code": "abc", "state": state}, follow_redirects=False,
+        )
     assert r.status_code in (302, 307)
     mock_exchange.assert_called_once_with("abc")
     mock_sync.assert_called_once()
+
+
+def test_freee_oauth_callback_rejects_missing_state(app_client):
+    with patch("app.integrations.freee_client.exchange_code") as mock_exchange:
+        r = app_client.get(
+            "/admin/freee/oauth/callback", params={"code": "abc", "state": "not-issued"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 400
+    mock_exchange.assert_not_called()
+
+
+def test_freee_oauth_callback_rejects_reused_state(app_client):
+    start = app_client.get("/admin/freee/oauth/start", follow_redirects=False)
+    state = start.headers["location"].split("state=")[1].split("&")[0]
+
+    with (
+        patch("app.integrations.freee_client.exchange_code"),
+        patch("app.ingest.freee_sync.sync_corporate_finance"),
+    ):
+        first = app_client.get(
+            "/admin/freee/oauth/callback", params={"code": "abc", "state": state}, follow_redirects=False,
+        )
+        second = app_client.get(
+            "/admin/freee/oauth/callback", params={"code": "abc", "state": state}, follow_redirects=False,
+        )
+    assert first.status_code in (302, 307)
+    assert second.status_code == 400  # 使い切り (リプレイ攻撃対策)
