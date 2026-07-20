@@ -137,6 +137,33 @@ def test_compute_corporate_finance_headline_and_leverage_bad(db_engine):
     assert result["leverage"] == "bad"
 
 
+def test_compute_corporate_finance_wealth_index_score_and_goal(db_engine):
+    # gross=net=2,000,000 → wealth_index=2,000,000。既定target=5,000,000 → score=40, goal=50
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=2000000, total_liabilities_jpy=0,
+            net_assets_jpy=2000000, ytd_net_income_jpy=50000,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["wealth_index"] == 2000000.0
+    assert result["score"] == 40.0
+    assert result["goal"] == 50.0
+
+
+def test_compute_corporate_finance_wealth_index_none_when_insolvent(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=1000000, total_liabilities_jpy=1500000,
+            net_assets_jpy=-500000, ytd_net_income_jpy=-800000,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["wealth_index"] is None
+    assert result["score"] is None
+    assert result["goal"] is None
+
+
 def test_compute_corporate_finance_leverage_good_when_low_debt(db_engine):
     with session_scope() as session:
         session.add(CorporateFinanceSnapshot(

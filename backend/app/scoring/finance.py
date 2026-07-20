@@ -424,6 +424,7 @@ def compute_advisor(
         min_savings_rate=s.finance_min_savings_rate,
         housing_burden_ratio=s.finance_housing_burden_ratio,
         expense_concentration_ratio=s.finance_expense_concentration_ratio,
+        net_worth_target=s.finance_net_worth_target_jpy,
     )
 
 

@@ -16,7 +16,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models.health import CorporateFinanceSnapshot
+from app.scoring.achievement import upper_achievement
 
 
 def parse_trial_bs(trial_bs: dict[str, Any]) -> dict[str, Any]:
@@ -120,12 +122,22 @@ def _leverage(debt: float, net_assets: float | None) -> str:
     return "good"
 
 
-def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
+GOAL_STRETCH_POINTS = 10.0  # 個人の finance_advisor と同じ: 目標 = 現在スコア + この点数
+
+
+def compute_corporate_finance(
+    session: Session, *, wealth_index_target: float | None = None,
+) -> dict[str, Any] | None:
     """最新スナップショット + 「なんで増えない/減ってる」診断 + 優先順位つき最善手。
 
-    個人の finance_advisor.build_advisor と同じ設計 (看板指標=総資産×純資産、
-    診断、moves を priority 降順で返す)。取込がまだ無ければ None。
+    個人の finance_advisor.build_advisor と同じ設計 (看板=√(総資産×純資産) のマイルストーン
+    達成度をスコア化、目標=スコア+10点、診断、moves を priority 降順で返す)。
+    取込がまだ無ければ None。
     """
+    target = (
+        wealth_index_target if wealth_index_target is not None
+        else get_settings().finance_corporate_wealth_index_target_jpy
+    )
     rows = list(
         session.execute(
             select(CorporateFinanceSnapshot).order_by(CorporateFinanceSnapshot.date.desc()).limit(2)
@@ -140,6 +152,11 @@ def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
     net_assets = latest.net_assets_jpy
     leverage = _leverage(debt, net_assets)
     insolvent = net_assets is not None and net_assets <= 0
+
+    # 看板の「数字」は √(総資産×純資産) (個人の finance_advisor と同じ考え方)。
+    wealth_index = (gross * net_assets) ** 0.5 if gross > 0 and net_assets and net_assets > 0 else None
+    score = upper_achievement(wealth_index, 0.0, target) if wealth_index is not None else None
+    goal = min(100.0, score + GOAL_STRETCH_POINTS) if score is not None else None
 
     diagnosis: list[dict[str, Any]] = []
     moves: list[dict[str, Any]] = []
@@ -233,6 +250,9 @@ def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
         "operating_income_jpy": _r(latest.operating_income_jpy),
         "top_expense_categories": top_expenses,
         "headline": gross * net_assets if net_assets is not None else None,
+        "wealth_index": wealth_index,
+        "score": score,
+        "goal": goal,
         "leverage": leverage,
         "diagnosis": diagnosis,
         "moves": moves,

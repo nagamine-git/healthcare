@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     finance_net_worth_target_jpy: float = 10_000_000   # 純資産マイルストーン「1000万」(目標)
     finance_savings_rate_median_pct: float = 20.0      # 家計貯蓄率の目安(推定)
     finance_savings_rate_target_pct: float = 25.0      # 良好な貯蓄率(目標)
+    # 法人版 √(総資産×純資産) のマイルストーン (個人の1000万よりずっと小さい事業規模を想定)
+    finance_corporate_wealth_index_target_jpy: float = 5_000_000
 
     # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
     # トレーニング習熟度 (beginner/intermediate/advanced)。実績が無い種目の初期重量係数に使う

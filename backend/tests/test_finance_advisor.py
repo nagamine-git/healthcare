@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.scoring.finance_advisor import AdvisorInputs, build_advisor
 
 
@@ -29,6 +31,41 @@ def test_headline_is_gross_times_net():
     assert res["gross"] == 1000.0
     assert res["net"] == 600.0  # gross - debt
     assert res["headline"] == 1000.0 * 600.0
+
+
+def test_wealth_index_is_sqrt_of_gross_times_net():
+    # gross=2,656,669 / net=2,039,203 (実データ相当) → wealth_index ≈ 2,327,700
+    res = build_advisor(_inp(gross=2_656_669.0, debt=2_656_669.0 - 2_039_203.0))
+    assert res["wealth_index"] == pytest.approx((2_656_669.0 * 2_039_203.0) ** 0.5, rel=1e-6)
+
+
+def test_wealth_index_none_when_net_not_positive():
+    res = build_advisor(_inp(gross=1000.0, debt=1000.0))  # net=0
+    assert res["wealth_index"] is None
+    assert res["score"] is None
+    assert res["goal"] is None
+
+
+def test_score_is_wealth_index_achievement_against_target():
+    # target=10,000,000 (既定)。wealth_index=2,000,000 → score=20
+    res = build_advisor(
+        _inp(gross=2_000_000.0, debt=0.0), net_worth_target=10_000_000.0,
+    )
+    assert res["wealth_index"] == 2_000_000.0  # gross=net (debt=0) → sqrt(g*g)=g
+    assert res["score"] == 20.0
+
+
+def test_score_clamped_at_100_when_wealth_index_exceeds_target():
+    res = build_advisor(_inp(gross=20_000_000.0, debt=0.0), net_worth_target=10_000_000.0)
+    assert res["score"] == 100.0
+
+
+def test_goal_is_score_plus_ten_capped_at_100():
+    res = build_advisor(_inp(gross=2_000_000.0, debt=0.0), net_worth_target=10_000_000.0)
+    assert res["goal"] == 30.0
+    res2 = build_advisor(_inp(gross=9_500_000.0, debt=0.0), net_worth_target=10_000_000.0)
+    assert res2["score"] == 95.0
+    assert res2["goal"] == 100.0  # 95+10=105 → 100にクランプ
 
 
 def test_leverage_none_when_no_debt():

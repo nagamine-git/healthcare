@@ -14,12 +14,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.scoring.achievement import upper_achievement
+
 # 既定閾値(config.py の personal 値。DB ラッパが settings から上書きして渡す)
 GOOD_DEBT_MAX_RATE = 3.0     # %以下=低利=良い借金候補
 BAD_DEBT_MIN_RATE = 7.0      # %以上=高利=悪い借金(先に返済)
 MIN_SAVINGS_RATE = 0.15      # 貯蓄率の下限目安
 HOUSING_BURDEN_RATIO = 0.30  # 住居費/収入 が重い閾値
 EXPENSE_CONCENTRATION_RATIO = 0.30  # 1カテゴリが月支出のこの割合超で指摘 (法人の同名診断と同基準)
+NET_WORTH_TARGET_JPY = 10_000_000  # √(総資産×純資産) のマイルストーン (atlas.py の economy 分岐と同じ値)
+GOAL_STRETCH_POINTS = 10.0  # 目標 = 現在スコア + この点数 (今日ちょっと頑張れば届く水準)
 
 
 @dataclass
@@ -69,6 +73,7 @@ def build_advisor(
     min_savings_rate: float = MIN_SAVINGS_RATE,
     housing_burden_ratio: float = HOUSING_BURDEN_RATIO,
     expense_concentration_ratio: float = EXPENSE_CONCENTRATION_RATIO,
+    net_worth_target: float = NET_WORTH_TARGET_JPY,
 ) -> dict[str, Any]:
     """看板指標 + 診断 + 優先順位つき最善手を返す純関数。"""
     gross = inp.gross
@@ -77,9 +82,18 @@ def build_advisor(
     leverage = _leverage(debt, inp.debt_rate_pct, good_rate, bad_rate)
     has_data = gross > 0 or debt > 0 or inp.avg_income is not None
 
+    # 看板の「数字」は √(総資産×純資産) (単位=円で読める幾何平均。gross×net だと円²で
+    # 読めない)。atlas.py の economy 分岐と同じ考え方 — score はこれをマイルストーン
+    # (net_worth_target) に対する達成度 (0-100) にする。
+    wealth_index = (gross * net) ** 0.5 if gross > 0 and net > 0 else None
+    score = upper_achievement(wealth_index, 0.0, net_worth_target) if wealth_index is not None else None
+    goal = min(100.0, score + GOAL_STRETCH_POINTS) if score is not None else None
+
     base: dict[str, Any] = {
         "gross": gross, "debt": debt, "net": net,
-        "headline": gross * net, "leverage": leverage,
+        "headline": gross * net, "wealth_index": wealth_index,
+        "score": score, "goal": goal,
+        "leverage": leverage,
         "has_data": has_data, "diagnosis": [], "moves": [],
     }
     if not has_data:
