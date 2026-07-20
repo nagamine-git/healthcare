@@ -85,7 +85,7 @@ async def extract_assets(*, image_b64: str, media_type: str = "image/png") -> li
 
 _FIN_SYSTEM = """\
 あなたは MoneyForward 等の家計/資産管理アプリのスクリーンショットを読み取る専門家です。
-画面がどの種類でも(資産一覧 / 負債 / 家計簿=月の収支)、**見えているものだけ**を抽出します。
+画面がどの種類でも(資産一覧 / 負債 / 家計簿=月の収支 / 予算)、**見えているものだけ**を抽出します。
 
 # 抽出対象
 - assets: 資産の種別ごと残高(預金/株式/投資信託/暗号資産/年金/ポイント/不動産 等)。
@@ -95,6 +95,11 @@ _FIN_SYSTEM = """\
   『口座①』『口座②』等の連番で捏造しないこと**。区分不明なら銘柄名のみで(同名2件のまま)返す。
 - debts: 負債(住宅ローン/カードローン/クレジットカード残高/奨学金 等)の name と value(円)。
 - income_monthly / expense_monthly: 家計簿画面に「今月の収入/支出」があれば、その月額(円)。
+- budget_variable_remaining_jpy: 「予算」画面の**変動費**の「残り」金額(円)。固定費の残りは
+  対象外(固定費は毎月ほぼ一定で衝動買い抑制の判断には使わないため)。「全体」の残りしか
+  見えない場合は出さない(変動費だけの内訳が必要)。
+- budget_days_remaining: 同じ画面の「あと◯日」(今月の残り日数)。
+- budget_confidence: 上記2項目セットの確度 (high/medium/low)。
 
 # 確度 (confidence)
 - 各項目に high/medium/low を付ける。数字がくっきり読め種別も明確 = high。
@@ -103,13 +108,13 @@ _FIN_SYSTEM = """\
 
 # 注意
 - 合計・前日比・グラフ・ナビ等、内訳でないものは出さない。value は円の整数(カンマ/¥除く)。
-- 画面に無い種類は空にする(資産だけの画面なら debts は空、収支は null)。
+- 画面に無い種類は空/null にする(資産だけの画面なら debts は空、予算画面でなければ budget_* は null)。
 必ず submit_finance ツールで返すこと。
 """
 
 _FIN_TOOL: dict[str, Any] = {
     "name": "submit_finance",
-    "description": "スクショから資産/負債/月次収支を確度つきで返す。",
+    "description": "スクショから資産/負債/月次収支/予算残りを確度つきで返す。",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -122,6 +127,9 @@ _FIN_TOOL: dict[str, Any] = {
             "income_monthly": {"type": ["number", "null"]},
             "expense_monthly": {"type": ["number", "null"]},
             "flow_confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+            "budget_variable_remaining_jpy": {"type": ["number", "null"]},
+            "budget_days_remaining": {"type": ["number", "null"]},
+            "budget_confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         },
     },
 }
@@ -163,5 +171,8 @@ async def extract_finance(*, image_b64: str, media_type: str = "image/png") -> d
                     "income_monthly": inp.get("income_monthly"),
                     "expense_monthly": inp.get("expense_monthly"),
                     "flow_confidence": inp.get("flow_confidence") or "low",
+                    "budget_variable_remaining_jpy": inp.get("budget_variable_remaining_jpy"),
+                    "budget_days_remaining": inp.get("budget_days_remaining"),
+                    "budget_confidence": inp.get("budget_confidence") or "low",
                 }
     return None

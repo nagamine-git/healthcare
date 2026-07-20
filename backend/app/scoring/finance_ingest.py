@@ -48,6 +48,7 @@ def consolidate_finance_ocr(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     committed: dict[str, Any] = {
         "assets": [], "debts": [], "income_monthly": None, "expense_monthly": None,
+        "budget_variable_remaining_jpy": None, "budget_days_remaining": None,
     }
     skipped: list[dict[str, Any]] = []
 
@@ -79,5 +80,19 @@ def consolidate_finance_ocr(results: list[dict[str, Any]]) -> dict[str, Any]:
                 skipped.append({"type": "income", "value": inc, "confidence": conf})
             if exp is not None:
                 skipped.append({"type": "expense", "value": exp, "confidence": conf})
+
+    # 予算(変動費の残り/残り日数): 各画像のうち最高確度のものを採用
+    budget = [r for r in results if r.get("budget_variable_remaining_jpy") is not None]
+    if budget:
+        best = max(budget, key=lambda r: _CONF.get(r.get("budget_confidence"), 0))
+        conf = best.get("budget_confidence") or "low"
+        remaining, days = best.get("budget_variable_remaining_jpy"), best.get("budget_days_remaining")
+        if conf == "high":
+            committed["budget_variable_remaining_jpy"] = remaining
+            committed["budget_days_remaining"] = days
+        else:
+            skipped.append({
+                "type": "budget", "value": remaining, "days_remaining": days, "confidence": conf,
+            })
 
     return {"committed": committed, "skipped": skipped}

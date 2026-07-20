@@ -665,8 +665,10 @@ function MFScreenshotImport() {
     <Panel>
       <h2 className="text-sm font-semibold text-ink">MoneyForward スクショ取込</h2>
       <p className="mt-0.5 text-[11px] text-ink-faint">
-        資産・負債・月の収支、どの画面でもまとめて選択。中身を読み取り、重複を消し、
+        資産・負債・月の収支・<strong className="text-ink-dim">予算(変動費の残り)</strong>、
+        どの画面でもまとめて選択。中身を読み取り、重複を消し、
         <strong className="text-ink-dim">確度が高いものだけ</strong>自動で入れます(低いものは要確認で保留)。
+        予算画面は「今日はいくらまで使っていいか」の日次目安にリアルタイムで反映されます。
       </p>
       <label className="mt-2 inline-block cursor-pointer rounded-lg bg-prog-700 px-3 py-1.5 text-xs text-void hover:bg-prog-500">
         {mut.isPending ? "読取中…" : "スクショを選ぶ(複数可)"}
@@ -691,7 +693,16 @@ function MFScreenshotImport() {
             入りました — 資産{summary.entered.assets}件 / 負債{summary.entered.debts}件
             {summary.entered.income != null && ` / 月収入 ${yen(summary.entered.income)}`}
             {summary.entered.expense != null && ` / 月支出 ${yen(summary.entered.expense)}`}
+            {summary.entered.budget != null &&
+              ` / 予算残り ${yen(summary.entered.budget.remaining_jpy)}`
+              + (summary.entered.budget.days_remaining != null
+                ? `(あと${summary.entered.budget.days_remaining}日)` : "")}
           </p>
+          {summary.entered.budget != null && (
+            <p className="text-ink-faint">
+              → 今日の「いまコレ」の衝動買い閾値がこの予算残りを元に計算されます。
+            </p>
+          )}
           {summary.skipped.length > 0 && (
             <div className="text-ink-faint">
               要確認(確度が低め・自動では入れていません):
@@ -699,7 +710,9 @@ function MFScreenshotImport() {
                 {summary.skipped.map((s, i) => (
                   <li key={i}>
                     {s.type}
-                    {s.name ? `「${s.name}」` : ""} {yen(s.value)}（{s.confidence}）
+                    {s.name ? `「${s.name}」` : ""} {yen(s.value)}
+                    {s.days_remaining != null && `・あと${s.days_remaining}日`}
+                    （{s.confidence}）
                   </li>
                 ))}
               </ul>

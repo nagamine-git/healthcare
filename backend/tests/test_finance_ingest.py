@@ -71,3 +71,35 @@ def test_empty_input():
     assert out["committed"]["assets"] == [] and out["committed"]["debts"] == []
     assert out["committed"]["income_monthly"] is None
     assert out["skipped"] == []
+    assert out["committed"]["budget_variable_remaining_jpy"] is None
+    assert out["committed"]["budget_days_remaining"] is None
+
+
+def test_budget_high_confidence_committed():
+    results = [{
+        "budget_variable_remaining_jpy": 13172, "budget_days_remaining": 12,
+        "budget_confidence": "high",
+    }]
+    out = consolidate_finance_ocr(results)
+    assert out["committed"]["budget_variable_remaining_jpy"] == 13172
+    assert out["committed"]["budget_days_remaining"] == 12
+
+
+def test_budget_medium_confidence_skipped():
+    results = [{
+        "budget_variable_remaining_jpy": 13172, "budget_days_remaining": 12,
+        "budget_confidence": "medium",
+    }]
+    out = consolidate_finance_ocr(results)
+    assert out["committed"]["budget_variable_remaining_jpy"] is None
+    assert {s["type"] for s in out["skipped"]} == {"budget"}
+
+
+def test_budget_picks_highest_confidence_across_images():
+    results = [
+        {"budget_variable_remaining_jpy": 1000, "budget_days_remaining": 20, "budget_confidence": "low"},
+        {"budget_variable_remaining_jpy": 13172, "budget_days_remaining": 12, "budget_confidence": "high"},
+    ]
+    out = consolidate_finance_ocr(results)
+    assert out["committed"]["budget_variable_remaining_jpy"] == 13172
+    assert out["committed"]["budget_days_remaining"] == 12

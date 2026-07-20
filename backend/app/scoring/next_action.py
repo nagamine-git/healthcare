@@ -124,14 +124,38 @@ def _parse_hhmm(s: str | None, base: date_type) -> datetime | None:
 def _dynamic_impulse_hold(session: Any) -> tuple[int, str] | None:
     """衝動買い保留の閾値を実データから 1 円単位で算出する。返り値 = (円, 根拠ラベル)。
 
-    衝動買いは **変動費 (裁量支出)** の話なので、固定費 (家賃・光熱・通信・保険・サブスク等)
-    を除いた「1 日あたり裁量予算」を閾値にする:
+    MoneyForward「予算」画面スクショの実残高スナップショット (今月の変動費残り/残り日数) が
+    あれば最優先で使う (月次平均より実態に即したリアルタイムの値になる)。スクショは撮影
+    時点の静的な値なので、撮影日からの経過日数ぶん残り日数を老化 (aged) させて再計算する。
+    月をまたいだ/経過日数が残り日数を超えた (=もう月末想定) 場合は無視し、下の平均ベースに
+    フォールバックする。
+
+    平均ベースは、衝動買いは **変動費 (裁量支出)** の話なので、固定費 (家賃・光熱・通信・
+    保険・サブスク等) を除いた「1 日あたり裁量予算」を閾値にする:
         月収 ×(1−貯蓄率目標) − 固定費 = 月あたり裁量予算 → ÷30 で 1 日あたり。
     月収/貯蓄目標が無ければ実際の変動費 ÷30、それも無ければ月支出 ÷30 で代替。
     """
-    from app.scoring.finance import compute_cashflow, compute_rebalance
+    from app.scoring.finance import compute_cashflow, compute_rebalance, get_state
+    from app.scoring.timewindow import app_today
 
     s = get_settings()
+
+    st = get_state(session)
+    if (
+        st.budget_variable_remaining_jpy is not None
+        and st.budget_days_remaining is not None
+        and st.budget_captured_at is not None
+        and st.budget_period_month == app_today().strftime("%Y-%m")
+    ):
+        elapsed_days = (app_today() - st.budget_captured_at.date()).days
+        aged_days = st.budget_days_remaining - elapsed_days
+        if aged_days >= 1:
+            per_day = st.budget_variable_remaining_jpy / aged_days
+            return (
+                max(500, round(per_day)),
+                f"今月の変動費予算残り÷残り{aged_days}日 (MoneyForward予算画面)",
+            )
+
     try:
         reb = compute_rebalance(session)
         cf = compute_cashflow(session, reb.get("total") or 0.0)

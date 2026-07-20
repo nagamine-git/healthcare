@@ -858,6 +858,14 @@ class FinanceState(Base):
     reserve_months: Mapped[int] = mapped_column(Integer, default=6)  # 防衛資金=月支出×この月数
     wage_jpy_per_h: Mapped[float] = mapped_column(Float, default=2000.0)  # 時間削減の換算時給
     risk_tolerance: Mapped[int] = mapped_column(Integer, default=3)  # 1(保守)〜7(積極)
+    # MoneyForward「予算」画面のスクショ由来スナップショット (衝動買い閾値をリアルタイム化)。
+    # 撮影時点の値なのでその後の支出は反映されない — budget_captured_at からの経過日数で
+    # budget_days_remaining を減算補正し、月をまたいだ/古すぎるスナップショットは
+    # 呼び出し側 (next_action._dynamic_impulse_hold) が無視して従来の平均ベース計算に戻す。
+    budget_variable_remaining_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    budget_days_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    budget_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    budget_period_month: Mapped[str | None] = mapped_column(String(7), nullable=True)  # "YYYY-MM"
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

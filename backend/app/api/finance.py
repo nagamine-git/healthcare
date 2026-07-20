@@ -6,6 +6,7 @@ import csv
 import io
 import re
 from datetime import date as date_type
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -24,6 +25,7 @@ from app.scoring.finance import (
     get_state,
     life_profile_to_dict,
 )
+from app.scoring.timewindow import app_today
 
 router = APIRouter()
 
@@ -421,12 +423,14 @@ async def import_screenshots(body: ScreenshotsIn) -> dict[str, Any]:
             results.append(got)
     con = consolidate_finance_ocr(results)
     c = con["committed"]
-    if not (c["assets"] or c["debts"] or c["income_monthly"] is not None or c["expense_monthly"] is not None):
+    has_budget = c["budget_variable_remaining_jpy"] is not None
+    if not (c["assets"] or c["debts"] or c["income_monthly"] is not None
+            or c["expense_monthly"] is not None or has_budget):
         raise HTTPException(
             status_code=422,
             detail="確度の高い項目を読み取れませんでした(LLM 未設定/読取不可/低確度の可能性)",
         )
-    entered: dict[str, Any] = {"assets": 0, "debts": 0, "income": None, "expense": None}
+    entered: dict[str, Any] = {"assets": 0, "debts": 0, "income": None, "expense": None, "budget": None}
     with session_scope() as session:
         # 資産
         if c["assets"]:
@@ -456,6 +460,19 @@ async def import_screenshots(body: ScreenshotsIn) -> dict[str, Any]:
         if c["expense_monthly"] is not None:
             lp.monthly_expense_jpy = float(c["expense_monthly"])
             entered["expense"] = lp.monthly_expense_jpy
+        # 予算(変動費残り/残り日数) → FinanceState (撮影時刻を記録し、以後は経過日数で老化させる)
+        if has_budget:
+            st = get_state(session)
+            st.budget_variable_remaining_jpy = float(c["budget_variable_remaining_jpy"])
+            st.budget_days_remaining = (
+                int(c["budget_days_remaining"]) if c["budget_days_remaining"] is not None else None
+            )
+            st.budget_captured_at = datetime.utcnow()
+            st.budget_period_month = app_today().strftime("%Y-%m")
+            entered["budget"] = {
+                "remaining_jpy": st.budget_variable_remaining_jpy,
+                "days_remaining": st.budget_days_remaining,
+            }
         session.flush()
         result = compute_finance(session)
     result["import_summary"] = {"entered": entered, "skipped": con["skipped"]}

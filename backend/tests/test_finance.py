@@ -444,6 +444,33 @@ def test_import_screenshots_routes_and_confidence(app_client, monkeypatch):
     assert body["profile"]["monthly_income_jpy"] == 500_000
 
 
+def test_import_screenshots_stores_budget_snapshot(app_client, monkeypatch):
+    import app.api.finance as fin
+    from app.scoring.timewindow import app_today
+
+    async def fake(*, image_b64, media_type="image/png"):
+        return {
+            "assets": [], "debts": [], "income_monthly": None, "expense_monthly": None,
+            "flow_confidence": "low",
+            "budget_variable_remaining_jpy": 13172, "budget_days_remaining": 12,
+            "budget_confidence": "high",
+        }
+    monkeypatch.setattr(fin, "extract_finance", fake)
+
+    r = app_client.post("/api/finance/import-screenshots",
+                        json={"images": [{"image_base64": "x", "media_type": "image/png"}]})
+    assert r.status_code == 200
+    entered = r.json()["import_summary"]["entered"]
+    assert entered["budget"] == {"remaining_jpy": 13172.0, "days_remaining": 12}
+
+    with session_scope() as session:
+        st = get_state(session)
+        assert st.budget_variable_remaining_jpy == 13172
+        assert st.budget_days_remaining == 12
+        assert st.budget_period_month == app_today().strftime("%Y-%m")
+        assert st.budget_captured_at is not None
+
+
 def test_advisor_uses_profile_income_expense_fallback(db_engine):
     from app.scoring.finance import get_life_profile
 

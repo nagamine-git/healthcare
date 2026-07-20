@@ -1521,8 +1521,11 @@ export type FinanceResponse = {
   advisor: FinanceAdvisor;
   profile: LifeProfile;
   import_summary?: {
-    entered: { assets: number; debts: number; income: number | null; expense: number | null };
-    skipped: { type: string; name?: string; value: number; confidence: string }[];
+    entered: {
+      assets: number; debts: number; income: number | null; expense: number | null;
+      budget: { remaining_jpy: number; days_remaining: number | null } | null;
+    };
+    skipped: { type: string; name?: string; value: number; days_remaining?: number | null; confidence: string }[];
   };
 };
 export type FinanceAdvisor = {
