@@ -740,47 +740,97 @@ function CorporateFinancePanel() {
   }
 
   const d: CorporateFinanceData | null = q.data.data;
+  if (!d) {
+    return (
+      <Panel title="法人 (freee)">
+        <p className="text-xs text-ink-faint">連携済みですが、まだ同期していません。</p>
+        <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
+          {sync.isPending ? "同期中…" : "今すぐ同期"}
+        </Button>
+      </Panel>
+    );
+  }
+
+  const lev = LEVERAGE[d.leverage] ?? LEVERAGE.none;
   return (
-    <Panel title={`法人 (${d?.company_name ?? "freee"})`}>
-      <p className="text-[11px] text-ink-faint">個人の純資産とは合算していません(別枠の参考値)。</p>
-      {d ? (
-        <>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-            <div>
-              <div className="telemetry-label">総資産</div>
-              <div className="telemetry-num text-ink">{yenK(d.total_assets_jpy)}</div>
-            </div>
-            <div>
-              <div className="telemetry-label">純資産</div>
-              <div className="telemetry-num text-prog-300">{yenK(d.net_assets_jpy)}</div>
-            </div>
-            <div>
-              <div className="telemetry-label">当期純損益</div>
-              <div className={`telemetry-num ${(d.ytd_net_income_jpy ?? 0) >= 0 ? "text-prog-300" : "text-risk"}`}>
-                {yenK(d.ytd_net_income_jpy)}
-              </div>
+    <Panel>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-ink">法人の最善手 ({d.company_name ?? "freee"})</h2>
+        {d.leverage !== "none" && (
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${lev.cls}`}>{lev.label}</span>
+        )}
+      </div>
+      <p className="mt-0.5 text-[10px] text-ink-faint">個人の純資産とは合算していません(別枠の参考値)。</p>
+
+      {/* 看板: 総資産 × 純資産 */}
+      <div className="mt-2 rounded-xl bg-void/40 p-3">
+        <div className="text-[10px] uppercase tracking-wider text-ink-faint">看板指標 — 総資産 × 純資産を増やす</div>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <div>
+            <div className="text-[10px] text-ink-faint">総資産</div>
+            <div className="text-lg font-semibold tabular-nums text-ink">{yenK(d.total_assets_jpy)}</div>
+          </div>
+          <span className="text-ink-faint">×</span>
+          <div>
+            <div className="text-[10px] text-ink-faint">純資産(=総資産−負債)</div>
+            <div className={`text-lg font-semibold tabular-nums ${(d.net_assets_jpy ?? 0) < 0 ? "text-risk" : "text-ink"}`}>
+              {yenK(d.net_assets_jpy)}
             </div>
           </div>
-          {d.diagnosis.length > 0 && (
-            <ul className="mt-2 space-y-1 text-[11px] text-act-300">
-              {d.diagnosis.map((x) => <li key={x.key}>▲ {x.text}</li>)}
-            </ul>
-          )}
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-[10px] text-ink-faint">最終同期 {d.date}</span>
-            <Button variant="subtle" onClick={() => sync.mutate()} disabled={sync.isPending}>
-              {sync.isPending ? "同期中…" : "再同期"}
-            </Button>
+          <div>
+            <div className="text-[10px] text-ink-faint">当期純損益</div>
+            <div className={`text-lg font-semibold tabular-nums ${(d.ytd_net_income_jpy ?? 0) >= 0 ? "text-prog-300" : "text-risk"}`}>
+              {yenK(d.ytd_net_income_jpy)}
+            </div>
           </div>
-        </>
-      ) : (
-        <div className="mt-2 space-y-2">
-          <p className="text-xs text-ink-faint">連携済みですが、まだ同期していません。</p>
-          <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
-            {sync.isPending ? "同期中…" : "今すぐ同期"}
-          </Button>
+        </div>
+        {lev.note && <div className={`mt-1 text-[10px] ${lev.cls}`}>{lev.note}</div>}
+        {d.net_assets_change_jpy != null && (
+          <div className={`mt-1 text-[10px] ${d.net_assets_change_jpy >= 0 ? "text-prog-300" : "text-risk"}`}>
+            前回同期比 {d.net_assets_change_jpy >= 0 ? "+" : ""}{yenK(d.net_assets_change_jpy)}
+          </div>
+        )}
+      </div>
+
+      {/* 診断: なんで増えない/減ってる */}
+      {d.diagnosis.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">なんで増えない</div>
+          <ul className="mt-1 space-y-1">
+            {d.diagnosis.map((x) => (
+              <li key={x.key} className="flex gap-1.5 text-[12px] text-ink-dim">
+                <span className="text-risk">▲</span>
+                <span className="min-w-0 flex-1">{x.text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
+
+      {/* 最善手: 優先順位つき */}
+      {d.moves.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">いまの最善手(優先順)</div>
+          <ol className="mt-1 space-y-1.5">
+            {d.moves.map((m, i) => (
+              <li key={m.kind} className="flex gap-2 rounded-lg bg-void/30 p-2">
+                <span className="text-[12px] font-bold text-act-300">{i + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-medium text-ink">{m.text}</div>
+                  <div className="text-[10px] text-ink-faint">{m.why}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <span className="text-[10px] text-ink-faint">最終同期 {d.date} / 現金 {yenK(d.cash_jpy)}</span>
+        <Button variant="subtle" onClick={() => sync.mutate()} disabled={sync.isPending}>
+          {sync.isPending ? "同期中…" : "再同期"}
+        </Button>
+      </div>
     </Panel>
   );
 }

@@ -50,8 +50,33 @@ def _r(v: float | None) -> float | None:
     return None if v is None else round(float(v))
 
 
+# 負債/純資産比率のしきい値 (個人の debt_rate_pct と違い freee は金利を返さないので、
+# レバレッジの良否は自己資本比率の代理指標として debt/net_assets 比で判定する)。
+_LEVERAGE_BAD_RATIO = 3.0
+_LEVERAGE_CAUTION_RATIO = 1.5
+
+
+def _leverage(debt: float, net_assets: float | None) -> str:
+    if net_assets is not None and net_assets <= 0:
+        return "bad"  # 債務超過
+    if debt <= 0:
+        return "none"
+    if net_assets is None:
+        return "caution"  # 純資産不明ではレバレッジの良否を判定できない
+    ratio = debt / net_assets
+    if ratio > _LEVERAGE_BAD_RATIO:
+        return "bad"
+    if ratio > _LEVERAGE_CAUTION_RATIO:
+        return "caution"
+    return "good"
+
+
 def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
-    """最新スナップショット + 診断。取込がまだ無ければ None。"""
+    """最新スナップショット + 「なんで増えない/減ってる」診断 + 優先順位つき最善手。
+
+    個人の finance_advisor.build_advisor と同じ設計 (看板指標=総資産×純資産、
+    診断、moves を priority 降順で返す)。取込がまだ無ければ None。
+    """
     rows = list(
         session.execute(
             select(CorporateFinanceSnapshot).order_by(CorporateFinanceSnapshot.date.desc()).limit(2)
@@ -61,37 +86,73 @@ def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
         return None
     latest, prev = rows[0], (rows[1] if len(rows) > 1 else None)
 
+    gross = latest.total_assets_jpy or 0.0
+    debt = latest.total_liabilities_jpy or 0.0
+    net_assets = latest.net_assets_jpy
+    leverage = _leverage(debt, net_assets)
+    insolvent = net_assets is not None and net_assets <= 0
+
     diagnosis: list[dict[str, Any]] = []
+    moves: list[dict[str, Any]] = []
+
+    if insolvent:
+        diagnosis.append({
+            "key": "insolvent",
+            "text": f"純資産がマイナス ({_r(net_assets):,}円)。債務超過の状態",
+        })
+        moves.append({
+            "priority": 95, "kind": "capital",
+            "text": "資本増強か負債圧縮を最優先で検討する",
+            "why": "債務超過は財務的に最も危険な状態。放置すると倒産リスクに直結する",
+        })
+    elif leverage == "bad":
+        ratio = debt / net_assets if net_assets else 0.0
+        diagnosis.append({
+            "key": "leverage",
+            "text": f"負債が純資産の{ratio:.1f}倍。借入金利が事業の利益率を超えていないか確認",
+        })
+        moves.append({
+            "priority": 80, "kind": "leverage",
+            "text": "借入の返済ペースを上げるか借り換えを検討する",
+            "why": "高レバレッジは金利上昇や業績悪化時の耐性を弱める",
+        })
+
     if latest.ytd_net_income_jpy is not None and latest.ytd_net_income_jpy < 0:
         diagnosis.append({
             "key": "deficit",
             "text": f"今期は赤字進行中 (当期純損益 {_r(latest.ytd_net_income_jpy):,}円)。"
                     "売上を増やすか経費を見直す",
         })
-    if (
-        latest.total_liabilities_jpy is not None
-        and latest.net_assets_jpy is not None
-        and latest.net_assets_jpy > 0
-        and latest.total_liabilities_jpy > latest.net_assets_jpy * 3
-    ):
-        diagnosis.append({
-            "key": "leverage",
-            "text": f"負債が純資産の{latest.total_liabilities_jpy / latest.net_assets_jpy:.1f}倍。"
-                    "借入金利が事業の利益率を超えていないか確認",
+        moves.append({
+            "priority": 75, "kind": "deficit",
+            "text": "売上を増やすか固定費(人件費・外注費等)を見直す",
+            "why": "当期純損益がマイナスのままだと純資産は毎期削られ続ける",
         })
 
-    result: dict[str, Any] = {
+    net_assets_change: float | None = None
+    if prev is not None and latest.net_assets_jpy is not None and prev.net_assets_jpy is not None:
+        net_assets_change = latest.net_assets_jpy - prev.net_assets_jpy
+        if net_assets_change < 0:
+            moves.append({
+                "priority": 55, "kind": "trend",
+                "text": "前回の同期より純資産が減っている。支出の急増が無いか確認する",
+                "why": "トレンドが下向きだと構造的な問題を見逃している可能性がある",
+            })
+
+    moves.sort(key=lambda m: -m["priority"])
+
+    return {
         "date": latest.date.isoformat(),
         "company_name": latest.company_name,
         "total_assets_jpy": _r(latest.total_assets_jpy),
         "total_liabilities_jpy": _r(latest.total_liabilities_jpy),
-        "net_assets_jpy": _r(latest.net_assets_jpy),
+        "net_assets_jpy": _r(net_assets),
         "ytd_net_income_jpy": _r(latest.ytd_net_income_jpy),
         "cash_jpy": _r(latest.cash_jpy),
         "fiscal_year": latest.fiscal_year,
+        "headline": gross * net_assets if net_assets is not None else None,
+        "leverage": leverage,
         "diagnosis": diagnosis,
-        "net_assets_change_jpy": None,
+        "moves": moves,
+        "net_assets_change_jpy": _r(net_assets_change),
     }
-    if prev is not None and latest.net_assets_jpy is not None and prev.net_assets_jpy is not None:
-        result["net_assets_change_jpy"] = _r(latest.net_assets_jpy - prev.net_assets_jpy)
-    return result

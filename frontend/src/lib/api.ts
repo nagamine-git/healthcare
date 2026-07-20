@@ -1537,7 +1537,10 @@ export type CorporateFinanceData = {
   ytd_net_income_jpy: number | null;
   cash_jpy: number | null;
   fiscal_year: number | null;
+  headline: number | null;
+  leverage: "none" | "good" | "bad" | "caution";
   diagnosis: { key: string; text: string }[];
+  moves: { priority: number; kind: string; text: string; why: string }[];
   net_assets_change_jpy: number | null;
 };
 export type CorporateFinanceResponse = {
