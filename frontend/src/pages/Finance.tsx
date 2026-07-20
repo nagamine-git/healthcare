@@ -409,19 +409,6 @@ function CashflowSection({ data }: { data: FinanceResponse }) {
             <span className="text-ink-dim">推奨 {yenK(cf.suggested_reserve)}</span>
             <Button variant="subtle" onClick={() => cfg.mutate({ apply_suggested_reserve: true } as never)}>防衛資金に適用</Button>
           </div>
-          {(cf.categories?.length ?? 0) > 0 && (
-            <div className="mt-2 border-t border-hairline pt-2">
-              <p className="telemetry-label">支出カテゴリ(直近6ヶ月)</p>
-              <div className="mt-1 space-y-0.5">
-                {cf.categories!.map((c) => (
-                  <div key={c.name} className="flex justify-between text-[11px]">
-                    <span className="text-ink-dim">{c.name}</span>
-                    <span className="telemetry-num text-ink-faint">{yenK(c.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </>
       ) : (
         <p className="text-sm text-ink-dim">入出金CSV(MoneyForward)を取り込むと、月平均支出から防衛資金を自動算出します。</p>
@@ -726,12 +713,14 @@ function MFScreenshotImport() {
 
 export function FinancePage({ onBack }: { onBack: () => void }) {
   const q = useQuery({ queryKey: ["finance"], queryFn: api.finance, retry: false });
+  const [roiOpen, setRoiOpen] = useState(false);
   return (
     <div className="safe-area-top safe-area-x pb-nav mx-auto max-w-3xl space-y-4">
       <button onClick={onBack} className="telemetry-label hover:text-ink">← 戻る</button>
       <h1 className="text-xl font-bold text-ink">資産・投資</h1>
       <p className="text-xs text-ink-faint">
-        総資産から防衛資金を引いた余剰を目標配分へ(リバランス)。その余剰で、ROI上位の購入を検討。
+        総資産から防衛資金を引いた余剰を目標配分へ(リバランス)。貯蓄率がプラスに戻ったら、
+        その余剰でROI上位の購入を検討。
       </p>
       {q.isError ? (
         <p className="text-sm text-risk">読み込みに失敗しました。少し待って再読み込みしてください。</p>
@@ -743,8 +732,17 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
           <MFScreenshotImport />
           <CashflowSection data={q.data} />
           <RebalanceSection data={q.data} />
-          <RoiSection data={q.data} />
           <LifeProfileForm data={q.data} />
+          {roiOpen ? (
+            <RoiSection data={q.data} />
+          ) : (
+            <button
+              onClick={() => setRoiOpen(true)}
+              className="w-full rounded-card border border-white/[0.06] bg-hull p-3 text-left text-xs text-ink-faint hover:text-ink-dim"
+            >
+              ▶ 購入ROIランキング(mac mini Pro 等) — 今は使っていないので畳んでいます。タップで開く
+            </button>
+          )}
         </>
       )}
     </div>
