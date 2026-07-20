@@ -90,3 +90,17 @@ def test_no_snapshot_falls_back_to_existing_average_calc(db_engine):
     hold, basis = result
     assert "予算" not in basis
     assert hold == 500
+
+
+def test_budget_snapshot_ignored_when_older_than_fresh_window(db_engine):
+    # 残り日数はまだプラス(12-4=8)だが、撮影から4日経過(鮮度ウィンドウ3日を超過)。
+    # 推測で延命せず、素直に平均ベースへフォールバックする。
+    with session_scope() as session:
+        _set_budget_snapshot(session, remaining=13172, days_remaining=12, captured_days_ago=4)
+        _add_variable_expense(session)
+    with session_scope() as session:
+        result = _dynamic_impulse_hold(session)
+    assert result is not None
+    hold, basis = result
+    assert "予算" not in basis
+    assert hold == 500

@@ -152,6 +152,28 @@ def test_atlas_focus_condition_routes_to_sleep_tab():
     assert c["link"] == "#tab-sleep"
 
 
+def test_atlas_focus_economy_stale_budget_adds_rescan_nudge():
+    # 予算スクショが古い/未取込 (budget_stale) なら「やること」に再取込を促す項目が出る
+    inp = Inputs(atlas_focus={"key": "economy", "label": "資産", "score": 12,
+                              "weight": 1.5, "pri": 132, "hold_jpy": 2847,
+                              "hold_basis": "固定費控除後の1日あたり裁量費(貯蓄目標ベース)",
+                              "budget_stale": True})
+    cands = build_candidates(inp, _at(15))
+    nudge = next(c for c in cands if c["key"] == "budget_stale")
+    assert "予算スクショ" in nudge["title"]
+    assert nudge["link"] == "#finance"
+
+
+def test_atlas_focus_economy_fresh_budget_no_rescan_nudge():
+    # budget_stale=False (新鮮なスナップショットを使用中) なら再取込ナジは出ない
+    inp = Inputs(atlas_focus={"key": "economy", "label": "資産", "score": 12,
+                              "weight": 1.5, "pri": 132, "hold_jpy": 439,
+                              "hold_basis": "今月の変動費予算残り÷残り9日 (MoneyForward予算画面)",
+                              "budget_stale": False})
+    cands = build_candidates(inp, _at(15))
+    assert all(c["key"] != "budget_stale" for c in cands)
+
+
 def test_atlas_focus_unknown_key_falls_back():
     inp = Inputs(atlas_focus={"key": "mystery", "label": "謎",
                               "score": 10, "weight": 1.0, "pri": 90})

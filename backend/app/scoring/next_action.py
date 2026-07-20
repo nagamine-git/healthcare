@@ -125,36 +125,37 @@ def _dynamic_impulse_hold(session: Any) -> tuple[int, str] | None:
     """衝動買い保留の閾値を実データから 1 円単位で算出する。返り値 = (円, 根拠ラベル)。
 
     MoneyForward「予算」画面スクショの実残高スナップショット (今月の変動費残り/残り日数) が
-    あれば最優先で使う (月次平均より実態に即したリアルタイムの値になる)。スクショは撮影
-    時点の静的な値なので、撮影日からの経過日数ぶん残り日数を老化 (aged) させて再計算する。
-    月をまたいだ/経過日数が残り日数を超えた (=もう月末想定) 場合は無視し、下の平均ベースに
-    フォールバックする。
+    **撮影から BUDGET_SNAPSHOT_FRESH_DAYS 以内 (新鮮)** なら最優先で使う (月次平均より実態に
+    即したリアルタイムの値になる)。スクショは撮影時点の静的な値なので、撮影日からの経過
+    日数ぶん残り日数を老化 (aged) させて再計算する。
+
+    古くなった残高を経過日数から推測で減算し続ける (延命する) ことはしない —
+    MoneyForward 自体がリアルタイムの正解を持っているので、鮮度ウィンドウを超えたら素直に
+    下の平均ベースにフォールバックし、呼び出し側 (_atlas) が「再取込」を促す。
 
     平均ベースは、衝動買いは **変動費 (裁量支出)** の話なので、固定費 (家賃・光熱・通信・
     保険・サブスク等) を除いた「1 日あたり裁量予算」を閾値にする:
         月収 ×(1−貯蓄率目標) − 固定費 = 月あたり裁量予算 → ÷30 で 1 日あたり。
     月収/貯蓄目標が無ければ実際の変動費 ÷30、それも無ければ月支出 ÷30 で代替。
     """
-    from app.scoring.finance import compute_cashflow, compute_rebalance, get_state
-    from app.scoring.timewindow import app_today
+    from app.scoring.finance import (
+        budget_snapshot_status,
+        compute_cashflow,
+        compute_rebalance,
+        get_state,
+    )
 
     s = get_settings()
 
-    st = get_state(session)
-    if (
-        st.budget_variable_remaining_jpy is not None
-        and st.budget_days_remaining is not None
-        and st.budget_captured_at is not None
-        and st.budget_period_month == app_today().strftime("%Y-%m")
-    ):
-        elapsed_days = (app_today() - st.budget_captured_at.date()).days
-        aged_days = st.budget_days_remaining - elapsed_days
-        if aged_days >= 1:
-            per_day = st.budget_variable_remaining_jpy / aged_days
-            return (
-                max(500, round(per_day)),
-                f"今月の変動費予算残り÷残り{aged_days}日 (MoneyForward予算画面)",
-            )
+    status = budget_snapshot_status(session)
+    if status["fresh"]:
+        st = get_state(session)
+        aged_days = st.budget_days_remaining - status["elapsed_days"]
+        per_day = st.budget_variable_remaining_jpy / aged_days
+        return (
+            max(500, round(per_day)),
+            f"今月の変動費予算残り÷残り{aged_days}日 (MoneyForward予算画面)",
+        )
 
     try:
         reb = compute_rebalance(session)
@@ -352,6 +353,16 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
         pri = 55 + min(35.0, af["pri"] * 0.18)
         title, why, tab = _atlas_concrete_action(af)
         add("atlas_focus", round(pri), title, why, tab)
+        # 衝動買い閾値が MoneyForward の実残高でなく月平均ベースで計算中 (未取込/古い) なら
+        # 再取込を促す。経過日数からの推測減算はしない (MoneyForward の実データの方が正確)。
+        if af["key"] == "economy" and af.get("budget_stale"):
+            add(
+                "budget_stale", 42,
+                "予算スクショを更新する (MoneyForwardの予算画面)",
+                "衝動買いの閾値が実際の予算残りでなく月平均ベースで計算中。"
+                "最新のスクショを取り込むと今日の閾値がより正確になる。",
+                "#finance",
+            )
 
     # --- 6.5 就寝前: 今夜の睡眠実験 (何で寝るべきか / データ取得のための探索+活用) ---
     se = inp.sleep_experiment
@@ -545,6 +556,8 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
                 hb = _dynamic_impulse_hold(db)
                 if hb:
                     best["hold_jpy"], best["hold_basis"] = hb
+                from app.scoring.finance import budget_snapshot_status
+                best["budget_stale"] = not budget_snapshot_status(db)["fresh"]
         inp.atlas_focus = best
 
     def _mental():

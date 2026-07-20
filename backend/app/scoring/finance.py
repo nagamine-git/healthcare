@@ -24,6 +24,38 @@ def _r(v: float | None, n: int = 0) -> float | None:
     return None if v is None else round(float(v), n)
 
 
+# MoneyForward「予算」スクショの撮影からこの日数以内だけ「新鮮」とみなし実残高を使う。
+# それを超えたら (推測で減算して延命するのではなく) 月次平均ベースにフォールバックし、
+# 再取込を促す — MoneyForward 自体がリアルタイムの正解を持っているので、古い自前の値を
+# 推測で近似するより「取り直してもらう」方が正確かつ実装が単純。
+BUDGET_SNAPSHOT_FRESH_DAYS = 3
+
+
+def budget_snapshot_status(session: Session) -> dict[str, Any]:
+    """予算スナップショットの鮮度を判定する。
+
+    Returns:
+        {"fresh": bool, "elapsed_days": int|None, "reason": str|None}
+        reason は fresh=False の時のみ: "missing" (未取込) | "different_month" (月またぎ) |
+        "stale" (鮮度ウィンドウ超過 or 撮影時点の残り日数を使い切った)。
+    """
+    st = get_state(session)
+    if (
+        st.budget_captured_at is None
+        or st.budget_variable_remaining_jpy is None
+        or st.budget_days_remaining is None
+    ):
+        return {"fresh": False, "elapsed_days": None, "reason": "missing"}
+    today = app_today()
+    if st.budget_period_month != today.strftime("%Y-%m"):
+        return {"fresh": False, "elapsed_days": None, "reason": "different_month"}
+    elapsed = (today - st.budget_captured_at.date()).days
+    aged_days = st.budget_days_remaining - elapsed
+    if elapsed > BUDGET_SNAPSHOT_FRESH_DAYS or aged_days < 1:
+        return {"fresh": False, "elapsed_days": elapsed, "reason": "stale"}
+    return {"fresh": True, "elapsed_days": elapsed, "reason": None}
+
+
 def get_state(session: Session) -> FinanceState:
     st = session.get(FinanceState, 1)
     if st is None:
