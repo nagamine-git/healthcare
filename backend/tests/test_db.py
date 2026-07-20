@@ -162,6 +162,48 @@ def test_source_sync_upsert_pattern(session):
     assert row.cursor_json == {"date": "2026-05-01"}
 
 
+def test_lightweight_migration_adds_new_finance_state_columns(temp_data_dir):
+    """本番で finance_state に列が無くクラッシュした事故の再発防止。
+
+    create_all() は **既存テーブルへの ALTER は行わない** (新規テーブル作成のみ)。
+    finance_state のような既存テーブルへの新規カラム追加は
+    _apply_lightweight_migrations 側の一覧に載せない限り本番 DB には反映されない。
+    ここでは「新しいカラムが無い旧スキーマの finance_state」を模して、create_all() 後に
+    そのカラムが実際に ALTER で追加され、素直に読み書きできることを確認する。
+    """
+    from sqlalchemy import text
+
+    from app.db import create_all, get_engine, init_engine, session_scope
+    from app.scoring.finance import get_state
+
+    engine = init_engine(temp_data_dir / "test.sqlite3")
+    with engine.begin() as conn:
+        # budget_* は元々存在しなかった旧スキーマを再現 (reserve_months/risk_tolerance は
+        # 過去に同じ理由で移行済みなので、それより後に追加された列だけを欠落させる)。
+        conn.execute(text(
+            "CREATE TABLE finance_state ("
+            "id INTEGER PRIMARY KEY, reserve_jpy REAL, reserve_months INTEGER DEFAULT 6, "
+            "wage_jpy_per_h REAL, risk_tolerance INTEGER DEFAULT 3, updated_at DATETIME)"
+        ))
+    create_all()
+
+    from sqlalchemy import inspect
+
+    cols = {c["name"] for c in inspect(get_engine()).get_columns("finance_state")}
+    assert {
+        "budget_variable_remaining_jpy", "budget_days_remaining",
+        "budget_captured_at", "budget_period_month",
+    }.issubset(cols)
+
+    with session_scope() as session:
+        st = get_state(session)
+        assert st.budget_variable_remaining_jpy is None
+        st.budget_variable_remaining_jpy = 13172.0
+        st.budget_days_remaining = 12
+    with session_scope() as session:
+        assert get_state(session).budget_variable_remaining_jpy == 13172.0
+
+
 def test_body_battery_daily(session):
     session.add(
         BodyBatteryDaily(

@@ -119,6 +119,10 @@ def _apply_lightweight_migrations() -> None:
         "finance_state": [
             ("reserve_months", "INTEGER DEFAULT 6"),
             ("risk_tolerance", "INTEGER DEFAULT 3"),
+            ("budget_variable_remaining_jpy", "REAL"),
+            ("budget_days_remaining", "INTEGER"),
+            ("budget_captured_at", "DATETIME"),
+            ("budget_period_month", "VARCHAR(7)"),
         ],
         "asset_holding": [("risk_tier", "INTEGER")],
         "life_profile": [("monthly_expense_jpy", "REAL")],
