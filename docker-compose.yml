@@ -43,6 +43,9 @@ services:
       GARMIN_PASSWORD: ${GARMIN_PASSWORD:?GARMIN_PASSWORD is required}
       HAE_INGEST_TOKEN: ${HAE_INGEST_TOKEN:?HAE_INGEST_TOKEN is required}
       EXERCISEDB_API_KEY: ${EXERCISEDB_API_KEY:-}
+      FREEE_CLIENT_ID: ${FREEE_CLIENT_ID:-}
+      FREEE_CLIENT_SECRET: ${FREEE_CLIENT_SECRET:-}
+      FREEE_REDIRECT_BASE: ${FREEE_REDIRECT_BASE:-https://healthcare.tailcda87f.ts.net}
       # 個人プロファイル (例の既定値。実値は gitignore したローカル env で上書き)
       USER_AGE: ${USER_AGE:-30}
       USER_SEX: ${USER_SEX:-male}

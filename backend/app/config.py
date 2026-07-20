@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     exercisedb_api_key: str | None = None
     exercisedb_host: str = "exercisedb.p.rapidapi.com"
 
+    # freee (法人会計): OAuth 連携。コールバックは {freee_redirect_base}/admin/freee/oauth/callback。
+    # env FREEE_CLIENT_ID/FREEE_CLIENT_SECRET (本番は .env.runtime)。
+    freee_client_id: str | None = None
+    freee_client_secret: str | None = None
+    freee_redirect_base: str = "https://healthcare.tailcda87f.ts.net"
+
     baseline_window_days: int = 28
 
     score_weight_sleep: float = 3.0
@@ -501,6 +507,7 @@ class Settings(BaseSettings):
     scheduler_github_sync_cron: str = "20 * * * *"
     scheduler_perf_tick_cron: str = "*/10 * * * *"  # 監視: 10分毎に問題をflush
     scheduler_garden_recompute_cron: str = "25 * * * *"
+    scheduler_freee_sync_cron: str = "0 7 * * *"  # 法人財務(freee試算表)を1日1回同期
 
     # --- Web Push 通知 ---
     # VAPID 鍵ペア。private は秘密 (1Password 等)、public はブラウザにも渡る applicationServerKey。

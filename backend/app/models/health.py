@@ -972,6 +972,27 @@ class BecomingSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CorporateFinanceSnapshot(Base):
+    """freee 試算表 (法人) からの日次財務スナップショット。
+
+    個人の純資産 (AssetHolding 等) とは意図的に合算しない — 法人の利益剰余金は
+    配当/役員報酬として引き出す際に課税されるため、個人の手取り資産と性質が違う。
+    別枠の参考値として date ごとに履歴を残し、トレンド(赤字が拡大/縮小)を見る。
+    """
+
+    __tablename__ = "corporate_finance_snapshot"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    company_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    total_assets_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_liabilities_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_assets_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ytd_net_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 当期純損益 (期首からの累計)
+    cash_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 現金・預金合計
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ExerciseGifOverride(Base):
     """種目デモ GIF の手動確定 (候補ピッカーでの選択を永続化)。
 

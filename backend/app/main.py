@@ -20,6 +20,7 @@ from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
 from app.api import checkup as checkup_api
 from app.api import consult as consult_api
+from app.api import corporate_finance as corporate_finance_api
 from app.api import dashboard, debug, health_export
 from app.api import domain as domain_api
 from app.api import equipment as equipment_api
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(exercise_api.router)
     app.include_router(consult_api.router)
     app.include_router(finance_api.router)
+    app.include_router(corporate_finance_api.router)
     app.include_router(perf_api.router)
     app.include_router(activity_api.router)
     app.include_router(alcohol_api.router)

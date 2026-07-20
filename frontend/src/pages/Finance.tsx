@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
+  type CorporateFinanceData,
   type FinanceResponse,
   type RebalanceHolding,
   type RoiInput,
@@ -711,6 +712,79 @@ function MFScreenshotImport() {
   );
 }
 
+/** 法人 (freee) の財務診断。個人の純資産とは意図的に合算しない (別枠の参考値)。 */
+function CorporateFinancePanel() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["corporate-finance"], queryFn: api.corporateFinance, retry: false });
+  const sync = useMutation({
+    mutationFn: api.freeeSync,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["corporate-finance"] }),
+  });
+
+  if (!q.data) return null; // ロード中/エラーは静かに隠す (個人の資産が主役)
+
+  if (!q.data.connected) {
+    return (
+      <Panel title="法人 (freee)">
+        <p className="text-xs text-ink-faint">
+          法人の財務も同じ「なんで増えない」診断ができます。個人の純資産とは合算せず、別枠の参考値として表示します。
+        </p>
+        <a
+          href="/admin/freee/oauth/start"
+          className="mt-2 inline-block rounded-lg bg-prog-700 px-3 py-1.5 text-xs text-void hover:bg-prog-500"
+        >
+          freee と連携する
+        </a>
+      </Panel>
+    );
+  }
+
+  const d: CorporateFinanceData | null = q.data.data;
+  return (
+    <Panel title={`法人 (${d?.company_name ?? "freee"})`}>
+      <p className="text-[11px] text-ink-faint">個人の純資産とは合算していません(別枠の参考値)。</p>
+      {d ? (
+        <>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            <div>
+              <div className="telemetry-label">総資産</div>
+              <div className="telemetry-num text-ink">{yenK(d.total_assets_jpy)}</div>
+            </div>
+            <div>
+              <div className="telemetry-label">純資産</div>
+              <div className="telemetry-num text-prog-300">{yenK(d.net_assets_jpy)}</div>
+            </div>
+            <div>
+              <div className="telemetry-label">当期純損益</div>
+              <div className={`telemetry-num ${(d.ytd_net_income_jpy ?? 0) >= 0 ? "text-prog-300" : "text-risk"}`}>
+                {yenK(d.ytd_net_income_jpy)}
+              </div>
+            </div>
+          </div>
+          {d.diagnosis.length > 0 && (
+            <ul className="mt-2 space-y-1 text-[11px] text-act-300">
+              {d.diagnosis.map((x) => <li key={x.key}>▲ {x.text}</li>)}
+            </ul>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[10px] text-ink-faint">最終同期 {d.date}</span>
+            <Button variant="subtle" onClick={() => sync.mutate()} disabled={sync.isPending}>
+              {sync.isPending ? "同期中…" : "再同期"}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-ink-faint">連携済みですが、まだ同期していません。</p>
+          <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
+            {sync.isPending ? "同期中…" : "今すぐ同期"}
+          </Button>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 export function FinancePage({ onBack }: { onBack: () => void }) {
   const q = useQuery({ queryKey: ["finance"], queryFn: api.finance, retry: false });
   const [roiOpen, setRoiOpen] = useState(false);
@@ -733,6 +807,7 @@ export function FinancePage({ onBack }: { onBack: () => void }) {
           <CashflowSection data={q.data} />
           <RebalanceSection data={q.data} />
           <LifeProfileForm data={q.data} />
+          <CorporateFinancePanel />
           {roiOpen ? (
             <RoiSection data={q.data} />
           ) : (

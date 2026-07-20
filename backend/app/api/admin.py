@@ -4,6 +4,7 @@ from datetime import date as date_type
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import RedirectResponse
 
 from app.scoring.timewindow import app_today
 
@@ -132,3 +133,46 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
             detail=f"Google Calendar 連携でエラー: {exc}",
         ) from exc
     return {"date": d.isoformat(), "deleted": deleted, "created": created}
+
+
+@router.get("/admin/freee/status")
+async def freee_status() -> dict[str, Any]:
+    from app.integrations.freee_client import has_token
+
+    return {"configured": has_token()}
+
+
+@router.get("/admin/freee/oauth/start")
+async def freee_oauth_start() -> RedirectResponse:
+    from app.integrations.freee_client import authorize_url
+
+    return RedirectResponse(authorize_url())
+
+
+@router.get("/admin/freee/oauth/callback")
+async def freee_oauth_callback(code: str) -> RedirectResponse:
+    from app.ingest.freee_sync import sync_corporate_finance
+    from app.integrations.freee_client import exchange_code
+
+    try:
+        exchange_code(code)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"freee 認可に失敗: {exc}",
+        ) from exc
+    # 認可直後に1回同期しておく (ユーザーがすぐ結果を見られるように)。失敗しても認可自体は成功。
+    try:
+        sync_corporate_finance()
+    except Exception:
+        pass
+    return RedirectResponse("/#finance")
+
+
+@router.post("/admin/freee/sync")
+async def freee_sync() -> dict[str, Any]:
+    from app.ingest.freee_sync import sync_corporate_finance
+
+    result = sync_corporate_finance()
+    if result["status"] == "error":
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=result.get("reason"))
+    return result

@@ -1528,6 +1528,23 @@ export type FinanceResponse = {
     skipped: { type: string; name?: string; value: number; days_remaining?: number | null; confidence: string }[];
   };
 };
+export type CorporateFinanceData = {
+  date: string;
+  company_name: string | null;
+  total_assets_jpy: number | null;
+  total_liabilities_jpy: number | null;
+  net_assets_jpy: number | null;
+  ytd_net_income_jpy: number | null;
+  cash_jpy: number | null;
+  fiscal_year: number | null;
+  diagnosis: { key: string; text: string }[];
+  net_assets_change_jpy: number | null;
+};
+export type CorporateFinanceResponse = {
+  connected: boolean;
+  data: CorporateFinanceData | null;
+};
+
 export type FinanceAdvisor = {
   gross: number;
   debt: number;
@@ -1860,6 +1877,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  corporateFinance: () => request<CorporateFinanceResponse>("/api/corporate-finance"),
+  freeeSync: () => request<{ status: string }>("/admin/freee/sync", { method: "POST" }),
   exerciseCandidates: (name: string) =>
     request<ExerciseCandidatesResponse>(`/api/exercise-candidates?name=${encodeURIComponent(name)}`),
   exerciseOverrideSave: (name: string, exercisedbId: string, exercisedbName: string) =>
