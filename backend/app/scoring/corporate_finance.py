@@ -88,6 +88,22 @@ _LEVERAGE_CAUTION_RATIO = 1.5
 # 超えたら「見て良い」水準として指摘する (悪いと決めつけず、確認を促す)。
 _EXPENSE_CONCENTRATION_RATIO = 0.3
 
+# 「経費を見直す」を具体的な費目名に変える時、対象から外す科目。
+# 租税公課/法定福利費/支払利息は法的義務でビジネス判断で削れない。減価償却費は非現金の
+# 会計上の配分で実際の支出タイミングとは無関係。役員報酬は定期同額給与の縛りがあり、
+# 期中に変更すると損金不算入になるため事実上「今すぐ削れる」対象ではない。
+_NON_ACTIONABLE_EXPENSE_CATEGORIES = frozenset({
+    "租税公課", "法定福利費", "支払利息", "減価償却費", "役員報酬",
+})
+
+
+def _pick_actionable_expense(categories: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """税・社会保険・役員報酬等を除いた、実際に削減判断ができる最大の費目。"""
+    for c in categories:
+        if c.get("name") not in _NON_ACTIONABLE_EXPENSE_CATEGORIES:
+            return c
+    return None
+
 
 def _leverage(debt: float, net_assets: float | None) -> str:
     if net_assets is not None and net_assets <= 0:
@@ -150,21 +166,32 @@ def compute_corporate_finance(session: Session) -> dict[str, Any] | None:
             "why": "高レバレッジは金利上昇や業績悪化時の耐性を弱める",
         })
 
+    top_expenses = latest.top_expense_categories or []
+    revenue = latest.revenue_jpy
+
     if latest.ytd_net_income_jpy is not None and latest.ytd_net_income_jpy < 0:
         diagnosis.append({
             "key": "deficit",
             "text": f"今期は赤字進行中 (当期純損益 {_r(latest.ytd_net_income_jpy):,}円)。"
                     "売上を増やすか経費を見直す",
         })
-        moves.append({
-            "priority": 75, "kind": "deficit",
-            "text": "売上を増やすか固定費(人件費・外注費等)を見直す",
-            "why": "当期純損益がマイナスのままだと純資産は毎期削られ続ける",
-        })
+        actionable = _pick_actionable_expense(top_expenses)
+        if actionable:
+            a_amount = actionable.get("amount") or 0
+            pct = f"、売上の{a_amount / revenue * 100:.0f}%" if revenue else ""
+            moves.append({
+                "priority": 75, "kind": "deficit",
+                "text": f"「{actionable['name']}」({_r(a_amount):,.0f}円{pct}) の契約・使い方を見直す",
+                "why": "税・社会保険・役員報酬等の固定費目を除くと、削減インパクトが最も大きい費目",
+            })
+        else:
+            moves.append({
+                "priority": 75, "kind": "deficit",
+                "text": "売上を増やすか固定費(人件費・外注費等)を見直す",
+                "why": "当期純損益がマイナスのままだと純資産は毎期削られ続ける",
+            })
 
     # 費目の集中: 「赤字です」で終わらせず、どの費目が主因かまで言う。
-    top_expenses = latest.top_expense_categories or []
-    revenue = latest.revenue_jpy
     if top_expenses and revenue and revenue > 0:
         top = top_expenses[0]
         top_amount = top.get("amount") or 0

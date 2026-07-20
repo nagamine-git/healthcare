@@ -244,3 +244,41 @@ def test_compute_corporate_finance_no_expense_concentration_when_below_threshold
     with session_scope() as session:
         result = compute_corporate_finance(session)
     assert all(x["key"] != "expense_concentration" for x in result["diagnosis"])
+
+
+def test_compute_corporate_finance_deficit_move_targets_actionable_expense(db_engine):
+    # 実データ相当: 1位の租税公課(税)・2位の役員報酬(定期同額給与で年内変更不可)は
+    # 「削れる」経費ではない。3位の通信費が実質最大の削減余地 → そこを名指しする。
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555, revenue_jpy=779182,
+            top_expense_categories=[
+                {"name": "租税公課", "amount": 680600},
+                {"name": "役員報酬", "amount": 539998},
+                {"name": "通信費", "amount": 487375},
+                {"name": "消耗品費", "amount": 217942},
+            ],
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "deficit")
+    assert "通信費" in m["text"]
+    assert "租税公課" not in m["text"] and "役員報酬" not in m["text"]
+    assert "487,375" in m["text"] or "487375" in m["text"]
+
+
+def test_compute_corporate_finance_deficit_move_generic_when_no_actionable_expense(db_engine):
+    # 上位が全て非アクションカテゴリなら、従来の汎用文言にフォールバックする。
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555, revenue_jpy=779182,
+            top_expense_categories=[
+                {"name": "租税公課", "amount": 680600}, {"name": "役員報酬", "amount": 539998},
+            ],
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "deficit")
+    assert "固定費(人件費・外注費等)を見直す" in m["text"]
