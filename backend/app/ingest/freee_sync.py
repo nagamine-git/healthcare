@@ -12,7 +12,7 @@ from app.db import session_scope
 from app.integrations import freee_client
 from app.logging import get_logger
 from app.models.health import CorporateFinanceSnapshot
-from app.scoring.corporate_finance import parse_trial_bs
+from app.scoring.corporate_finance import parse_trial_bs, parse_trial_pl
 from app.scoring.timewindow import app_today
 
 logger = get_logger(__name__)
@@ -32,6 +32,14 @@ def sync_corporate_finance() -> dict[str, Any]:
         return {"status": "error", "reason": "trial_bs fetch failed"}
 
     parsed = parse_trial_bs(trial_bs)
+
+    # 損益計算書は「どの費目が主因か」の内訳用 (ベストエフォート — 失敗しても
+    # 貸借対照表ベースの同期自体は成立させる)。
+    trial_pl = freee_client.fetch_trial_pl(company["id"])
+    parsed_pl = parse_trial_pl(trial_pl) if trial_pl is not None else {}
+    if trial_pl is None:
+        logger.warning("freee_sync_trial_pl_fetch_failed")
+
     today = app_today()
     with session_scope() as session:
         row = session.get(CorporateFinanceSnapshot, today)
@@ -39,7 +47,7 @@ def sync_corporate_finance() -> dict[str, Any]:
             row = CorporateFinanceSnapshot(date=today)
             session.add(row)
         row.company_name = company.get("name")
-        for k, v in parsed.items():
+        for k, v in {**parsed, **parsed_pl}.items():
             setattr(row, k, v)
 
     logger.info("freee_sync_ok", company=company.get("name"), date=today.isoformat())

@@ -204,6 +204,42 @@ def test_lightweight_migration_adds_new_finance_state_columns(temp_data_dir):
         assert get_state(session).budget_variable_remaining_jpy == 13172.0
 
 
+def test_lightweight_migration_adds_new_corporate_finance_snapshot_columns(temp_data_dir):
+    """corporate_finance_snapshot は既に本番にデプロイ済みの既存テーブル。trial_pl 対応で
+    追加した revenue_jpy/operating_income_jpy/top_expense_categories も同じ理由 (create_all()
+    は既存テーブルに ALTER しない) で _apply_lightweight_migrations への登録が必須。
+    """
+    from datetime import date
+
+    from sqlalchemy import inspect, text
+
+    from app.db import create_all, get_engine, init_engine, session_scope
+    from app.models.health import CorporateFinanceSnapshot
+
+    engine = init_engine(temp_data_dir / "test.sqlite3")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE corporate_finance_snapshot ("
+            "date DATE PRIMARY KEY, company_name VARCHAR(120), total_assets_jpy REAL, "
+            "total_liabilities_jpy REAL, net_assets_jpy REAL, ytd_net_income_jpy REAL, "
+            "cash_jpy REAL, fiscal_year INTEGER, captured_at DATETIME)"
+        ))
+    create_all()
+
+    cols = {c["name"] for c in inspect(get_engine()).get_columns("corporate_finance_snapshot")}
+    assert {"revenue_jpy", "operating_income_jpy", "top_expense_categories"}.issubset(cols)
+
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), revenue_jpy=779182.0,
+            top_expense_categories=[{"name": "租税公課", "amount": 680600}],
+        ))
+    with session_scope() as session:
+        row = session.get(CorporateFinanceSnapshot, date(2026, 7, 20))
+        assert row.revenue_jpy == 779182.0
+        assert row.top_expense_categories == [{"name": "租税公課", "amount": 680600}]
+
+
 def test_body_battery_daily(session):
     session.add(
         BodyBatteryDaily(

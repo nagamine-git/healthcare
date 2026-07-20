@@ -123,3 +123,29 @@ def test_start_nisa_suppressed_when_already_using():
 def test_start_nisa_shown_when_not_using():
     res = build_advisor(_inp(gross=1000.0, avg_income=40.0, avg_net=10.0, has_nisa=False))
     assert any(m["kind"] == "tax" for m in res["moves"])
+
+
+def test_expense_concentration_flagged_when_category_exceeds_threshold():
+    # 食費が月支出30の40% (>30%しきい値)
+    res = build_advisor(_inp(
+        gross=100.0, avg_income=40.0, avg_expense=30.0, avg_net=10.0,
+        top_expense_category={"name": "食費", "amount": 12.0},
+    ))
+    d = next(x for x in res["diagnosis"] if x["key"] == "expense_concentration")
+    assert "食費" in d["text"] and "40%" in d["text"]
+    m = next(x for x in res["moves"] if x["kind"] == "expense_concentration")
+    assert "食費" in m["text"]
+
+
+def test_expense_concentration_not_flagged_below_threshold():
+    # 食費10 / 支出30 = 33%... 下回るケースとして日用品5/30=17%を使う
+    res = build_advisor(_inp(
+        gross=100.0, avg_income=40.0, avg_expense=30.0, avg_net=10.0,
+        top_expense_category={"name": "日用品", "amount": 5.0},
+    ))
+    assert "expense_concentration" not in _dkeys(res)
+
+
+def test_expense_concentration_ignored_when_no_top_category():
+    res = build_advisor(_inp(gross=100.0, avg_income=40.0, avg_expense=30.0, avg_net=10.0))
+    assert "expense_concentration" not in _dkeys(res)

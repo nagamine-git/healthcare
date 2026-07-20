@@ -125,6 +125,11 @@ def _apply_lightweight_migrations() -> None:
             ("budget_period_month", "VARCHAR(7)"),
         ],
         "asset_holding": [("risk_tier", "INTEGER")],
+        "corporate_finance_snapshot": [
+            ("revenue_jpy", "REAL"),
+            ("operating_income_jpy", "REAL"),
+            ("top_expense_categories", "JSON"),
+        ],
         "life_profile": [("monthly_expense_jpy", "REAL")],
         "user_profile": [
             ("birth_date", "DATE"),

@@ -37,6 +37,7 @@ def test_sync_persists_snapshot_for_today(db_engine):
         patch("app.integrations.freee_client.get_company",
               return_value={"id": 2395998, "name": "株式会社EFG technologies"}),
         patch("app.integrations.freee_client.fetch_trial_bs", return_value=SAMPLE_TRIAL_BS),
+        patch("app.integrations.freee_client.fetch_trial_pl", return_value=None),
     ):
         result = sync_corporate_finance()
     assert result["status"] == "ok"
@@ -48,12 +49,53 @@ def test_sync_persists_snapshot_for_today(db_engine):
         assert row.ytd_net_income_jpy == -1694555
 
 
+def test_sync_persists_trial_pl_expense_breakdown(db_engine):
+    trial_pl = {
+        "balances": [
+            {"account_category_name": "売上高", "total_line": True, "hierarchy_level": 1,
+             "closing_balance": 779182},
+            {"account_item_name": "租税公課", "account_category_name": "販売管理費",
+             "hierarchy_level": 3, "closing_balance": 680600},
+            {"account_category_name": "営業損益金額", "total_line": True, "hierarchy_level": 1,
+             "closing_balance": -1629166},
+        ],
+    }
+    with (
+        patch("app.integrations.freee_client.has_token", return_value=True),
+        patch("app.integrations.freee_client.get_company",
+              return_value={"id": 2395998, "name": "株式会社EFG technologies"}),
+        patch("app.integrations.freee_client.fetch_trial_bs", return_value=SAMPLE_TRIAL_BS),
+        patch("app.integrations.freee_client.fetch_trial_pl", return_value=trial_pl),
+    ):
+        result = sync_corporate_finance()
+    assert result["status"] == "ok"
+    with session_scope() as session:
+        row = session.get(CorporateFinanceSnapshot, app_today())
+        assert row.revenue_jpy == 779182
+        assert row.operating_income_jpy == -1629166
+        assert row.top_expense_categories == [{"name": "租税公課", "amount": 680600}]
+
+
+def test_sync_ok_even_when_trial_pl_fetch_fails(db_engine):
+    # trial_pl はベストエフォート。取得失敗しても trial_bs ベースの同期は成立する。
+    with (
+        patch("app.integrations.freee_client.has_token", return_value=True),
+        patch("app.integrations.freee_client.get_company",
+              return_value={"id": 2395998, "name": "株式会社EFG technologies"}),
+        patch("app.integrations.freee_client.fetch_trial_bs", return_value=SAMPLE_TRIAL_BS),
+        patch("app.integrations.freee_client.fetch_trial_pl", return_value=None),
+    ):
+        result = sync_corporate_finance()
+    assert result["status"] == "ok"
+
+
 def test_sync_upserts_same_day_snapshot(db_engine):
     with (
         patch("app.integrations.freee_client.has_token", return_value=True),
         patch("app.integrations.freee_client.get_company",
               return_value={"id": 2395998, "name": "株式会社EFG technologies"}),
         patch("app.integrations.freee_client.fetch_trial_bs", return_value=SAMPLE_TRIAL_BS),
+        patch("app.integrations.freee_client.fetch_trial_pl", return_value=None),
     ):
         sync_corporate_finance()
         sync_corporate_finance()

@@ -19,6 +19,7 @@ GOOD_DEBT_MAX_RATE = 3.0     # %以下=低利=良い借金候補
 BAD_DEBT_MIN_RATE = 7.0      # %以上=高利=悪い借金(先に返済)
 MIN_SAVINGS_RATE = 0.15      # 貯蓄率の下限目安
 HOUSING_BURDEN_RATIO = 0.30  # 住居費/収入 が重い閾値
+EXPENSE_CONCENTRATION_RATIO = 0.30  # 1カテゴリが月支出のこの割合超で指摘 (法人の同名診断と同基準)
 
 
 @dataclass
@@ -36,6 +37,7 @@ class AdvisorInputs:
     nisa_monthly: float | None = None
     ideco_monthly: float | None = None
     has_nisa: bool = False                 # 既に NISA を使っているか (保有 or 積立設定)
+    top_expense_category: dict[str, Any] | None = None  # {"name","amount"} 月平均、未分類/その他除く
 
 
 def _man(v: float | None) -> str:
@@ -66,6 +68,7 @@ def build_advisor(
     bad_rate: float = BAD_DEBT_MIN_RATE,
     min_savings_rate: float = MIN_SAVINGS_RATE,
     housing_burden_ratio: float = HOUSING_BURDEN_RATIO,
+    expense_concentration_ratio: float = EXPENSE_CONCENTRATION_RATIO,
 ) -> dict[str, Any]:
     """看板指標 + 診断 + 優先順位つき最善手を返す純関数。"""
     gross = inp.gross
@@ -118,6 +121,18 @@ def build_advisor(
         diagnosis.append({"key": "bad_debt", "level": "warn",
                           "text": f"高利の借金 {inp.debt_rate_pct:.1f}% が純資産を毎年削っている"})
 
+    # 支出カテゴリの集中 (法人の expense_concentration 診断と同じ発想: 1費目が突出していないか)
+    expense_concentration: dict[str, Any] | None = None
+    if inp.top_expense_category and inp.avg_expense and inp.avg_expense > 0:
+        name = inp.top_expense_category.get("name")
+        amount = inp.top_expense_category.get("amount") or 0.0
+        ratio = amount / inp.avg_expense
+        if name and ratio > expense_concentration_ratio:
+            expense_concentration = {"name": name, "amount": amount, "ratio": ratio}
+            diagnosis.append({"key": "expense_concentration", "level": "info",
+                              "text": f"最大の支出カテゴリは「{name}」で月平均 {_man(amount)} "
+                                      f"(月支出の{ratio * 100:.0f}%)"})
+
     # 防衛資金不足
     reserve_gap = 0.0
     if inp.suggested_reserve is not None and inp.reserve < inp.suggested_reserve:
@@ -148,6 +163,12 @@ def build_advisor(
         moves.append({"priority": 60, "kind": "savings",
                       "text": "固定費(特に住居費)を見直し貯蓄率を上げる",
                       "why": "貯蓄率は投資リターンより効く最大のレバー"})
+    if expense_concentration is not None:
+        name, amount, ratio = (expense_concentration["name"], expense_concentration["amount"],
+                                expense_concentration["ratio"])
+        moves.append({"priority": 55, "kind": "expense_concentration",
+                      "text": f"「{name}」の支出内容を見直す(月{_man(amount)}、支出の{ratio * 100:.0f}%)",
+                      "why": "1カテゴリで支出の3割超は、固定サービスの解約や使い方の見直し余地が大きい"})
     if debt > 0 and leverage == "good":
         moves.append({"priority": 40, "kind": "credit",
                       "text": "低利ローンは繰上げ返済を急がない(信用枠=借りられる力を保つ)",

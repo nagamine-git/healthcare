@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     finance_bad_debt_min_rate: float = 7.0      # %以上=高利=悪い借金 (先に返済)
     finance_min_savings_rate: float = 0.15      # 貯蓄率の下限目安
     finance_housing_burden_ratio: float = 0.30  # 住居費/収入 が重い閾値
+    finance_expense_concentration_ratio: float = 0.30  # 1カテゴリが月支出のこの割合超で指摘
     # 全体マップの「世の中(中央値)/目標」推定ベンチマーク(あくまで推定。env で上書き可)
     finance_net_worth_median_jpy: float = 1_000_000    # 30代の金融資産中央値の目安(推定)
     finance_net_worth_target_jpy: float = 10_000_000   # 純資産マイルストーン「1000万」(目標)

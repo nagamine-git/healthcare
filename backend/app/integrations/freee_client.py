@@ -196,6 +196,12 @@ def fetch_trial_bs(company_id: int) -> dict[str, Any] | None:
     return (data or {}).get("trial_bs")
 
 
+def fetch_trial_pl(company_id: int) -> dict[str, Any] | None:
+    """試算表(損益計算書)。売上/営業損益/費目別の内訳を含む。"""
+    data = _api_get("/api/1/reports/trial_pl", params={"company_id": company_id})
+    return (data or {}).get("trial_pl")
+
+
 def fetch_walletables(company_id: int) -> list[dict[str, Any]]:
     """銀行口座/現金口座の一覧 (残高そのものは含まない。参照用)。"""
     data = _api_get("/api/1/walletables", params={"company_id": company_id})

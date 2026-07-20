@@ -990,6 +990,10 @@ class CorporateFinanceSnapshot(Base):
     ytd_net_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 当期純損益 (期首からの累計)
     cash_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 現金・預金合計
     fiscal_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # trial_pl (損益計算書) 由来。「赤字です」で終わらせず、どの費目が主因かまで言うための内訳。
+    revenue_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 売上高 (期首からの累計)
+    operating_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 営業損益金額
+    top_expense_categories: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{name, amount}] 降順
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

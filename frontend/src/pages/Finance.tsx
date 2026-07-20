@@ -410,6 +410,25 @@ function CashflowSection({ data }: { data: FinanceResponse }) {
             <span className="text-ink-dim">推奨 {yenK(cf.suggested_reserve)}</span>
             <Button variant="subtle" onClick={() => cfg.mutate({ apply_suggested_reserve: true } as never)}>防衛資金に適用</Button>
           </div>
+          {(cf.categories?.length ?? 0) > 0 && (
+            <div className="mt-2 border-t border-hairline pt-2">
+              <p className="telemetry-label">支出カテゴリ(月平均)</p>
+              <div className="mt-1 space-y-0.5">
+                {cf.categories!.map((c) => (
+                  <div key={c.name} className="flex justify-between text-[11px]">
+                    <span className="text-ink-dim">{c.name}</span>
+                    <span className="telemetry-num text-ink-faint">{yenK(c.amount)}</span>
+                  </div>
+                ))}
+              </div>
+              {cf.uncategorized_jpy != null && (
+                <p className="mt-1 text-[10px] text-ink-faint">
+                  未分類/その他 月平均 {yenK(cf.uncategorized_jpy)}(事業経費の立替混入の可能性があり、
+                  ランキングからは除外・別枠表示)
+                </p>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <p className="text-sm text-ink-dim">入出金CSV(MoneyForward)を取り込むと、月平均支出から防衛資金を自動算出します。</p>
@@ -804,6 +823,29 @@ function CorporateFinancePanel() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* 費目別内訳 (損益計算書) */}
+      {d.top_expense_categories.length > 0 && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-dim">費用の内訳(上位)</div>
+            {d.revenue_jpy != null && (
+              <span className="text-[10px] text-ink-faint">売上 {yenK(d.revenue_jpy)}</span>
+            )}
+          </div>
+          <div className="mt-1 space-y-0.5">
+            {d.top_expense_categories.map((c) => (
+              <div key={c.name} className="flex justify-between text-[11px]">
+                <span className="text-ink-dim">{c.name}</span>
+                <span className="telemetry-num text-ink-faint">
+                  {yenK(c.amount)}
+                  {d.revenue_jpy ? ` (売上比${Math.round((c.amount / d.revenue_jpy) * 100)}%)` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

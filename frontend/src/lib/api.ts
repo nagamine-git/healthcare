@@ -1502,6 +1502,7 @@ export type CashflowSummary = {
   runway_months?: number | null;
   months?: { ym: string; expense: number | null; income: number | null; net: number | null }[];
   categories?: { name: string; amount: number | null }[];
+  uncategorized_jpy?: number | null;
   tx_count?: number;
 };
 export type FinanceResponse = {
@@ -1537,6 +1538,9 @@ export type CorporateFinanceData = {
   ytd_net_income_jpy: number | null;
   cash_jpy: number | null;
   fiscal_year: number | null;
+  revenue_jpy: number | null;
+  operating_income_jpy: number | null;
+  top_expense_categories: { name: string; amount: number }[];
   headline: number | null;
   leverage: "none" | "good" | "bad" | "caution";
   diagnosis: { key: string; text: string }[];

@@ -264,6 +264,12 @@ def _is_fixed_cat(name: str | None) -> bool:
     return any(k in name for k in _FIXED_CAT_KEYWORDS)
 
 
+# MoneyForward が「未分類」「その他」に丸めるのは主にカテゴリ判定不能な行だが、実態は
+# 事業経費の立替(法人の支払いを個人カードで立て替え、後で精算)がここに大量に混ざる。
+# 個人の支出として見るには意味を持たないので、ランキングから除外し合計だけ出す。
+_UNRELIABLE_CATEGORIES = ("未分類", "その他")
+
+
 def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, Any]:
     """入出金履歴から月支出/収入・カテゴリ別・固定/変動費・推奨防衛資金・ランウェイを算出。"""
     st = get_state(session)
@@ -279,11 +285,8 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
     by_month_inc: dict[str, float] = defaultdict(float)
     by_month_fixed: dict[str, float] = defaultdict(float)
     by_month_var: dict[str, float] = defaultdict(float)
-    by_cat: dict[str, float] = defaultdict(float)
     today = app_today()
     cur_ym = f"{today.year:04d}-{today.month:02d}"
-    # 直近6ヶ月のカテゴリ集計用の下限(おおよそ)
-    cat_lo = today.year * 12 + today.month - 6
     for t in txs:
         ym = f"{t.date.year:04d}-{t.date.month:02d}"
         if t.amount_jpy < 0:
@@ -293,8 +296,6 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
                 by_month_fixed[ym] += amt
             else:
                 by_month_var[ym] += amt
-            if (t.date.year * 12 + t.date.month) >= cat_lo:
-                by_cat[t.major_category or "未分類"] += amt
         else:
             by_month_inc[ym] += t.amount_jpy
 
@@ -307,15 +308,35 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
     # 平均は当月(部分月)を除く直近6ヶ月。無ければ全体。
     full = [m for m in all_months if m != cur_ym]
     sample = full[-6:] if full else all_months
+    sample_set = set(sample)
+    n_sample = len(sample) or 1
     avg_exp = sum(by_month_exp.get(m, 0) for m in sample) / len(sample) if sample else 0.0
     avg_inc = sum(by_month_inc.get(m, 0) for m in sample) / len(sample) if sample else 0.0
     avg_fixed = sum(by_month_fixed.get(m, 0) for m in sample) / len(sample) if sample else 0.0
     avg_var = sum(by_month_var.get(m, 0) for m in sample) / len(sample) if sample else 0.0
 
+    # カテゴリ別は avg_exp と同じ期間 (sample) に揃えた上で月平均にする — 比率計算
+    # (finance_advisor の expense_concentration 診断) を avg_expense と整合させるため。
+    by_cat: dict[str, float] = defaultdict(float)
+    uncategorized = 0.0
+    for t in txs:
+        if t.amount_jpy >= 0:
+            continue
+        ym = f"{t.date.year:04d}-{t.date.month:02d}"
+        if ym not in sample_set:
+            continue
+        amt = -t.amount_jpy
+        name = t.major_category or "未分類"
+        if name in _UNRELIABLE_CATEGORIES:
+            uncategorized += amt
+        else:
+            by_cat[name] += amt
+
     suggested_reserve = avg_exp * st.reserve_months
     runway = (total_assets / avg_exp) if avg_exp > 0 else None
     categories = sorted(
-        ({"name": k, "amount": _r(v)} for k, v in by_cat.items()), key=lambda c: -(c["amount"] or 0)
+        ({"name": k, "amount": _r(v / n_sample)} for k, v in by_cat.items()),
+        key=lambda c: -(c["amount"] or 0),
     )[:8]
     return {
         "has_data": True,
@@ -328,7 +349,8 @@ def compute_cashflow(session: Session, total_assets: float = 0.0) -> dict[str, A
         "suggested_reserve": _r(suggested_reserve),
         "runway_months": _r(runway, 1) if runway is not None else None,
         "months": months,
-        "categories": categories,
+        "categories": categories,                # 月平均。未分類/その他は含まない
+        "uncategorized_jpy": _r(uncategorized / n_sample) if uncategorized > 0 else None,
         "tx_count": len(txs),
         "_avg_exp": avg_exp,  # 内部用(防衛資金自動設定)
     }
@@ -378,6 +400,7 @@ def compute_advisor(
     has_nisa = bool(lp.nisa_monthly_jpy and lp.nisa_monthly_jpy > 0) or any(
         "NISA" in (h.get("name") or "").upper() for h in (reb.get("holdings") or [])
     )
+    categories = cf.get("categories") if has_cf else None
     inp = AdvisorInputs(
         gross=reb.get("total") or 0.0,
         debt=lp.debt_balance_jpy or 0.0,
@@ -392,6 +415,7 @@ def compute_advisor(
         nisa_monthly=lp.nisa_monthly_jpy,
         ideco_monthly=lp.ideco_monthly_jpy,
         has_nisa=has_nisa,
+        top_expense_category=categories[0] if categories else None,
     )
     return build_advisor(
         inp,
@@ -399,6 +423,7 @@ def compute_advisor(
         bad_rate=s.finance_bad_debt_min_rate,
         min_savings_rate=s.finance_min_savings_rate,
         housing_burden_ratio=s.finance_housing_burden_ratio,
+        expense_concentration_ratio=s.finance_expense_concentration_ratio,
     )
 
 

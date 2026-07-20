@@ -90,6 +90,58 @@ def test_import_cashflow_sets_reserve_from_monthly_expense(app_client):
     assert r2.json()["cashflow"]["tx_count"] == 4  # counted & not transfer のみ
 
 
+def test_compute_cashflow_excludes_unreliable_categories_from_ranked_list(db_engine):
+    # 未分類/その他 は事業経費の立替混入等で信頼できないため、ランキングから除外し
+    # uncategorized_jpy に集約する (2026-05, 2026-06 の2ヶ月、当月=2026-07は集計対象外)。
+    from datetime import date as date_type
+
+    from app.models.health import CashflowTx
+    from app.scoring.finance import compute_cashflow
+
+    with session_scope() as session:
+        for i, d in enumerate([date_type(2026, 5, 10), date_type(2026, 6, 10)]):
+            session.add(CashflowTx(id=f"food{i}", date=d, amount_jpy=-20000,
+                                    major_category="食費", counted=True, is_transfer=False))
+            session.add(CashflowTx(id=f"uncat{i}", date=d, amount_jpy=-40000,
+                                    major_category="未分類", counted=True, is_transfer=False))
+            session.add(CashflowTx(id=f"other{i}", date=d, amount_jpy=-10000,
+                                    major_category="その他", counted=True, is_transfer=False))
+    with session_scope() as session:
+        cf = compute_cashflow(session)
+    assert cf["categories"] == [{"name": "食費", "amount": 20000}]
+    assert cf["uncategorized_jpy"] == 50000  # (40000+10000) の月平均
+
+
+def test_compute_cashflow_categories_are_monthly_averages(db_engine):
+    from datetime import date as date_type
+
+    from app.models.health import CashflowTx
+    from app.scoring.finance import compute_cashflow
+
+    with session_scope() as session:
+        for i, ym in enumerate([(2026, 4), (2026, 5), (2026, 6)]):
+            session.add(CashflowTx(id=f"food{i}", date=date_type(ym[0], ym[1], 10), amount_jpy=-30000,
+                                    major_category="食費", counted=True, is_transfer=False))
+    with session_scope() as session:
+        cf = compute_cashflow(session)
+    # 3ヶ月合計9万ではなく、月平均3万で返す (avg_monthly_expense と同じ基準に揃える)。
+    assert cf["categories"] == [{"name": "食費", "amount": 30000}]
+
+
+def test_compute_cashflow_no_uncategorized_when_none_present(db_engine):
+    from datetime import date as date_type
+
+    from app.models.health import CashflowTx
+    from app.scoring.finance import compute_cashflow
+
+    with session_scope() as session:
+        session.add(CashflowTx(id="food0", date=date_type(2026, 6, 10), amount_jpy=-20000,
+                                major_category="食費", counted=True, is_transfer=False))
+    with session_scope() as session:
+        cf = compute_cashflow(session)
+    assert cf["uncategorized_jpy"] is None
+
+
 def test_auto_allocate_recursive_risk_split(app_client):
     from app.scoring.finance import classify_risk_tier
 
