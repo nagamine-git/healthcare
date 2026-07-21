@@ -309,3 +309,60 @@ def test_compute_corporate_finance_deficit_move_generic_when_no_actionable_expen
         result = compute_corporate_finance(session)
     m = next(x for x in result["moves"] if x["kind"] == "deficit")
     assert "固定費(人件費・外注費等)を見直す" in m["text"]
+
+
+def test_compute_corporate_finance_leverage_move_includes_debt_amount(db_engine):
+    # ウィジェットは moves[0].text をそのまま出すので、抽象的な文言だけでなく実額が要る。
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=100000,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "leverage")
+    assert f"{5502748:,}円" in m["text"]
+    assert "4.8倍" in m["text"]
+
+
+def test_compute_corporate_finance_capital_move_includes_net_assets_amount(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=1000000, total_liabilities_jpy=1500000,
+            net_assets_jpy=-500000, ytd_net_income_jpy=-800000,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "capital")
+    assert f"{-500000:,}円" in m["text"]
+
+
+def test_compute_corporate_finance_deficit_generic_move_includes_net_income_amount(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555, revenue_jpy=779182,
+            top_expense_categories=[
+                {"name": "租税公課", "amount": 680600}, {"name": "役員報酬", "amount": 539998},
+            ],
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "deficit")
+    assert f"{1694555:,}円" in m["text"]
+
+
+def test_compute_corporate_finance_trend_move_includes_change_amount(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 10), net_assets_jpy=1300000, total_assets_jpy=6800000,
+            total_liabilities_jpy=5500000, ytd_net_income_jpy=-1500000,
+        ))
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), net_assets_jpy=1147426, total_assets_jpy=6650174,
+            total_liabilities_jpy=5502748, ytd_net_income_jpy=-1694555,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    m = next(x for x in result["moves"] if x["kind"] == "trend")
+    assert f"{1147426 - 1300000:,}円" in m["text"]

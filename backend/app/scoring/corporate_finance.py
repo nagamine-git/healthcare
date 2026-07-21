@@ -168,7 +168,7 @@ def compute_corporate_finance(
         })
         moves.append({
             "priority": 95, "kind": "capital",
-            "text": "資本増強か負債圧縮を最優先で検討する",
+            "text": f"純資産{_r(net_assets):,}円のマイナス。資本増強か負債圧縮を最優先で検討する",
             "why": "債務超過は財務的に最も危険な状態。放置すると倒産リスクに直結する",
         })
     elif leverage == "bad":
@@ -179,7 +179,7 @@ def compute_corporate_finance(
         })
         moves.append({
             "priority": 80, "kind": "leverage",
-            "text": "借入の返済ペースを上げるか借り換えを検討する",
+            "text": f"借入{_r(debt):,}円(純資産の{ratio:.1f}倍)の返済ペースを上げるか借り換えを検討する",
             "why": "高レバレッジは金利上昇や業績悪化時の耐性を弱める",
         })
 
@@ -204,7 +204,8 @@ def compute_corporate_finance(
         else:
             moves.append({
                 "priority": 75, "kind": "deficit",
-                "text": "売上を増やすか固定費(人件費・外注費等)を見直す",
+                "text": f"当期純損益 {_r(latest.ytd_net_income_jpy):,}円の赤字。"
+                        "売上を増やすか固定費(人件費・外注費等)を見直す",
                 "why": "当期純損益がマイナスのままだと純資産は毎期削られ続ける",
             })
 
@@ -231,7 +232,8 @@ def compute_corporate_finance(
         if net_assets_change < 0:
             moves.append({
                 "priority": 55, "kind": "trend",
-                "text": "前回の同期より純資産が減っている。支出の急増が無いか確認する",
+                "text": f"前回の同期より純資産が{_r(net_assets_change):,}円減っている。"
+                        "支出の急増が無いか確認する",
                 "why": "トレンドが下向きだと構造的な問題を見逃している可能性がある",
             })
 
