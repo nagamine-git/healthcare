@@ -59,7 +59,7 @@ async def exercise_gif(name: str, id: str | None = None) -> Response:
 @router.get("/api/exercise-candidates")
 async def exercise_candidates(name: str) -> dict[str, Any]:
     """現在の選択 (override/curated/auto) + 器具限定の候補一覧。候補ピッカー UI 用。"""
-    from app.integrations.exercisedb import fetch_detail_by_id, list_candidates
+    from app.integrations.exercisedb import fetch_detail_by_id, is_configured, list_candidates
 
     def _work() -> dict[str, Any]:
         selected_id, source = _resolve_with_override(name)
@@ -74,7 +74,8 @@ async def exercise_candidates(name: str) -> dict[str, Any]:
             selected = {**match, "source": source}
         for c in candidates:
             c["selected"] = selected_id is not None and c["id"] == selected_id
-        return {"selected": selected, "candidates": candidates}
+        # configured=False なら「候補なし」ではなく「連携が未設定」。UI が言い分ける。
+        return {"selected": selected, "candidates": candidates, "configured": is_configured()}
 
     return await run_in_threadpool(_work)
 

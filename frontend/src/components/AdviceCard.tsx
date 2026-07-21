@@ -391,7 +391,7 @@ function ExerciseGif({ name }: { name: string }) {
       api
         .exerciseCandidates(name)
         .then(setCandidates)
-        .catch(() => setCandidates({ selected: null, candidates: [] }))
+        .catch(() => setCandidates({ selected: null, candidates: [], configured: undefined }))
         .finally(() => setLoadingCandidates(false));
     }
   };
@@ -485,7 +485,12 @@ function ExerciseGifPicker({
       </div>
       {loading && <p className="text-[11px] text-ink-faint">検索中…</p>}
       {!loading && data && data.candidates.length === 0 && (
-        <p className="text-[11px] text-ink-faint">候補が見つかりませんでした。</p>
+        /* 候補ゼロの理由は 2 つある。連携未設定を「該当なし」と書くと原因を追えない。 */
+        <p className="text-[11px] text-ink-faint">
+          {data.configured === false
+            ? "デモ画像の連携が未設定です (EXERCISEDB_API_KEY)。サーバー側の設定が要ります。"
+            : "候補が見つかりませんでした。"}
+        </p>
       )}
       <ul className="space-y-1">
         {data?.candidates.map((c) => (

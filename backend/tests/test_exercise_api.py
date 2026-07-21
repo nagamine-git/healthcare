@@ -86,3 +86,16 @@ def test_delete_override_reverts_to_curated(app_client):
         r = app_client.get("/api/exercise-gif", params={"name": "ヒップスラスト"})
     assert r.content == b"CURATED"
     mock_fetch.assert_called_once_with("3562")
+
+
+def test_candidates_reports_unconfigured_when_api_key_missing(app_client):
+    """API キー未設定を「候補なし」と区別できること。
+
+    区別できないと、配線漏れで連携が死んでいても UI は「候補が見つかりませんでした」と
+    出すだけで、原因が種目名なのか設定なのか永久に判別できない (実際にそれで気づけなかった)。
+    """
+    r = app_client.get("/api/exercise-candidates", params={"name": "ダンベルベンチプレス"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["configured"] is False
+    assert body["candidates"] == []

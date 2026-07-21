@@ -1082,6 +1082,8 @@ export type ExerciseCandidate = {
 export type ExerciseCandidatesResponse = {
   selected: (Omit<ExerciseCandidate, "selected"> & { source: "override" | "curated" | "auto" }) | null;
   candidates: ExerciseCandidate[];
+  /** ExerciseDB の API キーが通っているか。false なら候補ゼロは「未設定」が原因。 */
+  configured?: boolean;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

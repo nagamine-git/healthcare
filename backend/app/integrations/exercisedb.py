@@ -179,6 +179,16 @@ def _score(query: str, candidate_name: str) -> float:
     return len(q & c) / len(q)
 
 
+def is_configured() -> bool:
+    """ExerciseDB の API キーが通っているか。
+
+    キーが無いと detail も GIF も静かに None になり、UI 上は「候補が見つかりません」と
+    区別がつかない。**設定漏れと該当種目なしは別物**なので、呼び出し側が言い分けられるよう
+    ここで明示的に返す (2026-07 に配線漏れで連携が死んでいたのに気づけなかった反省)。
+    """
+    return bool(get_settings().exercisedb_api_key)
+
+
 def _cache_dir() -> Path:
     d = get_settings().app_data_dir / "exercise_gifs"
     d.mkdir(parents=True, exist_ok=True)
