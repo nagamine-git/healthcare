@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     finance_savings_rate_target_pct: float = 25.0      # 良好な貯蓄率(目標)
     # 法人版 √(総資産×純資産) のマイルストーン (個人の1000万よりずっと小さい事業規模を想定)
     finance_corporate_wealth_index_target_jpy: float = 5_000_000
+    # 法人の財務健全度スコアを構成する 3 指標の目標。
+    # ランウェイ: 3ヶ月未満は資金繰りが危険水域、12ヶ月あれば 1 事業年度を戦える (VC の一般則)。
+    finance_corporate_runway_floor_months: float = 3.0
+    finance_corporate_runway_good_months: float = 12.0
+    # 自己資本比率: 中小企業の平均が概ね 30〜40%、50% 超で優良とされる (中小企業実態基本調査)。
+    finance_corporate_equity_ratio_floor_pct: float = 10.0
+    finance_corporate_equity_ratio_good_pct: float = 50.0
 
     # 利用可能な機材 (LLM 用)。ダンベル重量は **これ以外の刻みは存在しない**。
     # トレーニング習熟度 (beginner/intermediate/advanced)。実績が無い種目の初期重量係数に使う

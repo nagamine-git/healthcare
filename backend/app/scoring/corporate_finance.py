@@ -152,6 +152,74 @@ def _leverage(debt: float, net_assets: float | None) -> str:
 GOAL_STRETCH_POINTS = 10.0  # 個人の finance_advisor と同じ: 目標 = 現在スコア + この点数
 
 
+def _months_elapsed(latest: CorporateFinanceSnapshot) -> float | None:
+    """期首からの経過月数。trial_pl の累計値を月次ペースに割り戻す分母。"""
+    if latest.fiscal_start_date is None:
+        return None
+    days = (latest.date - latest.fiscal_start_date).days + 1
+    return days / 30.4375 if days >= 1 else None
+
+
+def _monthly_burn(latest: CorporateFinanceSnapshot) -> float | None:
+    """1ヶ月あたりの営業費用。営業損益 = 売上 − 費用 なので 費用 = 売上 − 営業損益。
+
+    freee は月次の費用合計を直接くれないため、期首からの累計を経過月数で割り戻す。
+    """
+    months = _months_elapsed(latest)
+    if months is None or months <= 0:
+        return None
+    if latest.revenue_jpy is None or latest.operating_income_jpy is None:
+        return None
+    expense_ytd = latest.revenue_jpy - latest.operating_income_jpy
+    return expense_ytd / months if expense_ytd > 0 else None
+
+
+def _health(latest: CorporateFinanceSnapshot, wealth_index: float | None) -> dict[str, Any]:
+    """財務健全度 = 「規模」「持続力」「安全性」の 3 指標を達成度化して平均する。
+
+    1 指標だけ良くても健全とは言えないので、性質の違う 3 つを等重みで見る:
+      - 規模   = √(総資産×純資産)。1 つの数字で「大きさ」と「借金の少なさ」を同時に見る
+      - 持続力 = ランウェイ (現金 ÷ 月あたり営業費用)
+      - 安全性 = 自己資本比率 (純資産 ÷ 総資産)
+    取れない指標は平均から外す (0 点扱いにすると未取込が「悪い」に化けるため)。
+    """
+    s = get_settings()
+    burn = _monthly_burn(latest)
+    cash = latest.cash_jpy
+    runway_months = cash / burn if burn and burn > 0 and cash is not None else None
+
+    gross = latest.total_assets_jpy
+    net = latest.net_assets_jpy
+    equity_ratio_pct = (net / gross * 100.0) if gross and gross > 0 and net is not None else None
+
+    parts: dict[str, float | None] = {
+        "scale": (
+            upper_achievement(wealth_index, 0.0, s.finance_corporate_wealth_index_target_jpy)
+            if wealth_index is not None else None
+        ),
+        "runway": (
+            upper_achievement(runway_months, s.finance_corporate_runway_floor_months,
+                              s.finance_corporate_runway_good_months)
+            if runway_months is not None else None
+        ),
+        "equity": (
+            upper_achievement(equity_ratio_pct, s.finance_corporate_equity_ratio_floor_pct,
+                              s.finance_corporate_equity_ratio_good_pct)
+            if equity_ratio_pct is not None else None
+        ),
+    }
+    got = [v for v in parts.values() if v is not None]
+    score = round(sum(got) / len(got), 1) if got else None
+    return {
+        "runway_months": round(runway_months, 1) if runway_months is not None else None,
+        "monthly_burn_jpy": _r(burn),
+        "equity_ratio_pct": round(equity_ratio_pct, 1) if equity_ratio_pct is not None else None,
+        "subscores": {k: (round(v, 1) if v is not None else None) for k, v in parts.items()},
+        "health_score": score,
+        "health_goal": min(100.0, score + GOAL_STRETCH_POINTS) if score is not None else None,
+    }
+
+
 def compute_corporate_finance(
     session: Session, *, wealth_index_target: float | None = None,
 ) -> dict[str, Any] | None:
@@ -269,8 +337,10 @@ def compute_corporate_finance(
     # 衝動買い保留の閾値は個人 (/api/finance) と同じく常時公開 — ウィジェットが
     # 「¥○○以上の経費は一晩保留に」を出すのに使う。moves の優先度には依存させない。
     impulse_hold_jpy, impulse_hold_basis = _impulse_hold(latest)
+    health = _health(latest, wealth_index)
 
     return {
+        **health,
         "date": latest.date.isoformat(),
         "company_name": latest.company_name,
         "total_assets_jpy": _r(latest.total_assets_jpy),

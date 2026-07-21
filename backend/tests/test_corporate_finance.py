@@ -396,3 +396,51 @@ def test_compute_corporate_finance_trend_move_includes_change_amount(db_engine):
         result = compute_corporate_finance(session)
     m = next(x for x in result["moves"] if x["kind"] == "trend")
     assert f"{1147426 - 1300000:,}円" in m["text"]
+
+
+def test_compute_corporate_finance_health_score_from_three_metrics(db_engine):
+    # 期首 5/1 → 7/20 は 81日 ≈ 2.66ヶ月。費用 = 売上779,182 − 営業損益(−1,629,166) = 2,408,348
+    # → 月バーン ≈ 904,262。現金 6,475,201 → ランウェイ ≈ 7.2ヶ月。
+    # 自己資本比率 = 1,147,426 / 6,650,174 = 17.3%
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555, cash_jpy=6475201,
+            revenue_jpy=779182, operating_income_jpy=-1629166,
+            fiscal_start_date=date(2026, 5, 1),
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["runway_months"] == 7.2
+    assert result["equity_ratio_pct"] == 17.3
+    # 3 指標すべて算出できている → 総合点は 3 つの平均
+    subs = result["subscores"]
+    assert all(subs[k] is not None for k in ("scale", "runway", "equity"))
+    assert result["health_score"] == round(sum(subs.values()) / 3, 1)
+    assert result["health_goal"] == min(100.0, result["health_score"] + 10.0)
+
+
+def test_compute_corporate_finance_health_ignores_missing_metrics(db_engine):
+    # 期首日も PL も無い → ランウェイ算出不可。取れた指標だけで平均する
+    # (0 点扱いにすると「未取込」が「不健全」に化けるため)。
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["runway_months"] is None
+    assert result["subscores"]["runway"] is None
+    assert result["subscores"]["equity"] is not None
+    got = [v for v in result["subscores"].values() if v is not None]
+    assert result["health_score"] == round(sum(got) / len(got), 1)
+
+
+def test_compute_corporate_finance_health_none_when_nothing_computable(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(date=date(2026, 7, 20)))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["health_score"] is None
+    assert result["health_goal"] is None
