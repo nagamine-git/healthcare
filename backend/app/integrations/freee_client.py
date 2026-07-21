@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -188,6 +189,24 @@ def get_company() -> dict[str, Any] | None:
         return None
     c = companies[0]
     return {"id": c.get("id"), "name": c.get("display_name") or c.get("name")}
+
+
+def fetch_fiscal_start_date(company_id: int, on: date) -> date | None:
+    """on を含む会計期間の期首日。/companies/{id}?details=true の fiscal_years から探す。
+
+    trial_bs/trial_pl は「期首からの累計」を返すのに期間そのものを含まないため、
+    1日あたりペース (衝動買い閾値など) の分母はここで取る。取得失敗は None (ベストエフォート)。
+    """
+    data = _api_get(f"/api/1/companies/{company_id}", params={"details": "true"})
+    for fy in (((data or {}).get("company") or {}).get("fiscal_years")) or []:
+        try:
+            start = date.fromisoformat(fy["start_date"])
+            end = date.fromisoformat(fy["end_date"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start <= on <= end:
+            return start
+    return None
 
 
 def fetch_trial_bs(company_id: int) -> dict[str, Any] | None:

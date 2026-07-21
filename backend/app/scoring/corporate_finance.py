@@ -57,6 +57,9 @@ def parse_trial_pl(trial_pl: dict[str, Any]) -> dict[str, Any]:
     「赤字です」で終わらせず「どの費目が主因か」まで言うための内訳。個々の費目行
     (販売管理費配下、非合計行) を金額降順で並べる。COGS 内訳(売上原価配下)は今回対象外
     (この会社では影響が小さく、対象を広げると階層追跡が複雑になるため)。
+
+    actionable_expense_ytd_jpy は top 5 に切る前の全費目から集計する (裁量経費の
+    1日あたりペース = 衝動買い閾値の分子。上位5件だけだと小さい費目が漏れて過小になる)。
     """
     revenue = operating_income = None
     items: list[dict[str, Any]] = []
@@ -69,11 +72,16 @@ def parse_trial_pl(trial_pl: dict[str, Any]) -> dict[str, Any]:
                 operating_income = b.get("closing_balance")
         if not b.get("total_line") and cat == "販売管理費" and b.get("account_item_name"):
             items.append({"name": b["account_item_name"], "amount": b.get("closing_balance")})
+    actionable = [
+        x["amount"] for x in items
+        if x["name"] not in _NON_ACTIONABLE_EXPENSE_CATEGORIES and x["amount"]
+    ]
     items.sort(key=lambda x: -(x["amount"] or 0))
     return {
         "revenue_jpy": revenue,
         "operating_income_jpy": operating_income,
         "top_expense_categories": items[:_TOP_EXPENSE_LIMIT],
+        "actionable_expense_ytd_jpy": sum(actionable) if actionable else None,
     }
 
 
@@ -105,6 +113,25 @@ def _pick_actionable_expense(categories: list[dict[str, Any]]) -> dict[str, Any]
         if c.get("name") not in _NON_ACTIONABLE_EXPENSE_CATEGORIES:
             return c
     return None
+
+
+def _impulse_hold(latest: CorporateFinanceSnapshot) -> tuple[int, str]:
+    """法人版の衝動買い保留の閾値 (円, 根拠ラベル)。個人の 1日あたり裁量費と同じ発想:
+
+    裁量経費 (税・社会保険・役員報酬等を除いた販管費) の期首からの累計 ÷ 経過日数 =
+    「1日あたり裁量経費」。1日分を超える経費の即決は一晩保留にする (24h ルール)。
+    費目内訳か期首日が未取込なら設定の既定値にフォールバックする。
+    """
+    total = latest.actionable_expense_ytd_jpy
+    start = latest.fiscal_start_date
+    if total and total > 0 and start is not None:
+        days = (latest.date - start).days + 1  # 期首当日を1日目と数える
+        if days >= 1:
+            return (
+                max(500, round(total / days)),
+                f"裁量経費(税・役員報酬等を除く販管費){round(total):,}円 ÷ 期首から{days}日",
+            )
+    return get_settings().corporate_impulse_hold_jpy, "既定値 (freee費目内訳/会計期間 未取込)"
 
 
 def _leverage(debt: float, net_assets: float | None) -> str:
@@ -239,6 +266,10 @@ def compute_corporate_finance(
 
     moves.sort(key=lambda m: -m["priority"])
 
+    # 衝動買い保留の閾値は個人 (/api/finance) と同じく常時公開 — ウィジェットが
+    # 「¥○○以上の経費は一晩保留に」を出すのに使う。moves の優先度には依存させない。
+    impulse_hold_jpy, impulse_hold_basis = _impulse_hold(latest)
+
     return {
         "date": latest.date.isoformat(),
         "company_name": latest.company_name,
@@ -259,4 +290,6 @@ def compute_corporate_finance(
         "diagnosis": diagnosis,
         "moves": moves,
         "net_assets_change_jpy": _r(net_assets_change),
+        "impulse_hold_jpy": impulse_hold_jpy,
+        "impulse_hold_basis": impulse_hold_basis,
     }

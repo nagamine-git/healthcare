@@ -994,6 +994,10 @@ class CorporateFinanceSnapshot(Base):
     revenue_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 売上高 (期首からの累計)
     operating_income_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)  # 営業損益金額
     top_expense_categories: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{name, amount}] 降順
+    # 裁量経費 (税・社会保険・役員報酬等の非アクション費目を除いた販管費) の期首からの累計。
+    # 期首日と組み合わせて「法人の1日あたり裁量経費」= 衝動買い保留の閾値を出す。
+    actionable_expense_ytd_jpy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiscal_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # 会計期間の期首日
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

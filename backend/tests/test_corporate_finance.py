@@ -65,11 +65,14 @@ def test_parse_trial_pl_extracts_revenue_and_top_expenses():
     assert parsed["top_expense_categories"][0] == {"name": "租税公課", "amount": 680600}
     assert parsed["top_expense_categories"][1] == {"name": "役員報酬", "amount": 539998}
     assert len(parsed["top_expense_categories"]) == 5
+    # 裁量経費 = 販管費のうち税・社会保険・役員報酬・減価償却を除いた合計
+    assert parsed["actionable_expense_ytd_jpy"] == 487375 + 217942 + 150000
 
 
 def test_parse_trial_pl_missing_fields_are_none_or_empty():
     assert parse_trial_pl({"balances": []}) == {
         "revenue_jpy": None, "operating_income_jpy": None, "top_expense_categories": [],
+        "actionable_expense_ytd_jpy": None,
     }
 
 
@@ -309,6 +312,33 @@ def test_compute_corporate_finance_deficit_move_generic_when_no_actionable_expen
         result = compute_corporate_finance(session)
     m = next(x for x in result["moves"] if x["kind"] == "deficit")
     assert "固定費(人件費・外注費等)を見直す" in m["text"]
+
+
+def test_compute_corporate_finance_impulse_hold_from_actionable_expense_pace(db_engine):
+    # 裁量経費 855,317円 / 期首(5/1)から 7/20 までの 81 日 = 1日あたり 10,560円 → 閾値
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555,
+            actionable_expense_ytd_jpy=855317, fiscal_start_date=date(2026, 5, 1),
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["impulse_hold_jpy"] == round(855317 / 81)
+    assert "81日" in result["impulse_hold_basis"]
+
+
+def test_compute_corporate_finance_impulse_hold_falls_back_to_default(db_engine):
+    # 費目内訳/期首日が未取込でも閾値は常時返す (既定値 + それと分かる根拠ラベル)
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555,
+        ))
+    with session_scope() as session:
+        result = compute_corporate_finance(session)
+    assert result["impulse_hold_jpy"] == 10000
+    assert "既定値" in result["impulse_hold_basis"]
 
 
 def test_compute_corporate_finance_leverage_move_includes_debt_amount(db_engine):

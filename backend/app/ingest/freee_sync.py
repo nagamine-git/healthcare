@@ -41,12 +41,16 @@ def sync_corporate_finance() -> dict[str, Any]:
         logger.warning("freee_sync_trial_pl_fetch_failed")
 
     today = app_today()
+    # 期首日 (衝動買い閾値の分母 = 期首からの経過日数)。ベストエフォート。
+    fiscal_start = freee_client.fetch_fiscal_start_date(company["id"], today)
     with session_scope() as session:
         row = session.get(CorporateFinanceSnapshot, today)
         if row is None:
             row = CorporateFinanceSnapshot(date=today)
             session.add(row)
         row.company_name = company.get("name")
+        # 取得失敗 (None) 時は同日既存行の値を消さない (期首日はめったに変わらない)
+        row.fiscal_start_date = fiscal_start or row.fiscal_start_date
         for k, v in {**parsed, **parsed_pl}.items():
             setattr(row, k, v)
 
