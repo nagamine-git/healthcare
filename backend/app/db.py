@@ -131,6 +131,7 @@ def _apply_lightweight_migrations() -> None:
             ("top_expense_categories", "JSON"),
             ("actionable_expense_ytd_jpy", "REAL"),
             ("fiscal_start_date", "DATE"),
+            ("cogs_jpy", "REAL"),
         ],
         "life_profile": [("monthly_expense_jpy", "REAL")],
         "user_profile": [

@@ -72,7 +72,7 @@ def test_parse_trial_pl_extracts_revenue_and_top_expenses():
 def test_parse_trial_pl_missing_fields_are_none_or_empty():
     assert parse_trial_pl({"balances": []}) == {
         "revenue_jpy": None, "operating_income_jpy": None, "top_expense_categories": [],
-        "actionable_expense_ytd_jpy": None,
+        "actionable_expense_ytd_jpy": None, "cogs_jpy": None,
     }
 
 
@@ -444,3 +444,67 @@ def test_compute_corporate_finance_health_none_when_nothing_computable(db_engine
         result = compute_corporate_finance(session)
     assert result["health_score"] is None
     assert result["health_goal"] is None
+
+
+def test_parse_trial_pl_extracts_cogs_for_gross_margin():
+    pl = {"balances": [
+        {"account_category_name": "売上高", "total_line": True, "hierarchy_level": 1,
+         "closing_balance": 779182},
+        {"account_category_name": "売上原価", "total_line": True, "hierarchy_level": 2,
+         "closing_balance": 59626},
+    ]}
+    assert parse_trial_pl(pl)["cogs_jpy"] == 59626
+
+
+def test_breakdown_splits_deficit_into_revenue_and_expense_paths(db_engine):
+    # 赤字 1,694,555。粗利率 = (779,182 − 59,626)/779,182 = 92.3%
+    # → 必要増収 = 1,694,555 / 0.923 ≈ 1,835,700
+    # 裁量経費 855,317 → 必要削減率 = 198% (支出だけでは埋まらない)
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=6650174, total_liabilities_jpy=5502748,
+            net_assets_jpy=1147426, ytd_net_income_jpy=-1694555,
+            revenue_jpy=779182, cogs_jpy=59626, actionable_expense_ytd_jpy=855317,
+            top_expense_categories=[
+                {"name": "租税公課", "amount": 680600},
+                {"name": "通信費", "amount": 487375},
+                {"name": "消耗品費", "amount": 217942},
+            ],
+        ))
+    with session_scope() as session:
+        b = compute_corporate_finance(session)["breakdown"]
+    assert b["deficit_jpy"] == 1694555
+    assert b["revenue_path"]["gross_margin_pct"] == 92.3
+    assert b["revenue_path"]["required_increase_jpy"] == round(1694555 / ((779182 - 59626) / 779182))
+    # 支出だけでは埋まらないことを明示する
+    assert b["expense_path"]["required_cut_pct"] > 100
+    assert b["expense_path"]["enough_alone"] is False
+    # 削れない費目 (租税公課) は経路から除外される
+    names = [i["name"] for i in b["expense_path"]["items"]]
+    assert "租税公課" not in names
+    assert names == ["通信費", "消耗品費"]
+    assert b["expense_path"]["items"][0]["covers_pct"] == round(487375 / 1694555 * 100, 1)
+
+
+def test_breakdown_none_when_profitable(db_engine):
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=3000000, total_liabilities_jpy=200000,
+            net_assets_jpy=2800000, ytd_net_income_jpy=100000, revenue_jpy=1000000,
+        ))
+    with session_scope() as session:
+        assert compute_corporate_finance(session)["breakdown"] is None
+
+
+def test_breakdown_expense_path_enough_alone_when_cut_is_feasible(db_engine):
+    # 赤字 200,000 / 裁量経費 1,000,000 → 20% 削れば埋まる
+    with session_scope() as session:
+        session.add(CorporateFinanceSnapshot(
+            date=date(2026, 7, 20), total_assets_jpy=3000000, total_liabilities_jpy=200000,
+            net_assets_jpy=2800000, ytd_net_income_jpy=-200000,
+            revenue_jpy=1000000, cogs_jpy=0, actionable_expense_ytd_jpy=1000000,
+        ))
+    with session_scope() as session:
+        b = compute_corporate_finance(session)["breakdown"]
+    assert b["expense_path"]["required_cut_pct"] == 20.0
+    assert b["expense_path"]["enough_alone"] is True

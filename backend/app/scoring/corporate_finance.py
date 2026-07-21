@@ -61,10 +61,13 @@ def parse_trial_pl(trial_pl: dict[str, Any]) -> dict[str, Any]:
     actionable_expense_ytd_jpy は top 5 に切る前の全費目から集計する (裁量経費の
     1日あたりペース = 衝動買い閾値の分子。上位5件だけだと小さい費目が漏れて過小になる)。
     """
-    revenue = operating_income = None
+    revenue = operating_income = cogs = None
     items: list[dict[str, Any]] = []
     for b in trial_pl.get("balances") or []:
         cat = b.get("account_category_name")
+        # 売上原価は hierarchy_level 2 の合計行 (売上総損益金額の子)。粗利率の算出に要る。
+        if b.get("total_line") and cat == "売上原価" and b.get("hierarchy_level") == 2:
+            cogs = b.get("closing_balance")
         if b.get("total_line") and b.get("hierarchy_level") == 1:
             if cat == "売上高":
                 revenue = b.get("closing_balance")
@@ -80,6 +83,7 @@ def parse_trial_pl(trial_pl: dict[str, Any]) -> dict[str, Any]:
     return {
         "revenue_jpy": revenue,
         "operating_income_jpy": operating_income,
+        "cogs_jpy": cogs,
         "top_expense_categories": items[:_TOP_EXPENSE_LIMIT],
         "actionable_expense_ytd_jpy": sum(actionable) if actionable else None,
     }
@@ -132,6 +136,61 @@ def _impulse_hold(latest: CorporateFinanceSnapshot) -> tuple[int, str]:
                 f"裁量経費(税・役員報酬等を除く販管費){round(total):,}円 ÷ 期首から{days}日",
             )
     return get_settings().corporate_impulse_hold_jpy, "既定値 (freee費目内訳/会計期間 未取込)"
+
+
+def _breakdown(latest: CorporateFinanceSnapshot) -> dict[str, Any] | None:
+    """赤字を「収入を増やす」「支出を減らす」の 2 経路に分解し、各々の必要量を出す。
+
+    「赤字だから頑張る」では動けないので、**同じ赤字を埋めるのに各経路で
+    いくら必要か**を並べて、どちらが現実的かを比較できるようにする。
+
+    - 収入経路: 増やした売上のうち利益として残るのは粗利率ぶんだけ。
+      よって必要増収 = 赤字 ÷ 粗利率 (粗利率 100% と誤認すると過小評価になる)。
+    - 支出経路: 削れるのは裁量経費だけ (税・社保・役員報酬・減価償却は除く)。
+      よって必要削減率 = 赤字 ÷ 裁量経費。100% を超えるなら**支出だけでは埋まらない**。
+
+    黒字なら None (埋めるべき赤字が無い)。
+    """
+    net_income = latest.ytd_net_income_jpy
+    if net_income is None or net_income >= 0:
+        return None
+    deficit = -net_income
+
+    revenue = latest.revenue_jpy
+    cogs = latest.cogs_jpy
+    gross_margin = None
+    if revenue and revenue > 0 and cogs is not None:
+        gross_margin = (revenue - cogs) / revenue
+
+    revenue_path: dict[str, Any] = {"required_increase_jpy": None, "gross_margin_pct": None}
+    if gross_margin and gross_margin > 0:
+        need = deficit / gross_margin
+        revenue_path = {
+            "required_increase_jpy": _r(need),
+            "gross_margin_pct": round(gross_margin * 100, 1),
+            "vs_current_pct": round(need / revenue * 100) if revenue else None,
+        }
+
+    actionable = latest.actionable_expense_ytd_jpy
+    expense_path: dict[str, Any] = {"actionable_total_jpy": _r(actionable), "items": []}
+    if actionable and actionable > 0:
+        cut_pct = deficit / actionable * 100
+        expense_path["required_cut_pct"] = round(cut_pct, 1)
+        # 支出だけで埋まらないなら、その事実を隠さず持ち上げる。
+        expense_path["enough_alone"] = cut_pct <= 100
+        items = []
+        for c in latest.top_expense_categories or []:
+            name, amount = c.get("name"), c.get("amount") or 0
+            if name in _NON_ACTIONABLE_EXPENSE_CATEGORIES or amount <= 0:
+                continue
+            # この費目を全部消したら赤字の何 % が埋まるか。
+            items.append({
+                "name": name, "amount": _r(amount),
+                "covers_pct": round(amount / deficit * 100, 1),
+            })
+        expense_path["items"] = items
+
+    return {"deficit_jpy": _r(deficit), "revenue_path": revenue_path, "expense_path": expense_path}
 
 
 def _leverage(debt: float, net_assets: float | None) -> str:
@@ -341,6 +400,7 @@ def compute_corporate_finance(
 
     return {
         **health,
+        "breakdown": _breakdown(latest),
         "date": latest.date.isoformat(),
         "company_name": latest.company_name,
         "total_assets_jpy": _r(latest.total_assets_jpy),
