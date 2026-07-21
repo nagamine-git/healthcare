@@ -39,6 +39,22 @@ def test_rebalance_reserve_and_room(db_engine):
     assert crypto["room"] == 700_000 and crypto["signal"] == "buy"
 
 
+def test_compute_finance_exposes_impulse_hold_regardless_of_atlas_priority(db_engine):
+    # 「いまコレ」の経済枠が最優先でない日でも、資産ページ/ウィジェットは常に
+    # 具体的な閾値を出したい → compute_finance の直下に impulse_hold_jpy/basis がある。
+    from app.models.health import CashflowTx
+    from app.scoring.timewindow import app_today
+
+    with session_scope() as session:
+        session.add(CashflowTx(id="t1", date=app_today(), amount_jpy=-9000,
+                                major_category="日用品", counted=True, is_transfer=False))
+    with session_scope() as session:
+        f = compute_finance(session)
+    assert isinstance(f["impulse_hold_jpy"], int)
+    assert f["impulse_hold_jpy"] >= 500
+    assert isinstance(f["impulse_hold_basis"], str) and f["impulse_hold_basis"]
+
+
 def test_roi_ranking_and_verdict(db_engine):
     with session_scope() as session:
         get_state(session).wage_jpy_per_h = 2000

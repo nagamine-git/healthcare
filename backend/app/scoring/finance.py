@@ -435,4 +435,18 @@ def compute_finance(session: Session) -> dict[str, Any]:
     cf.pop("_avg_exp", None)
     advisor = compute_advisor(session, reb, cf)
     profile = life_profile_to_dict(get_life_profile(session))
-    return {"rebalance": reb, "roi": roi, "cashflow": cf, "advisor": advisor, "profile": profile}
+
+    # 衝動買い保留の閾値 (next_action の「いまコレ」経済枠と同じ計算)。全体マップで
+    # 経済が最優先でない日でも、資産ページ/ウィジェットでは常に具体額を出したいので
+    # ここで独立に計算する (next_action._dynamic_impulse_hold への依存は循環回避のため遅延import)。
+    from app.scoring.next_action import _dynamic_impulse_hold
+
+    impulse = _dynamic_impulse_hold(session)
+    s = get_settings()
+    impulse_hold_jpy = impulse[0] if impulse else s.impulse_hold_jpy
+    impulse_hold_basis = impulse[1] if impulse else "既定値 (家計データ未反映)"
+
+    return {
+        "rebalance": reb, "roi": roi, "cashflow": cf, "advisor": advisor, "profile": profile,
+        "impulse_hold_jpy": impulse_hold_jpy, "impulse_hold_basis": impulse_hold_basis,
+    }
