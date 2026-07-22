@@ -817,6 +817,20 @@ export type SleepDriverState = {
   recommendations?: SleepRecommendation[];
 };
 
+// 就寝前 wind-down: 状態から「すぐ寝ろ or この呼吸法を N 分」を出し分ける
+export type WindDown = {
+  action: "sleep_now" | "breathe" | "none";
+  protocol: "cyclic_sigh" | "slow_6" | null;
+  minutes: number;
+  headline: string;
+  reason: string;
+  steps: string[];
+  minutes_to_bedtime: number | null;
+  hrv_drop_pct: number | null;
+  rhr_rise_bpm: number | null;
+  target_bedtime: string | null;
+};
+
 // 就寝前の介入 (耳栓/アイマスク/ノーズブリーズ/口テープ) の記録と効果分析
 export type SleepInterventionFlags = {
   earplugs: boolean | null;
@@ -2001,6 +2015,7 @@ export const api = {
   forecast: () => request<ForecastState>("/api/forecast"),
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
+  windDown: () => request<WindDown>("/api/wind-down"),
   sleepInterventionGet: () =>
     request<SleepInterventionRecord>("/api/sleep-intervention"),
   sleepInterventionSet: (body: SleepInterventionSet) =>

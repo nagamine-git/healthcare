@@ -38,6 +38,7 @@ import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
 import { SleepDriverPanel } from "../components/SleepDriverPanel";
+import { WindDownCard } from "../components/WindDownCard";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
 import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
 import { SleepInterventionPanel } from "../components/SleepInterventionPanel";
@@ -370,6 +371,8 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 睡眠 ============ */}
       {tab === "sleep" && (
       <div className="space-y-3">
+        {/* 就寝前の一手: 状態から「すぐ寝ろ or この呼吸法」を出し分ける (押し付けない) */}
+        <WindDownCard />
         <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
         <TonightPlanPanel plan={data.tonight_plan} />
         <SectionHeader label="就寝前の介入 × 睡眠の質" hint="耳栓・アイマスク・鼻呼吸・口テープの効果をn-of-1検証" />
