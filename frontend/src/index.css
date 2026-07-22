@@ -107,9 +107,9 @@ body {
   left: 0;
   right: 0;
   height: env(safe-area-inset-top);
-  background: rgb(var(--scrim-rgb) / 0.72);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  /* ページ地 (void) と完全一致の不透明色。半透明+saturate はライトの淡いグレーを
+     色相シフトさせて上端に色ズレを生むので使わない (blur も不要)。 */
+  background: rgb(var(--c-void));
   z-index: 50;
   pointer-events: none;
 }
@@ -117,7 +117,8 @@ body {
 /* 固定ボトムナビ + ホームインジケータを必ずクリアする下余白。
    全ページ共通で使い、ページ側の pb-* / safe-area-bottom とは併用しない。 */
 .pb-nav {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
+  /* 浮遊ナビ (カプセル + 持ち上げた+ボタン + 下マージン) を最下部コンテンツが必ずクリアする */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 96px);
 }
 
 /* ===== タイポグラフィ階層(iOS 準拠)===== */

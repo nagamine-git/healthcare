@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 /** SF シンボル風の線アイコン(currentColor 追従) */
 const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" width={24} height={24} aria-hidden
+  <svg viewBox="0 0 24 24" width={22} height={22} aria-hidden
     fill="none" stroke="currentColor"
-    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
     <path d={d} />
   </svg>
 );
@@ -26,6 +26,7 @@ const RIGHT: { key: string; label: string; hash: string }[] = [
   { key: "consult", label: "相談", hash: "#consult" },
 ];
 
+/** アクティブは塗りピルで静かに持ち上げる。緑グローは廃止 (古びて見えるため)。 */
 function NavButton({ it, current }: { it: { key: string; label: string; hash: string }; current: string }) {
   const active = it.key === current;
   return (
@@ -35,41 +36,46 @@ function NavButton({ it, current }: { it: { key: string; label: string; hash: st
       }}
       aria-label={it.label}
       aria-current={active ? "page" : undefined}
-      className={`press flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 transition-colors ${
-        active ? "text-prog-300" : "text-ink-faint hover:text-ink-dim"
+      className={`press flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-1.5 transition-colors ${
+        active ? "bg-ink/[0.07] text-ink" : "text-ink-faint hover:text-ink-dim"
       }`}
     >
-      <span className={active ? "drop-shadow-[0_0_8px_rgba(110,231,183,0.35)]" : ""}>
-        {ICONS[it.key]}
-      </span>
-      <span className="text-[10px] font-medium tracking-tight">{it.label}</span>
+      {ICONS[it.key]}
+      <span className="text-[10px] font-semibold tracking-tight">{it.label}</span>
     </button>
   );
 }
 
-/** 全画面に常設のナビ。中央の + はどこからでも 2 タップで記録できる導線。 */
+/**
+ * 全画面に常設の浮遊ナビ。端から浮かせたカプセルで iOS 風に。
+ * 中央の + はどこからでも 2 タップで記録できる主導線 — ここだけ主役色 (amber)。
+ */
 export function BottomNav({ current, onQuickLog }: { current: string; onQuickLog: () => void }) {
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-void/80 backdrop-blur-xl"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 10px)" }}
     >
-      <div className="mx-auto flex max-w-2xl items-stretch px-1">
+      <nav className="pointer-events-auto relative mx-4 flex w-full max-w-md items-center gap-1 rounded-[26px] border border-hairline bg-panel/85 px-2 py-1.5 shadow-float backdrop-blur-2xl">
         {LEFT.map((it) => <NavButton key={it.key} it={it} current={current} />)}
-        <div className="flex flex-1 items-center justify-center">
+
+        {/* 中央 +: カプセルから少し持ち上げた記録ボタン。地色のリングで浮遊感を出す。 */}
+        <div className="flex shrink-0 items-center justify-center px-1">
           <button
             onClick={onQuickLog}
             aria-label="クイック記録"
-            className="press -mt-4 grid h-12 w-12 place-items-center rounded-full bg-act text-void shadow-glow-act transition hover:bg-act-300 active:scale-95"
+            className="press -mt-6 grid place-items-center rounded-full bg-act text-void shadow-glow-act ring-4 ring-panel transition hover:bg-act-300 active:scale-95"
+            style={{ height: "3.25rem", width: "3.25rem" }}
           >
             <svg viewBox="0 0 24 24" width={24} height={24} aria-hidden fill="none"
-              stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
         </div>
+
         {RIGHT.map((it) => <NavButton key={it.key} it={it} current={current} />)}
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 }
