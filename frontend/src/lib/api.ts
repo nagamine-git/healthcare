@@ -817,6 +817,19 @@ export type SleepDriverState = {
   recommendations?: SleepRecommendation[];
 };
 
+// 種目の詳しいフォームガイド (タップで LLM 生成 → キャッシュ)。
+export type ExerciseGuide = {
+  cached: boolean;
+  name_ja?: string;
+  steps?: {
+    setup?: string[];
+    execution?: string[];
+    breathing?: string[];
+    mistakes?: string[];
+    tips?: string[];
+  };
+};
+
 // 就寝前 wind-down: 状態から「すぐ寝ろ or この呼吸法を N 分」を出し分ける
 export type WindDown = {
   action: "sleep_now" | "breathe" | "none";
@@ -2016,6 +2029,13 @@ export const api = {
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
   windDown: () => request<WindDown>("/api/wind-down"),
+  exerciseGuide: (name: string) =>
+    request<ExerciseGuide>(`/api/exercise-guide?name=${encodeURIComponent(name)}`),
+  exerciseGuideGenerate: (name: string) =>
+    request<ExerciseGuide>("/api/exercise-guide", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
   sleepInterventionGet: () =>
     request<SleepInterventionRecord>("/api/sleep-intervention"),
   sleepInterventionSet: (body: SleepInterventionSet) =>

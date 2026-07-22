@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../lib/api";
+import { WorkoutSession } from "./WorkoutSession";
 import type {
   Advice,
   AdviceAction,
@@ -207,7 +208,7 @@ export function AdviceCard({ advice, onRegenerate, onSchedule, onFeedback, gcalC
                       <span className="basis-full text-xs text-ink-faint">{a.why}</span>
                     )}
                     {a.exercises && a.exercises.length > 0 && (
-                      <ExerciseList exercises={a.exercises} />
+                      <ExerciseList exercises={a.exercises} action={a} />
                     )}
                     {a.alternative && (
                       <div className="basis-full mt-1 rounded-md border border-hairline bg-hull/50 px-2 py-1.5">
@@ -537,9 +538,24 @@ function ExerciseGifPicker({
   );
 }
 
-function ExerciseList({ exercises }: { exercises: NonNullable<AdviceAction["exercises"]> }) {
+function ExerciseList({
+  exercises,
+  action,
+}: {
+  exercises: NonNullable<AdviceAction["exercises"]>;
+  action: AdviceAction;
+}) {
+  const [session, setSession] = useState(false);
   return (
     <div className="basis-full mt-2 space-y-2">
+      {/* 全画面・スリープ禁止の実行ビューへ。フォームを見ながら1種目ずつ進める。 */}
+      <button
+        onClick={() => setSession(true)}
+        className="press w-full rounded-control bg-prog py-2.5 text-[13px] font-semibold text-void"
+      >
+        トレを始める (実行ビュー)
+      </button>
+      {session && <WorkoutSession action={action} onClose={() => setSession(false)} />}
       <ul className="space-y-1.5">
         {exercises.map((e, i) => (
           <li
