@@ -204,6 +204,10 @@ def compute_tonight_plan(
     return {
         "wake": wake_dt.strftime("%H:%M"),
         "bedtime": bedtime_dt.strftime("%H:%M"),  # 今夜の現実的な目標 (習慣から前倒し)
+        # bedtime の完全な日時 (TZ-aware ISO)。日付境界 (深夜0時台の呼び出し等) を
+        # 正しくまたいだ値なので、他モジュール (wind_down 等) が「就寝まで残り分」を
+        # 計算する際は HH:MM を自前で日付に組み立てず、こちらを使うこと。
+        "bedtime_iso": bedtime_dt.isoformat(),
         "bath": bath_dt.strftime("%H:%M"),  # 後方互換 (= 上がる時刻)
         "bath_start": bath_start_dt.strftime("%H:%M"),  # 湯船に入る
         "bath_end": bath_end_dt.strftime("%H:%M"),  # 上がる (就寝90分前)

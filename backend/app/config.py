@@ -248,6 +248,35 @@ class Settings(BaseSettings):
     # 夕食の「遅すぎない上限」: 起床からこの時間以内に食べ終える (夜遅い食事は代謝/血糖に悪い
     # = 概日の摂食ミスアライメント; Morris 2015)。就寝逆算とこの絶対上限の早い方を採る。
     meal_last_h_after_wake: float = 13.0
+    # 睡眠負債の推定に使う直近日数 (target_sleep_min に対する不足分の合計)。
+    # 急性の睡眠負債は数日の回復睡眠でほぼ解消される (Kitamura 2016 らの知見) ため、
+    # 長期窓ではなく直近数日の不足に絞る (personal: 生活リズムの安定度に応じて調整余地)。
+    sleep_debt_window_days: int = 3
+
+    # --- Wind-down (就寝前:「すぐ寝ろ」vs 呼吸法の出し分け) ---
+    # wind-down 局面とみなす、就寝目標のこの分前からの窓 (personal: 生活リズム依存)。
+    wind_down_window_min: int = 45
+    # 睡眠負債が「大きい」とみなす閾値(分)。これを超え、かつ就寝目標まで残りわずかなら
+    # 呼吸法より「今すぐ寝る」を優先する (personal: 負債への耐性は個人差が大きい)。
+    wind_down_large_sleep_debt_min: float = 90.0
+    # 上と組み合わせて「残りわずか」とみなす閾値(分、就寝目標まで)。
+    wind_down_bedtime_soon_min: float = 20.0
+    # 過覚醒判定: HRV がベースライン比でこの割合以上低ければ「強い」過覚醒。
+    # baseline に対する相対値なので個人の絶対 HRV レベルには依存しないが、
+    # 閾値そのものの感度は個人差があるため personal (env 上書き可)。
+    wind_down_hrv_drop_strong_pct: float = 0.30
+    wind_down_hrv_drop_mild_pct: float = 0.15
+    # 過覚醒判定: 安静時心拍がベースラインよりこの bpm 以上高ければ「強い」/「軽度」過覚醒。
+    wind_down_rhr_rise_strong_bpm: float = 8.0
+    wind_down_rhr_rise_mild_bpm: float = 4.0
+    # 体内カフェイン残量がこの mg 以上なら「軽度の過覚醒」寄与とみなす
+    # (caffeine_min_cognitive_mg=60mg の半分程度。知覚できる残存量の目安)。
+    wind_down_caffeine_residual_mg: float = 30.0
+    # 各呼吸法プロトコルの実施分数レンジ (personal: 就寝までの残り時間で実際にはこの範囲に収める)。
+    wind_down_cyclic_sigh_min_min: int = 3
+    wind_down_cyclic_sigh_max_min: int = 5
+    wind_down_slow6_min_min: int = 5
+    wind_down_slow6_max_min: int = 10
 
     # --- トレーニング処方の開始重量 (前回実績が無いときの保守的スタート) ---
     # 腰のケガ歴を考慮し、ヒンジ系は 8kg から、全般に控えめに開始。
