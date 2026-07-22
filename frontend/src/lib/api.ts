@@ -850,6 +850,7 @@ export type SleepInterventionFlags = {
   eyemask: boolean | null;
   nose_strip: boolean | null;
   mouth_tape: boolean | null;
+  breathing: boolean | null;
 };
 export type SleepInterventionNight = SleepInterventionFlags & {
   date: string;
