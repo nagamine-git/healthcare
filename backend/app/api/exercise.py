@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from app.models import ExerciseGuide
 
 router = APIRouter()
 
@@ -124,3 +128,73 @@ async def delete_exercise_override(name: str) -> dict[str, Any]:
         return {"ok": True}
 
     return await run_in_threadpool(_work)
+
+
+def _guide_to_dict(row: ExerciseGuide) -> dict[str, Any]:
+    return {
+        "cached": True,
+        "exercise_key": row.exercise_key,
+        "name_ja": row.name_ja,
+        "steps": row.steps_json,
+        "model": row.model,
+        "created_at": (
+            row.created_at.replace(tzinfo=UTC).isoformat() if row.created_at else None
+        ),
+    }
+
+
+class ExerciseGuideIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+@router.get("/api/exercise-guide")
+async def exercise_guide(name: str) -> Response:
+    """種目名 (JA) の保存済みステップ式フォームガイド。
+
+    未生成 (キャッシュなし) は 204 (LLM は勝手に呼ばない。生成は POST で行う)。
+    """
+    from app.db import session_scope
+    from app.integrations.exercisedb import exercise_key
+    from app.models import ExerciseGuide
+
+    def _work() -> dict[str, Any] | None:
+        key = exercise_key(name)
+        with session_scope() as session:
+            row = session.get(ExerciseGuide, key)
+            return _guide_to_dict(row) if row is not None else None
+
+    data = await run_in_threadpool(_work)
+    if data is None:
+        return Response(status_code=204)
+    return JSONResponse(data)
+
+
+@router.post("/api/exercise-guide")
+async def create_exercise_guide(body: ExerciseGuideIn, force: bool = False) -> dict[str, Any]:
+    """ステップ式フォームガイドを LLM で生成して保存。保存済みならそれを返す (冪等・LLM はタップ時の1回だけ)。"""
+    from app.db import session_scope
+    from app.integrations.exercisedb import exercise_key
+    from app.models import ExerciseGuide
+
+    key = exercise_key(body.name)
+    with session_scope() as session:
+        existing = session.get(ExerciseGuide, key)
+        if existing is not None and not force:
+            return _guide_to_dict(existing)
+
+    from app.llm.exercise_guide import generate_guide
+
+    got = await generate_guide(body.name)
+    if got is None:
+        raise HTTPException(status_code=503, detail="ガイドを生成できませんでした (LLM 未設定/失敗)")
+    with session_scope() as session:
+        row = session.get(ExerciseGuide, key)
+        if row is None:
+            row = ExerciseGuide(exercise_key=key, name_ja=got["name_ja"], steps_json=got["steps"])
+            session.add(row)
+        row.name_ja = got["name_ja"]
+        row.steps_json = got["steps"]
+        row.model = got.get("model")
+        row.created_at = datetime.utcnow()
+        session.flush()
+        return _guide_to_dict(row)

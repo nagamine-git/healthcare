@@ -1017,5 +1017,23 @@ class ExerciseGifOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ExerciseGuide(Base):
+    """種目ごとの詳しいステップ式フォームガイド (ユーザーのタップで生成し、以後は保存済みを表示)。
+
+    自動生成はしない (LLM コストはタップ時の1回だけ)。exercise_key は種目名の正規化キー
+    (exercisedb.exercise_key と同じ規則、無ければ小文字化+空白/括弧除去に揃える)。
+    steps_json の構造: {"setup": [..], "execution": [..], "breathing": [..],
+    "mistakes": [..], "tips": [..]} で各値は箇条書きの文字列配列。
+    """
+
+    __tablename__ = "exercise_guide"
+
+    exercise_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name_ja: Mapped[str] = mapped_column(String(200))
+    steps_json: Mapped[dict] = mapped_column(JSON)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # Foreign keys not strictly needed for SQLite single-user, kept simple intentionally.
 _ = ForeignKey  # silence unused import if not referenced elsewhere
