@@ -134,6 +134,7 @@ def _apply_lightweight_migrations() -> None:
             ("cogs_jpy", "REAL"),
         ],
         "life_profile": [("monthly_expense_jpy", "REAL")],
+        "sleep_intervention_log": [("breathing", "BOOLEAN")],
         "user_profile": [
             ("birth_date", "DATE"),
             ("age", "INTEGER"),

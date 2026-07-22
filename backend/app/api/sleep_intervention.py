@@ -22,7 +22,7 @@ from app.scoring import sleep_interventions
 
 router = APIRouter()
 
-_FLAGS = ("earplugs", "eyemask", "nose_strip", "mouth_tape")
+_FLAGS = ("earplugs", "eyemask", "nose_strip", "mouth_tape", "breathing")
 
 
 def _target_date() -> date_type:
@@ -44,6 +44,7 @@ def _to_dict(row: SleepInterventionLog | None, target: date_type) -> dict[str, A
         "date": row.date.isoformat(), "display_label": display,
         "earplugs": row.earplugs, "eyemask": row.eyemask,
         "nose_strip": row.nose_strip, "mouth_tape": row.mouth_tape,
+        "breathing": row.breathing,
         "note": row.note,
         "updated_at": (
             row.updated_at.replace(tzinfo=UTC).isoformat() if row.updated_at else None
@@ -56,6 +57,7 @@ class InterventionIn(BaseModel):
     eyemask: bool | None = None
     nose_strip: bool | None = None
     mouth_tape: bool | None = None
+    breathing: bool | None = None
     note: str | None = Field(default=None, max_length=500)
     clear: list[str] = Field(default_factory=list)  # None に戻すフィールド名 (3状態トグル用)
     reset: bool = False  # その夜の記録を未記録 (全 None) に戻す
@@ -143,6 +145,7 @@ async def get_history(days: int = 14) -> dict[str, Any]:
                 "eyemask": log.eyemask if log else None,
                 "nose_strip": log.nose_strip if log else None,
                 "mouth_tape": log.mouth_tape if log else None,
+                "breathing": log.breathing if log else None,
             })
     return {"nights": nights}
 

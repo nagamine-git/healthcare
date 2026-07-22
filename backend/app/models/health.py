@@ -465,6 +465,7 @@ class SleepInterventionLog(Base):
     eyemask: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     nose_strip: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     mouth_tape: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    breathing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の呼吸法セッション
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
