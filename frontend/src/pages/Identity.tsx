@@ -19,11 +19,12 @@ import {
   type SjtAssessed,
 } from "../lib/api";
 import { mediaLink } from "../lib/links";
+import { P } from "../lib/palette";
 
 type Props = { onBack: () => void; embedded?: boolean };
 
 function alignColor(v: number | null): string {
-  if (v == null) return "#94a3b8";
+  if (v == null) return P.inkDim;
   const r = Math.max(0, Math.min(1, v / 100));
   const hue = r < 0.5 ? 5 + 90 * (r / 0.5) : 50 + 90 * ((r - 0.5) / 0.5);
   return `hsl(${Math.round(hue)} 70% 55%)`;
@@ -151,15 +152,15 @@ function RadarPanel({
         {rows.length >= 3 ? (
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={rows} outerRadius="72%">
-              <PolarGrid stroke="#1e293b" />
-              <PolarAngleAxis dataKey="axis" tick={{ fill: "#cbd5e1", fontSize: 11 }} />
-              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "#475569", fontSize: 9 }} stroke="#334155" tickCount={5} />
+              <PolarGrid stroke={P.hairline} />
+              <PolarAngleAxis dataKey="axis" tick={{ fill: P.ink, fontSize: 11 }} />
+              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: P.inkFaint, fontSize: 9 }} stroke={P.hairline} tickCount={5} />
               <Tooltip
-                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", fontSize: 12 }}
+                contentStyle={{ backgroundColor: P.panel, border: `1px solid ${P.hairline}`, fontSize: 12 }}
                 formatter={(v: number, name: string) => [Math.round(v).toString(), name === "target" ? "理想" : "現状"]}
               />
-              <Radar name="target" dataKey="target" stroke="#64748b" fill="none" strokeWidth={1} strokeDasharray="3 3" isAnimationActive={false} />
-              <Radar name="score" dataKey="score" stroke="#34d399" fill="#34d399" fillOpacity={0.22} isAnimationActive={false} />
+              <Radar name="target" dataKey="target" stroke={P.inkFaint} fill="none" strokeWidth={1} strokeDasharray="3 3" isAnimationActive={false} />
+              <Radar name="score" dataKey="score" stroke={P.prog} fill={P.prog} fillOpacity={0.22} isAnimationActive={false} />
             </RadarChart>
           </ResponsiveContainer>
         ) : null}

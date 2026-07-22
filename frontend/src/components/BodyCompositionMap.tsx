@@ -75,7 +75,7 @@ export function BodyCompositionMap({
             <text x={PAD.l - 3} y={y(bf) + 3} fontSize={8} fill={P.inkFaint} textAnchor="end">{bf}%</text>
           </g>
         ))}
-        <text x={W - PAD.r} y={H - PAD.b + 12} fontSize={8} fill="#475569" textAnchor="end">体重kg →</text>
+        <text x={W - PAD.r} y={H - PAD.b + 12} fontSize={8} fill={P.inkFaint} textAnchor="end">体重kg →</text>
 
         {/* ゾーン */}
         {zones.map((z) => (
@@ -93,7 +93,7 @@ export function BodyCompositionMap({
         {/* 目標地 */}
         {target && (
           <g>
-            <circle cx={x(target.weight)} cy={y(target.bf)} r={4.5} fill={P.prog300} stroke="#022c22" strokeWidth={1.5} />
+            <circle cx={x(target.weight)} cy={y(target.bf)} r={4.5} fill={P.prog300} stroke={P.hull} strokeWidth={1.5} />
             <text x={x(target.weight) + 6} y={y(target.bf) + 10} fontSize={8} fill={P.prog300}>目標</text>
           </g>
         )}

@@ -154,9 +154,9 @@ export function WeatherPanel() {
 function uvColor(uv: number): string {
   if (uv < 3) return P.prog300; // 弱い
   if (uv < 6) return P.act300; // 中程度
-  if (uv < 8) return "#fb923c"; // 強い
+  if (uv < 8) return P.act; // 強い
   if (uv < 11) return P.risk300; // 非常に強い
-  return "#c084fc"; // 極端
+  return "#c084fc"; // 極端 (P に紫系トークンが無く、"非常に強い" risk300 と同色になり区別できなくなるため意図的に残置)
 }
 function uvLabel(uv: number): string {
   if (uv < 3) return "弱い";

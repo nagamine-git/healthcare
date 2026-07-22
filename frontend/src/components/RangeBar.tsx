@@ -39,7 +39,7 @@ export function RangeBar({ current, target, scaleMax }: Props) {
       : target.ideal == null || Math.abs(cur - target.ideal) / target.ideal < 0.1;
 
   const fillColor = current == null ? P.hairline : inRange ? P.prog300 : P.act;
-  const overColor = "#fb7185"; // 範囲を大きく超えた場合
+  const overColor = P.risk; // 範囲を大きく超えた場合
   const farOver =
     target.kind === "range" && target.max != null && cur > target.max * 1.2;
   const finalColor = farOver ? overColor : fillColor;

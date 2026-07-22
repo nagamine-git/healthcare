@@ -18,6 +18,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ascend" />
     <title>Ascend</title>
+    <!-- FOUC 回避: React 起動前に data-theme を確定する。lib/theme.ts と同じ規約。 -->
+    <script>
+      (function () {
+        try {
+          var p = localStorage.getItem("healthcare:theme") || "system";
+          var actual = p === "system"
+            ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+            : p;
+          document.documentElement.dataset.theme = actual;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", actual === "light" ? "#eceff3" : "#0a0e14");
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
   </head>
   <body class="bg-void text-ink">
     <div id="root"></div>

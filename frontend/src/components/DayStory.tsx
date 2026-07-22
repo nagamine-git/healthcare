@@ -36,6 +36,10 @@ const SCHED_Y = AXIS_Y + 11; // 今夜の理想スケジュールのアイコン
 const TOTAL_H = SCHED_Y + 5;
 const bodyY = (v: number) => BODY_Y1 - (Math.max(0, Math.min(100, v)) / 100) * BODY_H;
 
+// 以下の行動カテゴリ色 (indigo/cyan/teal/violet 等) は P のトークンには無い色相で、
+// 多数の行動カテゴリを同時に見分けられるようにするための意図的な固有色。
+// P の 4 色相 (prog/act/risk/info) に寄せると別カテゴリ同士が同色化し区別できなくなるため、
+// 暗色前提の背景/文字トークンとは別物として残す (テーマに関わらず彩度・明度が十分で判読可能)。
 function colorFor(seg: DayStorySegment): string {
   if (seg.source === "sleep") return "#6366f1";
   if (seg.source === "calendar") return P.inkFaint;
@@ -136,6 +140,7 @@ export function DayStory() {
     dinner: "🍽", dinner_cutoff: "🍽", bath: "🛁", bedtime: "🛌", wake: "☀",
     caffeine_cutoff: "☕", dim_light: "🌙",
   };
+  // colorFor と同じ理由で固有色を維持 (各予定アイコンを見分けるための固有色相)
   const SCHED_FILL: Record<string, string> = {
     dinner: "#fb923c", bath: "#22d3ee", bedtime: "#818cf8", wake: P.act300,
     caffeine_cutoff: P.act, dim_light: "#6366f1",
@@ -218,7 +223,7 @@ export function DayStory() {
             混同しないよう中立のスレートで薄く塗る */}
         {nowH != null && nowH < 24 && (
           <>
-            <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill="#475569" opacity={0.12} />
+            <rect x={X(nowH)} y={ACT_Y} width={X(24) - X(nowH)} height={BODY_Y1 - ACT_Y} fill={P.inkFaint} opacity={0.12} />
             <text x={(X(nowH) + X(24)) / 2} y={ACT_Y + 9} fontSize={9} fill={P.inkDim} textAnchor="middle" opacity={0.8}>予測ゾーン</text>
           </>
         )}
@@ -278,6 +283,7 @@ export function DayStory() {
         ))}
 
         {/* ── イベントマーカー行 ── */}
+        {/* violet はカフェイン専用の固有色 (凡例の text-violet-400 と対応、P にトークン無し) */}
         {(t?.caffeine ?? []).map((c, i) => (
           <g key={`c${i}`} transform={`translate(${X(c.h)},${EVT_Y})`}>
             <circle r={4} fill="#a78bfa">
@@ -348,6 +354,7 @@ export function DayStory() {
                     fill="none" stroke={P.prog300} strokeWidth={2} strokeLinejoin="round" />
         )}
         {/* Body Battery 予測 (最終実測〜未来、破線)。受け渡し点にマーカー */}
+        {/* teal は「予測」を実測の P.prog300 と見分けるための固有色 (同色だと実測/予測が区別不能) */}
         {(t?.body_battery_forecast?.length ?? 0) > 1 && (
           <>
             <polyline points={t!.body_battery_forecast!.map((p) => `${X(p.h)},${bodyY(p.v)}`).join(" ")}
@@ -567,11 +574,11 @@ function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks
       ))}
       {/* 安静時心拍の基準線 */}
       {restingHr != null && (
-        <line x1={0} y1={y(restingHr)} x2={SUB_W} y2={y(restingHr)} stroke="#fb7185" strokeWidth={0.7} strokeDasharray="3 3" opacity={0.45} />
+        <line x1={0} y1={y(restingHr)} x2={SUB_W} y2={y(restingHr)} stroke={P.risk} strokeWidth={0.7} strokeDasharray="3 3" opacity={0.45} />
       )}
       {/* 平滑化した心拍 */}
       {sm.length > 1 && (
-        <polyline points={sm.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke="#fb7185" strokeWidth={1.6} strokeLinejoin="round" />
+        <polyline points={sm.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")} fill="none" stroke={P.risk} strokeWidth={1.6} strokeLinejoin="round" />
       )}
       {/* 心拍 予測 (最終実測〜未来、安静へ減衰。破線)。受け渡し点にマーカー */}
       {(hrForecast?.length ?? 0) > 1 && (
@@ -582,7 +589,7 @@ function HeartMotionTrack({ hr, hrForecast, steps, restingHr, nowH, X, gridTicks
       )}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill={P.inkDim}>
-        <tspan fill="#fb7185">━</tspan> 心拍(平滑){nowBpm != null ? `約${Math.round(nowBpm)}` : ""}{restingHr != null ? `/安静${Math.round(restingHr)}` : ""}
+        <tspan fill={P.risk}>━</tspan> 心拍(平滑){nowBpm != null ? `約${Math.round(nowBpm)}` : ""}{restingHr != null ? `/安静${Math.round(restingHr)}` : ""}
         {"  "}<tspan fill={P.info}>▮</tspan> 歩数(動いた量)
       </text>
     </svg>
@@ -624,6 +631,7 @@ function CaffeineTrack({ curve, threshold, floor, todayMg, dailyLimit, nowH, X, 
           <text x={SUB_W - 4} y={y(threshold) - 2} fontSize={8} fill={P.act} textAnchor="end" opacity={0.85}>就寝{Math.round(threshold)}</text>
         </>
       )}
+      {/* violet はカフェイン専用の固有色 (上のイベントマーカーと同色で統一) */}
       <path d={area} fill="#a78bfa" opacity={0.18} />
       {/* 実測 (現在まで) は実線、未来 (減衰予測) は破線 */}
       {(() => {
@@ -678,6 +686,7 @@ function WaterTrack({ water, nowH, X, gridTicks }: {
         <polyline points={water.expected_curve!.map((p) => `${X(p.h)},${y(p.v)}`).join(" ")}
           fill="none" stroke={P.act300} strokeWidth={1.4} strokeDasharray="4 3" opacity={0.9} strokeLinejoin="round" />
       )}
+      {/* cyan は水分トラック専用の固有色 (colorFor の家事カテゴリと同じ色だが別トラックのため衝突なし) */}
       {stepPath && <path d={`${stepPath} L ${X(lastH)},${y(0)} Z`} fill="#22d3ee" opacity={0.16} />}
       {stepPath && <path d={stepPath} fill="none" stroke="#22d3ee" strokeWidth={1.5} />}
       {water.intake_curve.map((p, i) => (<circle key={i} cx={X(p.h)} cy={y(p.ml)} r={2} fill="#22d3ee" />))}
@@ -712,7 +721,7 @@ function PressureTrack({ curve, nowH, X, gridTicks }: {
     <svg viewBox={`0 0 ${SUB_W + 12} ${H}`} className="w-full" role="img" aria-label="気圧(実測+予報)">
       <SubGrid gridTicks={gridTicks} X={X} y0={14} y1={H - 8} />
       {past.length > 1 && <polyline points={past.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={P.inkDim} strokeWidth={1.5} />}
-      {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? "#fb7185" : P.inkDim} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
+      {fut.length > 1 && <polyline points={fut.map((p) => `${X(p.h)},${y(p.hpa)}`).join(" ")} fill="none" stroke={warnDrop ? P.risk : P.inkDim} strokeWidth={1.5} strokeDasharray="3 3" opacity={0.8} />}
       {nowH != null && <line x1={X(nowH)} y1={12} x2={X(nowH)} y2={H - 8} stroke={P.risk} strokeWidth={1} />}
       <text x={4} y={9} fontSize={10} fill={warnDrop ? P.risk300 : P.inkDim}>
         気圧(実測+予報){nowHpa != null ? ` · 現在${Math.round(nowHpa)}hPa` : ""}{drop != null ? ` · 3h後${drop > 0 ? "+" : ""}${drop.toFixed(1)}${warnDrop ? " ⚠頭痛注意" : ""}` : ""}

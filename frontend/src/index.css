@@ -2,6 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== テーマトークン (ライト/ダーク) =====
+   値は「R G B」チャンネル (Tailwind の rgb(var(--x) / <alpha-value>) 用)。
+   既定はダーク。<html data-theme="light"> でライトに入れ替わる。
+   data-theme は初回ペイント前に index.html のインラインスクリプトが付ける
+   (FOUC 回避)。system 追従は useTheme が matchMedia を見て data-theme を切替える。 */
+:root {
+  --c-void: 6 8 12;
+  --c-hull: 15 20 29;
+  --c-panel: 26 33 46;
+  --c-hairline: 34 44 59;
+  --c-ink: 238 242 248;
+  --c-ink-dim: 159 171 189;
+  --c-ink-faint: 105 116 138;
+  --c-prog: 16 185 129;
+  --c-prog-300: 110 231 183;
+  --c-act: 245 158 11;
+  --c-act-300: 252 211 77;
+  --c-risk: 251 91 115;
+  --c-risk-300: 253 164 175;
+  --c-info: 56 189 248;
+  --c-info-300: 125 211 252;
+  /* 立体表現。ダークは白の微光、ライトは黒の微陰。 */
+  --edge-highlight: 255 255 255;
+  --edge-alpha: 0.035;
+  --scrim-rgb: 6 8 12;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  /* ライト = コーポレートサイト (efg-technologies.com) の白基調。
+     void<hull<panel は「下ほど灰・上ほど白」で elevation を保つ。 */
+  --c-void: 236 239 243;
+  --c-hull: 247 249 251;
+  --c-panel: 255 255 255;
+  --c-hairline: 214 219 226;
+  --c-ink: 22 26 32;
+  --c-ink-dim: 78 86 99;
+  --c-ink-faint: 120 128 141;
+  /* 意味色は白地で沈まないよう暗めに寄せる (明るい原色は白で視認性が落ちる)。 */
+  --c-prog: 5 150 105;
+  --c-prog-300: 16 185 129;
+  --c-act: 200 118 8;
+  --c-act-300: 217 119 6;
+  --c-risk: 220 38 61;
+  --c-risk-300: 225 70 90;
+  --c-info: 2 132 199;
+  --c-info-300: 14 165 233;
+  --edge-highlight: 0 0 0;
+  --edge-alpha: 0.05;
+  --scrim-rgb: 236 239 243;
+  color-scheme: light;
+}
+
 html, body, #root {
   min-height: 100%;
 }
@@ -13,8 +66,8 @@ html {
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #06080c; /* void */
-  color: #eef2f8;      /* ink */
+  background: rgb(var(--c-void));
+  color: rgb(var(--c-ink));
   letter-spacing: -0.01em; /* SF 風のわずかな詰め */
   /* PWA: ダブルタップズーム抑止 / フォーム遷移時のジャンプ防止 */
   touch-action: manipulation;
@@ -54,7 +107,7 @@ body {
   left: 0;
   right: 0;
   height: env(safe-area-inset-top);
-  background: rgba(6, 8, 12, 0.72); /* void */
+  background: rgb(var(--scrim-rgb) / 0.72);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   z-index: 50;
@@ -74,7 +127,7 @@ body {
   line-height: 1.1;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #eef2f8;
+  color: rgb(var(--c-ink));
 }
 /* セクション見出し(グループの上の小見出し) */
 .section-title {
@@ -82,7 +135,7 @@ body {
   line-height: 1.2;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #9fabbd; /* ink-dim */
+  color: rgb(var(--c-ink-dim));
 }
 /* 計器ラベル: 小さく・トラッキングを効かせた大文字キャプション */
 .telemetry-label {
@@ -90,7 +143,7 @@ body {
   line-height: 1.25;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #69748a; /* ink-faint */
+  color: rgb(var(--c-ink-faint));
   font-weight: 600;
 }
 /* 数値テレメトリ: Space Grotesk + tabular */
@@ -104,7 +157,7 @@ body {
 /* ===== 質感ユーティリティ ===== */
 /* カード上辺の微かなハイライト(立体感) */
 .panel-edge {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 36%);
+  background-image: linear-gradient(180deg, rgb(var(--edge-highlight) / var(--edge-alpha)), transparent 36%);
 }
 /* タップ時の心地よい沈み込み(iOS の押下感) */
 .press {
@@ -144,7 +197,10 @@ body {
   100% { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.07) 37%, rgba(255,255,255,0.02) 63%);
+  background: linear-gradient(90deg,
+    rgb(var(--edge-highlight) / calc(var(--edge-alpha) * 0.6)) 25%,
+    rgb(var(--edge-highlight) / calc(var(--edge-alpha) * 2)) 37%,
+    rgb(var(--edge-highlight) / calc(var(--edge-alpha) * 0.6)) 63%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }

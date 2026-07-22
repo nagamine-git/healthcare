@@ -6,6 +6,8 @@ import {
   Coffee,
   HeartPulse,
   Moon,
+  Monitor,
+  Sun,
   User,
   Utensils,
 } from "lucide-react";
@@ -13,6 +15,43 @@ import { api } from "../lib/api";
 import type { SettingsDto, SettingsUpdate } from "../lib/api";
 import { PhysiqueTargetSection } from "./PhysiqueTargetSection";
 import { NotificationSettings } from "./NotificationSettings";
+import { useTheme, type ThemePref } from "../lib/theme";
+
+/** 外観 (システム/ライト/ダーク) 切替。端末テーマに追従 or 固定。 */
+function AppearanceToggle() {
+  const [pref, setPref] = useTheme();
+  const opts: { value: ThemePref; label: string; icon: typeof Sun }[] = [
+    { value: "system", label: "システム", icon: Monitor },
+    { value: "light", label: "ライト", icon: Sun },
+    { value: "dark", label: "ダーク", icon: Moon },
+  ];
+  return (
+    <div className="rounded-xl bg-hull/40 p-3">
+      <div className="mb-2 text-[11px] font-semibold text-ink-dim">外観</div>
+      <div className="flex gap-1 rounded-lg bg-void/50 p-1">
+        {opts.map((o) => {
+          const active = pref === o.value;
+          const Icon = o.icon;
+          return (
+            <button
+              key={o.value}
+              onClick={() => setPref(o.value)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] font-medium transition ${
+                active ? "bg-panel text-ink shadow-sm" : "text-ink-faint"
+              }`}
+            >
+              <Icon size={13} strokeWidth={2.2} />
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[10px] text-ink-faint">
+        「システム」は端末の外観設定に追従します。
+      </p>
+    </div>
+  );
+}
 
 /**
  * 個人差ファクター設定タブ。計算に直結する因子だけをグループ別の開閉式
@@ -50,6 +89,7 @@ export function SettingsTab({
 
   return (
     <div className="space-y-3">
+      <AppearanceToggle />
       <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
         計算に効く体質・生活パラメータ。<span className="text-ink-dim">グレーの値は自動</span>
         （派生・デフォルト）で、迷ったらそのままでOK。値を入れると個人設定になり、× で自動に戻せます。

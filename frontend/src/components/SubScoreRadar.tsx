@@ -120,12 +120,12 @@ export function SubScoreRadar({ subs, total }: Props) {
               <PolarGrid stroke={P.panel} />
               <PolarAngleAxis
                 dataKey="axis"
-                tick={{ fill: "#cbd5e1", fontSize: 12 }}
+                tick={{ fill: P.ink, fontSize: 12 }}
               />
               <PolarRadiusAxis
                 angle={90}
                 domain={[0, 100]}
-                tick={{ fill: "#475569", fontSize: 10 }}
+                tick={{ fill: P.inkFaint, fontSize: 10 }}
                 stroke={P.hairline}
                 tickCount={5}
               />
@@ -199,7 +199,7 @@ export function SubScoreRadar({ subs, total }: Props) {
 function GapRow({ sub }: { sub: Sub }) {
   const { label, value, ideal, realWorld } = sub;
   const ratio = value == null ? 0 : Math.max(0, Math.min(1, value / ideal));
-  const color = value == null ? "#475569" : gradientHsl(ratio);
+  const color = value == null ? P.inkFaint : gradientHsl(ratio);
   const gap = value == null ? null : Math.round(ideal - value);
   return (
     <div className="space-y-1">

@@ -49,8 +49,8 @@ function Sparkline({ n }: { n: AtlasNode }) {
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={n.series} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           <Tooltip
-            contentStyle={{ background: "#1a2230", border: "1px solid #243044", borderRadius: 8, fontSize: 11 }}
-            labelStyle={{ color: "#9aa7b8" }}
+            contentStyle={{ background: P.panel, border: `1px solid ${P.hairline}`, borderRadius: 8, fontSize: 11 }}
+            labelStyle={{ color: P.inkDim }}
             formatter={(v: number) => [`${v}${n.unit}`, n.label]}
           />
           {n.target != null && <ReferenceLine y={n.target} stroke={P.act} strokeDasharray="3 3" />}
@@ -125,16 +125,16 @@ function DomainRadar({ children }: { children: AtlasNode[] }) {
     <div className="h-52">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data} outerRadius="65%">
-          <PolarGrid stroke="#243044" />
-          <PolarAngleAxis dataKey="axis" tick={{ fill: "#9aa7b8", fontSize: 10 }} />
+          <PolarGrid stroke={P.hairline} />
+          <PolarAngleAxis dataKey="axis" tick={{ fill: P.inkDim, fontSize: 10 }} />
           <Radar name="目標" dataKey="目標" stroke={P.act} fill="none" strokeDasharray="3 3" />
           {hasPop && (
-            <Radar name="中央値" dataKey="中央値" stroke="#9aa7b8" fill="#9aa7b8" fillOpacity={0.12} connectNulls />
+            <Radar name="中央値" dataKey="中央値" stroke={P.inkDim} fill={P.inkDim} fillOpacity={0.12} connectNulls />
           )}
           <Radar name="現状" dataKey="現状" stroke={P.prog} fill={P.prog} fillOpacity={0.35} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           <Tooltip
-            contentStyle={{ background: "#1a2230", border: "1px solid #243044", borderRadius: 8, fontSize: 11 }}
+            contentStyle={{ background: P.panel, border: `1px solid ${P.hairline}`, borderRadius: 8, fontSize: 11 }}
             formatter={(v: number, name: string) => [Math.round(v), name]}
           />
         </RadarChart>

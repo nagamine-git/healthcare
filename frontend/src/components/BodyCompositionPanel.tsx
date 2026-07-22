@@ -85,8 +85,8 @@ export function BodyCompositionPanel() {
                 <LineChart data={muscleTrend} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                   <YAxis domain={["dataMin - 0.5", "dataMax + 0.5"]} hide />
                   <Tooltip
-                    contentStyle={{ background: "#1a2230", border: "1px solid #243044", borderRadius: 8, fontSize: 11 }}
-                    labelStyle={{ color: "#9aa7b8" }}
+                    contentStyle={{ background: P.panel, border: `1px solid ${P.hairline}`, borderRadius: 8, fontSize: 11 }}
+                    labelStyle={{ color: P.inkDim }}
                     formatter={(v: number) => [`${v}kg`, "骨格筋"]}
                   />
                   <Line type="monotone" dataKey="v" stroke={P.prog} strokeWidth={2} dot={false} />

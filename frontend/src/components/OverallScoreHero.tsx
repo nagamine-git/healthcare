@@ -94,9 +94,9 @@ export function OverallScoreHero({ focus }: { focus?: Focus }) {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={series} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
                   <Tooltip
-                    contentStyle={{ background: "#1a2230", border: "1px solid #243044",
+                    contentStyle={{ background: P.panel, border: `1px solid ${P.hairline}`,
                                     borderRadius: 8, fontSize: 11 }}
-                    labelStyle={{ color: "#9aa7b8" }}
+                    labelStyle={{ color: P.inkDim }}
                     formatter={(v: number) => [`${Math.round(v)}`, "総合点"]}
                   />
                   {median != null && <ReferenceLine y={median} stroke={P.inkFaint} strokeDasharray="3 3" />}

@@ -8,6 +8,7 @@ import { FinancePage } from "./pages/Finance";
 import { ConsultPage } from "./pages/Consult";
 import { BottomNav } from "./components/ui/BottomNav";
 import { QuickLogSheet } from "./components/QuickLogSheet";
+import { useTheme } from "./lib/theme";
 
 type View = "home" | "debug" | "compass" | "checkup" | "journal" | "finance" | "consult";
 
@@ -33,6 +34,9 @@ function viewFromHash(): View {
 }
 
 export default function App() {
+  // アプリ全体でテーマを一度購読する。system 選択時は端末の外観変化に追従し、
+  // 設定タブを開かなくても data-theme が正しく保たれる。
+  useTheme();
   const [view, setView] = useState<View>(viewFromHash);
   const [compassSeg, setCompassSeg] = useState<CompassSegment>(
     COMPASS_HASHES[window.location.hash] ?? "values",
