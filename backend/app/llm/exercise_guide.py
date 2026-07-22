@@ -14,7 +14,6 @@ from app.config import get_settings
 
 _STEP_KEYS = ("setup", "execution", "breathing", "mistakes", "tips")
 
-_EMPTY_STEPS: dict[str, list[str]] = {k: [] for k in _STEP_KEYS}
 
 _TOOL: dict[str, Any] = {
     "name": "submit_exercise_guide",
@@ -80,16 +79,20 @@ def _system_prompt() -> str:
 
 
 def _valid_steps(raw: Any) -> dict[str, list[str]] | None:
-    """tool_use の input を検証。壊れていれば None。"""
+    """tool_use の input を検証。取れた区分は活かし、全滅時のみ None。
+
+    max_tokens 打ち切り等で一部区分が欠けても、埋まった区分は捨てない
+    (欠けた区分は空リストで補完)。最低1区分に中身があれば成功とみなす。
+    """
     if not isinstance(raw, dict):
         return None
     out: dict[str, list[str]] = {}
     for key in _STEP_KEYS:
         items = raw.get(key)
-        if not isinstance(items, list):
-            return None
-        cleaned = [str(x).strip() for x in items if str(x).strip()]
-        out[key] = cleaned
+        if isinstance(items, list):
+            out[key] = [str(x).strip() for x in items if str(x).strip()]
+        else:
+            out[key] = []  # 欠損区分は空で補完 (打ち切りに強くする)
     # 全区分が空なら実質失敗扱い (最低1区分は中身があること)
     if not any(out.values()):
         return None
@@ -102,7 +105,9 @@ async def _call_llm(name: str, *, model: str, api_key: str) -> dict[str, Any]:
     client = AsyncAnthropic(api_key=api_key)
     resp = await client.messages.create(
         model=model,
-        max_tokens=1500,
+        # 5区分×3〜6項目の日本語を出し切る余裕を持たせる (1500 だと mistakes/tips が
+        # max_tokens で欠落し、フォームガイドが不完全になっていた)。
+        max_tokens=3000,
         system=_system_prompt(),
         messages=[{
             "role": "user",
@@ -122,11 +127,10 @@ _call = _call_llm
 
 
 async def generate_guide(name: str) -> dict[str, Any] | None:
-    """LLM でフォームガイドを生成。api_key 未設定/完全失敗時は None。
+    """LLM でフォームガイドを生成。api_key 未設定/生成失敗 (全区分空) 時は None。
 
-    tool_use の構造が壊れている場合は1回だけ再試行し、それでも壊れていれば
-    既定の空構造 (steps 各区分が空リスト) を返す (呼び出し元は保存だけ行い、
-    後で再生成 (force) できる)。
+    tool_use が全区分空なら1回だけ再試行。それでも中身が無ければ None を返す
+    (呼び出し元は保存せず 503。空をキャッシュに焼き付けない)。
     """
     settings = get_settings()
     api_key = settings.anthropic_api_key
@@ -138,12 +142,11 @@ async def generate_guide(name: str) -> dict[str, Any] | None:
         return None
     steps = _valid_steps(raw)
     if steps is None:
-        raw2: dict[str, Any] | None
         try:
             raw2 = await _call(name, model=settings.llm_model, api_key=api_key)
         except Exception:
-            raw2 = None
-        steps = _valid_steps(raw2) if raw2 is not None else None
+            return None
+        steps = _valid_steps(raw2)
     if steps is None:
-        steps = dict(_EMPTY_STEPS)
+        return None
     return {"name_ja": name, "steps": steps, "model": settings.llm_model}

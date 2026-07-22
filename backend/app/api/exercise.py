@@ -185,8 +185,10 @@ async def create_exercise_guide(body: ExerciseGuideIn, force: bool = False) -> d
     from app.llm.exercise_guide import generate_guide
 
     got = await generate_guide(body.name)
-    if got is None:
-        raise HTTPException(status_code=503, detail="ガイドを生成できませんでした (LLM 未設定/失敗)")
+    # 中身が無い生成 (LLM 未設定/失敗/全区分空) は**保存しない** — 空をキャッシュすると
+    # 以後ずっと空が返り、force なしでは回復しなくなる。503 にして再試行可能に保つ。
+    if got is None or not any((got.get("steps") or {}).values()):
+        raise HTTPException(status_code=503, detail="ガイドを生成できませんでした (再試行してください)")
     with session_scope() as session:
         row = session.get(ExerciseGuide, key)
         if row is None:
