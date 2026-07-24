@@ -37,11 +37,10 @@ import { ScheduleCard } from "../components/ScheduleCard";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
-import { SleepDriverPanel } from "../components/SleepDriverPanel";
+import { SleepEffectivenessPanel } from "../components/SleepEffectivenessPanel";
 import { WindDownCard } from "../components/WindDownCard";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
 import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
-import { SleepInterventionPanel } from "../components/SleepInterventionPanel";
 import { SyncMenu } from "../components/SyncMenu";
 import { useEffect, useRef, useState } from "react";
 import { SectionHeader, Skeleton } from "../components/ui/cockpit";
@@ -388,9 +387,8 @@ export function TodayPage({ onOpenDebug }: Props) {
         </button>
         <SleepInterventionCard />
         <SleepInterventionHistory />
-        <SleepInterventionPanel />
-        <SectionHeader label="睡眠ドライバー" hint="睡眠の質 × 翌日パフォーマンスの個人分析" />
-        <SleepDriverPanel />
+        <SectionHeader label="睡眠に効く要因" hint="介入(耳栓等)とドライバー(活動量等)をまとめて有効な順に" />
+        <SleepEffectivenessPanel />
       </div>
       )}
 
