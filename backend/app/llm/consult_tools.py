@@ -48,8 +48,10 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "カフェイン摂取を記録する。ユーザーが「コーヒー飲んだ」等と伝えたら使う。"
             "source: instant_coffee(単位g)/canned_coffee(本)/nespresso(カプセル)/"
-            "green_tea(杯)/ibuquick(錠)/bufferin_premium(錠)/manual(mg直接)。"
+            "drip_coffee(杯)/green_tea(杯)/ibuquick(錠)/bufferin_premium(錠)/manual(mg直接)。"
             "amount は各単位の量 (省略時1。manual のときは mg そのもの)。"
+            "dose_pct は規定量に対する割合(%、省略時100=規定量どおり)。"
+            "「半分だけ」「濃いめ2杯分」等の申告があれば dose_pct で調整する。"
             "該当プリセットが無い飲み物は manual で mg を概算して記録する。"
         ),
         "input_schema": {
@@ -57,6 +59,10 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "source": {"type": "string", "description": "プリセット名 or manual"},
                 "amount": {"type": "number", "description": "杯数/単位数 (manual時はmg)。既定1"},
+                "dose_pct": {
+                    "type": "number",
+                    "description": "規定量に対する割合(%)。既定100",
+                },
             },
             "required": ["source"],
         },
@@ -108,19 +114,21 @@ def _record_caffeine(inp: dict[str, Any]) -> dict[str, Any]:
                 "valid_sources": sorted(PRESET_DEFAULTS.keys())}
     settings = get_settings()
     amount = float(inp.get("amount") or 1.0)
+    dose_pct = float(inp.get("dose_pct") or 100.0)
     preset = PRESET_DEFAULTS[source]
     mg_per_unit = (
         settings.instant_coffee_mg_per_g
         if source == "instant_coffee"
         else float(preset["mg_per_unit"])
     )
-    mg = amount * mg_per_unit
+    mg = amount * mg_per_unit * (dose_pct / 100.0)
     with session_scope() as session:
         session.add(CaffeineIntake(
             ts=datetime.now(UTC).replace(tzinfo=None), source=source,
             amount=amount, unit=str(preset.get("unit", "cup")), mg=mg,
+            dose_pct=dose_pct,
         ))
-    return {"ok": True, "source": source, "amount": amount, "mg": round(mg, 1)}
+    return {"ok": True, "source": source, "amount": amount, "dose_pct": dose_pct, "mg": round(mg, 1)}
 
 
 def _record_checkin(inp: dict[str, Any]) -> dict[str, Any]:

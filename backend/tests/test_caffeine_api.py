@@ -172,6 +172,57 @@ def test_patch_not_found(app_client):
     assert resp.status_code == 404
 
 
+def test_presets_include_drip_coffee(app_client):
+    resp = app_client.get("/api/caffeine/presets")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "drip_coffee" in body
+    assert body["drip_coffee"]["default_mg"] == 100.0
+
+
+def test_add_dose_pct_150_scales_mg_by_1_5x(app_client):
+    resp = app_client.post(
+        "/api/caffeine",
+        json={"source": "canned_coffee", "amount": 1.0, "dose_pct": 150},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dose_pct"] == 150
+    assert body["mg"] == pytest.approx(150.0)  # 100mg × 1.5
+
+
+def test_add_dose_pct_omitted_defaults_to_100_backward_compatible(app_client):
+    resp = app_client.post(
+        "/api/caffeine", json={"source": "canned_coffee", "amount": 1.0}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dose_pct"] == 100.0
+    assert body["mg"] == 100.0
+
+
+def test_add_drip_coffee_records_100mg(app_client):
+    resp = app_client.post(
+        "/api/caffeine", json={"source": "drip_coffee", "amount": 1.0}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mg"] == 100.0
+    assert body["unit"] == "杯"
+
+
+def test_patch_dose_pct_recomputes_mg(app_client):
+    add = app_client.post(
+        "/api/caffeine", json={"source": "canned_coffee", "amount": 1.0}
+    )
+    iid = add.json()["id"]
+    resp = app_client.patch(f"/api/caffeine/{iid}", json={"dose_pct": 150})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dose_pct"] == 150
+    assert body["mg"] == pytest.approx(150.0)
+
+
 def test_add_unknown_source_rejected(app_client):
     resp = app_client.post(
         "/api/caffeine", json={"source": "espresso_double_shot", "amount": 1.0}

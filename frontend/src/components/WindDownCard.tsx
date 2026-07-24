@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Moon, Wind, Check, X, Volume2, VolumeX, Smartphone } from "lucide-react";
 import { api, type WindDown } from "../lib/api";
 import { useWakeLock } from "../lib/wakeLock";
-import { primeAudio, tone, haptic } from "../lib/feedback";
+import { primeAudio, tone, haptic, writeMindful } from "../lib/feedback";
 
 /**
  * 就寝前 wind-down。状態から「すぐ寝ろ / 呼吸法 / なし」を出し分ける。
@@ -56,8 +56,10 @@ export function WindDownCard() {
         </div>
       )}
 
-      {/* 常設の呼吸セッション入口 (状態に関わらずいつでも開始できる) */}
+      {/* 常設の呼吸セッション入口 (状態に関わらずいつでも開始できる)。
+          id は「就寝前の介入」セクションの案内リンクからのスクロール先として参照される。 */}
       <button
+        id="breathe-entry"
         onClick={() => setSession(recommended)}
         className="press flex w-full items-center gap-3 rounded-card border border-hairline bg-hull/50 p-4 text-left"
       >
@@ -146,6 +148,7 @@ function BreatheSession({
       if (left <= 0) {
         setDone(true);
         api.sleepInterventionSet({ breathing: true }).catch(() => {});
+        writeMindful(minutes);
       }
     }, 500);
     return () => clearInterval(iv);

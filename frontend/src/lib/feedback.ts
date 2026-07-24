@@ -69,3 +69,23 @@ export function haptic(kind: "light" | "medium" | "soft" = "light"): void {
   const nav = navigator as Navigator & { vibrate?: (p: number | number[]) => boolean };
   nav.vibrate?.(kind === "medium" ? 30 : 15);
 }
+
+interface HealthKitBridge {
+  postMessage: (body: { type: "mindful"; minutes: number }) => void;
+}
+function healthKitBridge(): HealthKitBridge | null {
+  const w = window as unknown as {
+    webkit?: { messageHandlers?: { healthKit?: HealthKitBridge } };
+  };
+  return w.webkit?.messageHandlers?.healthKit ?? null;
+}
+
+/// 呼吸/瞑想の実施時間を Apple Health (マインドフルネス) に write-only で書き出す
+/// (Phase2 / Ascend native の HealthKit ブリッジ向け先行仕込み)。
+/// ネイティブブリッジが無い環境 (ブラウザ直開き等) では無害にスキップする。
+/// 分析の真実源は自前DB (sleep_intervention_log) のまま — ここは書き出し専用。
+export function writeMindful(minutes: number): void {
+  const bridge = healthKitBridge();
+  if (!bridge) return;
+  bridge.postMessage({ type: "mindful", minutes });
+}

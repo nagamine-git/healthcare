@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ear, Eye, VolumeX, Wind } from "lucide-react";
+import { AudioWaveform, Brain, Ear, Eye, VolumeX, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { LoadingState } from "./ui/cockpit";
@@ -11,11 +11,14 @@ import type {
 } from "../lib/api";
 
 /**
- * 就寝前の介入トラッカー。耳栓/アイマスク/ノーズブリーズ/口テープを「今夜」ワンタップ記録。
+ * 就寝前の介入トラッカー。耳栓/アイマスク/ノーズブリーズ/口テープ/呼吸法/瞑想を「今夜」ワンタップ記録。
  *
  * 効果分析は「着けた夜 vs 外した夜」を比較するため、未記録(null)と「外した(false)」を区別する。
  * 最初のタップでその夜が記録済みになり、タップした介入=使用(true)、残り=なし(false)として
- * 4項目すべてを明示保存する。以後タップでトグル。「クリア」で未記録に戻す。
+ * 全項目を明示保存する。以後タップでトグル。「クリア」で未記録に戻す。
+ *
+ * breathing は WindDownCard の呼吸セッション完了時に自動 ON されるが、ここでも手動トグルできる
+ * ようにして「今夜つけた/外した」を後から上書きできるようにしている(最後の書き込みが勝つ)。
  */
 
 type Key = keyof SleepInterventionFlags;
@@ -24,6 +27,8 @@ const ITEMS: { key: Key; label: string; icon: LucideIcon }[] = [
   { key: "eyemask", label: "アイマスク", icon: Eye },
   { key: "nose_strip", label: "ノーズブリーズ", icon: Wind },
   { key: "mouth_tape", label: "口テープ", icon: VolumeX },
+  { key: "breathing", label: "呼吸法", icon: AudioWaveform },
+  { key: "meditation", label: "瞑想", icon: Brain },
 ];
 const KEYS = ITEMS.map((i) => i.key);
 
@@ -40,13 +45,14 @@ export function SleepInterventionCard() {
         if (!old) return old;
         const t = old.tonight;
         const next: SleepInterventionNight = body.reset
-          ? { ...t, earplugs: null, eyemask: null, nose_strip: null, mouth_tape: null, updated_at: null }
+          ? {
+              ...t,
+              ...Object.fromEntries(KEYS.map((k) => [k, null])),
+              updated_at: null,
+            }
           : {
               ...t,
-              earplugs: body.earplugs ?? t.earplugs,
-              eyemask: body.eyemask ?? t.eyemask,
-              nose_strip: body.nose_strip ?? t.nose_strip,
-              mouth_tape: body.mouth_tape ?? t.mouth_tape,
+              ...Object.fromEntries(KEYS.map((k) => [k, body[k] ?? t[k]])),
               updated_at: new Date().toISOString(),
             };
         return { ...old, tonight: next };

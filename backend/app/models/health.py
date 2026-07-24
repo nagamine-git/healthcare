@@ -289,6 +289,7 @@ class CaffeineIntake(Base):
     unit: Mapped[str] = mapped_column(String(16))
     mg: Mapped[float] = mapped_column(Float)
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    dose_pct: Mapped[float] = mapped_column(Float, default=100.0)  # 規定量に対する割合(%)
 
 
 class SourceSync(Base):
@@ -466,6 +467,7 @@ class SleepInterventionLog(Base):
     nose_strip: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     mouth_tape: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     breathing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の呼吸法セッション
+    meditation: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の瞑想セッション
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

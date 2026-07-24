@@ -14,6 +14,7 @@ def _night(i: int, **kw: Any) -> dict[str, Any]:
         "date": date(2026, 1, 1) + timedelta(days=i),
         "sleep_score": None, "efficiency": None, "deep_min": None, "hrv_overnight": None,
         "earplugs": None, "eyemask": None, "nose_strip": None, "mouth_tape": None,
+        "breathing": None, "meditation": None,
     }
     row.update(kw)
     return row
@@ -154,3 +155,49 @@ def test_tonight_deconfound_takes_priority():
     res = _analyze_rows(rows)
     assert res["suggestion"]["kind"] == "deconfound"
     assert "一方だけ" in res["suggestion"]["text"]
+
+
+# ===== breathing / meditation の n-of-1 格上げ (2026-07-24 design Step3) =====
+
+
+def test_breathing_and_meditation_are_analyzed():
+    # 呼吸法・瞑想は既存4フラグと完全に同格に扱われる: 十分な夜数があれば analyzed/improves になる。
+    rows: list[dict[str, Any]] = []
+    for i in range(8):
+        rows.append(_night(i, breathing=True, meditation=True, sleep_score=85 + (i % 3)))
+    for i in range(8, 16):
+        rows.append(_night(i, breathing=False, meditation=False, sleep_score=60 + (i % 3)))
+    res = _analyze_rows(rows)
+    assert res["status"] == "analyzed"
+
+    breathing = _find(res, "breathing")
+    assert breathing["n_did"] == 8 and breathing["n_didnt"] == 8
+    assert breathing["verdict"] == "improves"
+    assert breathing["primary"] is not None
+    assert breathing["primary"]["outcome"] == "sleep_score"
+    assert breathing["primary"]["diff"] > 0
+
+    meditation = _find(res, "meditation")
+    assert meditation["n_did"] == 8 and meditation["n_didnt"] == 8
+    assert meditation["verdict"] == "improves"
+    assert meditation["primary"] is not None
+    assert meditation["primary"]["outcome"] == "sleep_score"
+    assert meditation["primary"]["diff"] > 0
+
+
+def test_breathing_only_night_is_not_dropped_as_empty_row():
+    # 旧実装の穴: _collect の空行判定が4フラグしか見ておらず、breathing だけ記録した夜が
+    # 「全項目未記録」扱いで捨てられていた。_analyze_rows レベルでは breathing/meditation を
+    # 単独指定した夜もちゃんと群にカウントされることを確認する。
+    rows = [_night(i, breathing=True, sleep_score=80) for i in range(4)]
+    rows += [_night(i + 100, breathing=False, sleep_score=65) for i in range(4)]
+    res = _analyze_rows(rows)
+    breathing = _find(res, "breathing")
+    assert breathing["n_did"] == 4 and breathing["n_didnt"] == 4
+
+
+def test_meditation_in_explore_order_gets_tonight_suggestion():
+    # 瞑想が一度も記録されていない (ログ皆無) → 夜1からの探索提案に breathing/meditation も候補になり得る。
+    res = _analyze_rows([])
+    assert res["suggestion"] is not None
+    assert res["suggestion"]["kind"] == "explore"

@@ -252,6 +252,7 @@ export type CaffeineSource =
   | "instant_coffee"
   | "canned_coffee"
   | "nespresso"
+  | "drip_coffee"
   | "green_tea"
   | "ibuquick"
   | "bufferin_premium"
@@ -265,6 +266,7 @@ export type CaffeineIntake = {
   amount: number;
   unit: string;
   mg: number;
+  dose_pct: number;
   note?: string | null;
 };
 
@@ -851,6 +853,7 @@ export type SleepInterventionFlags = {
   nose_strip: boolean | null;
   mouth_tape: boolean | null;
   breathing: boolean | null;
+  meditation: boolean | null;
 };
 export type SleepInterventionNight = SleepInterventionFlags & {
   date: string;
@@ -1890,7 +1893,7 @@ export const api = {
   caffeineAdd: (
     source: CaffeineSource,
     amount: number,
-    opts?: { note?: string; ts_iso?: string },
+    opts?: { note?: string; ts_iso?: string; dose_pct?: number },
   ) =>
     request<CaffeineIntake>("/api/caffeine", {
       method: "POST",
@@ -1900,7 +1903,13 @@ export const api = {
     request<{ deleted: number }>(`/api/caffeine/${id}`, { method: "DELETE" }),
   caffeinePatch: (
     id: number,
-    patch: { ts_iso?: string; amount?: number; source?: CaffeineSource; note?: string },
+    patch: {
+      ts_iso?: string;
+      amount?: number;
+      source?: CaffeineSource;
+      note?: string;
+      dose_pct?: number;
+    },
   ) =>
     request<CaffeineIntake>(`/api/caffeine/${id}`, {
       method: "PATCH",

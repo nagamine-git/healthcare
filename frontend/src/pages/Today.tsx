@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings as SettingsIcon } from "lucide-react";
+import { AudioWaveform, Settings as SettingsIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { OverallScoreHero } from "../components/OverallScoreHero";
 import { DayStory } from "../components/DayStory";
@@ -375,7 +375,17 @@ export function TodayPage({ onOpenDebug }: Props) {
         <WindDownCard />
         <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
         <TonightPlanPanel plan={data.tonight_plan} />
-        <SectionHeader label="就寝前の介入 × 睡眠の質" hint="耳栓・アイマスク・鼻呼吸・口テープの効果をn-of-1検証" />
+        <SectionHeader label="就寝前の介入 × 睡眠の質" hint="耳栓・アイマスク・鼻呼吸・口テープ・呼吸法・瞑想の効果をn-of-1検証" />
+        <button
+          onClick={() =>
+            document.getElementById("breathe-entry")?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+          className="press flex w-full items-center gap-2 rounded-lg border border-dashed border-hairline bg-hull/30 px-3 py-2 text-left text-[12px] text-ink-dim"
+        >
+          <AudioWaveform size={14} className="shrink-0 text-prog-300" />
+          呼吸で整える(上のセッションを開始)
+          <span className="ml-auto text-ink-faint">↑</span>
+        </button>
         <SleepInterventionCard />
         <SleepInterventionHistory />
         <SleepInterventionPanel />

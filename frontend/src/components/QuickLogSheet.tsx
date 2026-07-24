@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { AudioWaveform, Brain, X } from "lucide-react";
 import { api } from "../lib/api";
-import type { AlcoholSource, CaffeineSource } from "../lib/api";
+import type { AlcoholSource, CaffeineSource, SleepInterventionFlags } from "../lib/api";
 import { CheckinCard } from "./CheckinCard";
 import { SleepInterventionCard } from "./SleepInterventionCard";
 
@@ -27,6 +27,7 @@ const CAFFEINE_LABEL: Record<string, string> = {
   instant_coffee: "インスタント",
   canned_coffee: "缶コーヒー",
   nespresso: "ネスプレッソ",
+  drip_coffee: "ドリップ",
   green_tea: "緑茶",
   ibuquick: "イブクイック",
   bufferin_premium: "バファリンP",
@@ -108,6 +109,20 @@ export function QuickLogSheet({ open, onClose }: { open: boolean; onClose: () =>
       setDone(`${ALCOHOL_LABEL[v.source] ?? v.source} を記録しました`);
     },
   });
+  // 「もうやった」の事後ワンタップ (呼吸法/瞑想)。WindDownCard の呼吸セッションと違い実施時間を
+  // 計測していないため、writeMindful (Apple Health への分数書き出し) はここでは呼ばない —
+  // 不明な分数を真実源である HealthKit に書き込むと記録が汚れる。自前DBのフラグ (n-of-1 分析用)
+  // だけ true にする。時間込みで記録したい場合は上の「呼吸で整える」セッションを使う。
+  const sleepQuickLog = useMutation({
+    mutationFn: (flag: "breathing" | "meditation") =>
+      api.sleepInterventionSet({ [flag]: true } as Partial<SleepInterventionFlags>),
+    onSuccess: (_d, flag) => {
+      qc.invalidateQueries({ queryKey: ["sleep-intervention"] });
+      qc.invalidateQueries({ queryKey: ["sleep-intervention-history"] });
+      qc.invalidateQueries({ queryKey: ["sleep-interventions"] });
+      setDone(`${flag === "breathing" ? "呼吸法" : "瞑想"}を記録しました`);
+    },
+  });
 
   if (!open) return null;
 
@@ -163,7 +178,29 @@ export function QuickLogSheet({ open, onClose }: { open: boolean; onClose: () =>
             </div>
           )}
           {seg === "checkin" && <CheckinCard />}
-          {seg === "intervention" && <SleepInterventionCard />}
+          {seg === "intervention" && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => sleepQuickLog.mutate("breathing")}
+                  disabled={sleepQuickLog.isPending}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-hairline bg-panel/60 px-2 py-2.5 text-[12px] text-ink transition active:scale-95 hover:border-white/15 disabled:opacity-50"
+                >
+                  <AudioWaveform size={14} className="text-prog-300" />
+                  呼吸した
+                </button>
+                <button
+                  onClick={() => sleepQuickLog.mutate("meditation")}
+                  disabled={sleepQuickLog.isPending}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-hairline bg-panel/60 px-2 py-2.5 text-[12px] text-ink transition active:scale-95 hover:border-white/15 disabled:opacity-50"
+                >
+                  <Brain size={14} className="text-prog-300" />
+                  瞑想した
+                </button>
+              </div>
+              <SleepInterventionCard />
+            </div>
+          )}
           {seg === "caffeine" && (
             <div className="space-y-2 rounded-xl bg-hull/40 p-1">
               <PresetGrid

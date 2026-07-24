@@ -1,7 +1,8 @@
 """カフェイン摂取の手動記録 API。
 
-プリセット (インスタントコーヒー / 缶コーヒー / ネスプレッソ / イブクイック) と
-mg 直接入力をサポートする。
+プリセット (インスタントコーヒー / 缶コーヒー / ネスプレッソ / ドリップコーヒー / イブクイック) と
+mg 直接入力をサポートする。各プリセットは「規定量に対する割合」(dose_pct, %) の指定にも対応する
+(既定 100%。省略時は既存レコードと後方互換)。
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ Source = Literal[
     "instant_coffee",
     "canned_coffee",
     "nespresso",
+    "drip_coffee",
     "green_tea",
     "ibuquick",
     "bufferin_premium",
@@ -44,6 +46,9 @@ PRESET_DEFAULTS: dict[str, dict[str, Any]] = {
     "instant_coffee": {"unit": "g", "default_amount": 2.0, "mg_per_unit": 60.0},
     "canned_coffee": {"unit": "本", "default_amount": 1.0, "mg_per_unit": 100.0},
     "nespresso": {"unit": "カプセル", "default_amount": 1.0, "mg_per_unit": 70.0},
+    # ドリップコーヒー: 1 杯 (150ml) ≈ 100mg
+    # (USDA brewed coffee ~95mg/8oz、日本食品標準成分表 浸出液 ~90mg/150ml の相場)
+    "drip_coffee": {"unit": "杯", "default_amount": 1.0, "mg_per_unit": 100.0},
     # 緑茶 (煎茶): 浸出液 20mg/100ml (日本食品標準成分表)、湯呑み 1 杯 150ml ≈ 30mg
     "green_tea": {"unit": "杯", "default_amount": 1.0, "mg_per_unit": 30.0},
     "ibuquick": {"unit": "錠", "default_amount": 2.0, "mg_per_unit": 40.0},
@@ -55,6 +60,9 @@ PRESET_DEFAULTS: dict[str, dict[str, Any]] = {
 class CaffeineIntakeIn(BaseModel):
     source: Source
     amount: float = Field(gt=0, description="量。manual の場合は mg そのもの")
+    dose_pct: float = Field(
+        default=100.0, gt=0, description="規定量に対する割合(%)。省略時 100 (規定量どおり)"
+    )
     note: str | None = None
     # 任意で過去時刻を指定可能。省略時は now。
     ts_iso: str | None = None
@@ -68,6 +76,7 @@ class CaffeineIntakeOut(BaseModel):
     amount: float
     unit: str
     mg: float
+    dose_pct: float = 100.0
     note: str | None = None
 
 
@@ -84,7 +93,7 @@ async def add_caffeine_intake(body: CaffeineIntakeIn) -> CaffeineIntakeOut:
         if body.source == "instant_coffee"
         else float(preset["mg_per_unit"])
     )
-    mg = body.amount * mg_per_unit
+    mg = body.amount * mg_per_unit * (body.dose_pct / 100.0)
 
     if body.ts_iso:
         try:
@@ -104,6 +113,7 @@ async def add_caffeine_intake(body: CaffeineIntakeIn) -> CaffeineIntakeOut:
             amount=body.amount,
             unit=preset["unit"],
             mg=mg,
+            dose_pct=body.dose_pct,
             note=body.note,
         )
         session.add(row)
@@ -129,13 +139,14 @@ async def list_caffeine_intakes(hours: int = 24) -> dict[str, Any]:
 class CaffeineIntakePatch(BaseModel):
     """編集可能フィールド。指定されたものだけ更新する。
 
-    amount を変えると、source の mg_per_unit を使って mg も再計算する。
+    amount / dose_pct を変えると、source の mg_per_unit を使って mg も再計算する。
     mg を直接指定したい場合は source="manual" + amount=mg にする (上書きできる)。
     """
 
     ts_iso: str | None = None
     amount: float | None = Field(default=None, gt=0)
     source: Source | None = None
+    dose_pct: float | None = Field(default=None, gt=0)
     note: str | None = None
 
 
@@ -165,14 +176,19 @@ async def patch_caffeine_intake(
             row.source = body.source
             row.unit = PRESET_DEFAULTS[body.source]["unit"]
 
+        if body.dose_pct is not None:
+            row.dose_pct = body.dose_pct
+
         if body.amount is not None:
             row.amount = body.amount
+
+        if body.amount is not None or body.dose_pct is not None or body.source is not None:
             mg_per_unit = (
                 settings.instant_coffee_mg_per_g
                 if new_source == "instant_coffee"
                 else float(PRESET_DEFAULTS[new_source]["mg_per_unit"])
             )
-            row.mg = body.amount * mg_per_unit
+            row.mg = row.amount * mg_per_unit * (row.dose_pct / 100.0)
 
         if body.note is not None:
             row.note = body.note or None  # 空文字は None に正規化
@@ -325,5 +341,6 @@ def _to_out(row: CaffeineIntake, tz_name: str) -> CaffeineIntakeOut:
         amount=row.amount,
         unit=row.unit,
         mg=row.mg,
+        dose_pct=row.dose_pct,
         note=row.note,
     )

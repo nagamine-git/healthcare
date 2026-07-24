@@ -16,6 +16,7 @@ const SOURCE_LABEL: Record<CaffeineSource, string> = {
   instant_coffee: "インスタント",
   canned_coffee: "缶コーヒー",
   nespresso: "ネスプレッソ",
+  drip_coffee: "ドリップ",
   green_tea: "緑茶",
   ibuquick: "イブクイック",
   bufferin_premium: "バファリンPremium",
@@ -40,12 +41,14 @@ export function CaffeinePanel({ caffeine }: Props) {
     mutationFn: ({
       source,
       amount,
+      dosePct,
       tsIso,
     }: {
       source: CaffeineSource;
       amount: number;
+      dosePct?: number;
       tsIso?: string;
-    }) => api.caffeineAdd(source, amount, { ts_iso: tsIso }),
+    }) => api.caffeineAdd(source, amount, { ts_iso: tsIso, dose_pct: dosePct }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["caffeine-list"] });
       qc.invalidateQueries({ queryKey: ["today"] });
@@ -138,6 +141,7 @@ export function CaffeinePanel({ caffeine }: Props) {
                 "instant_coffee",
                 "canned_coffee",
                 "nespresso",
+                "drip_coffee",
                 "green_tea",
                 "ibuquick",
                 "bufferin_premium",
@@ -150,11 +154,16 @@ export function CaffeinePanel({ caffeine }: Props) {
                   key={source}
                   label={SOURCE_LABEL[source]}
                   unit={p.unit}
-                  mgPerUnit={p.mg_per_unit}
                   defaultAmount={p.default_amount}
+                  defaultMg={p.default_mg}
                   pending={add.isPending}
-                  onAdd={(amount) =>
-                    add.mutate({ source, amount, tsIso: localToJstIso(tsLocal) })
+                  onAdd={(dosePct) =>
+                    add.mutate({
+                      source,
+                      amount: p.default_amount,
+                      dosePct,
+                      tsIso: localToJstIso(tsLocal),
+                    })
                   }
                 />
               );
@@ -360,59 +369,62 @@ function DecayCurve({
   );
 }
 
+// 規定量 (default_mg) を 100% とする割合チップ。薬 (イブクイック等) を含む全プリセット共通。
+// 履歴フィルタ (24h/72h/…) と同じチップ UI に揃え、選択した % × 規定 mg のプレビューを添える。
+const DOSE_PCT_OPTIONS = [25, 50, 75, 100, 150, 200];
+
 function PresetRow({
   label,
   unit,
-  mgPerUnit,
   defaultAmount,
+  defaultMg,
   pending,
   onAdd,
 }: {
   label: string;
   unit: string;
-  mgPerUnit: number;
   defaultAmount: number;
+  defaultMg: number;
   pending: boolean;
-  onAdd: (amount: number) => void;
+  onAdd: (dosePct: number) => void;
 }) {
-  const [amountStr, setAmountStr] = useState(String(defaultAmount));
-  const amount = parseFloat(amountStr);
-  const valid = Number.isFinite(amount) && amount > 0 && amount < 100;
-  const previewMg = valid ? Math.round(amount * mgPerUnit) : 0;
-  // 整数単位かどうかで step を切り替え (g は小数、本/錠/カプセルは整数)
-  const isIntegerUnit = unit !== "g";
+  const [pct, setPct] = useState(100);
+  const previewMg = Math.round(defaultMg * (pct / 100));
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (valid) onAdd(amount);
-      }}
-      className="flex items-center gap-2"
-    >
+    <div className="flex flex-wrap items-center gap-2">
       <span className="w-28 shrink-0 text-xs text-ink">{label}</span>
-      <input
-        type="number"
-        inputMode={isIntegerUnit ? "numeric" : "decimal"}
-        min={isIntegerUnit ? 1 : 0.1}
-        max={99}
-        step={isIntegerUnit ? 1 : "any"}
-        value={amountStr}
-        onChange={(e) => setAmountStr(e.target.value)}
-        className="w-16 rounded border border-hairline bg-hull px-2 py-1 text-right text-xs text-ink tabular-nums focus:border-act focus:outline-none"
-      />
-      <span className="w-12 shrink-0 text-[10px] text-ink-faint">{unit}</span>
-      <span className="ml-auto w-16 text-right telemetry-num text-xs tabular-nums text-act-300/70">
+      <div className="flex flex-1 flex-wrap gap-1">
+        {DOSE_PCT_OPTIONS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setPct(p)}
+            className={`rounded border px-1.5 py-0.5 text-[10px] tracking-wider ${
+              pct === p
+                ? "border-act/60 bg-act-700/30 text-act-300"
+                : "border-hairline text-ink-faint hover:text-ink-dim"
+            }`}
+          >
+            {p}%
+          </button>
+        ))}
+      </div>
+      <span className="shrink-0 text-[10px] text-ink-faint">
+        規定{defaultAmount}{unit}
+      </span>
+      <span className="w-16 shrink-0 text-right telemetry-num text-xs tabular-nums text-act-300/70">
         {previewMg} mg
       </span>
       <button
-        type="submit"
-        disabled={!valid || pending}
+        type="button"
+        onClick={() => onAdd(pct)}
+        disabled={pending}
         className="rounded-full border border-act-700/60 bg-act-700/20 px-3 py-1 text-xs text-act-300 hover:bg-act-700/50 disabled:opacity-30"
       >
         + 記録
       </button>
-    </form>
+    </div>
   );
 }
 
@@ -523,6 +535,7 @@ function IntakeList({
             </span>
             <span className="text-ink-faint">
               {it.amount} {it.unit}
+              {it.dose_pct != null && it.dose_pct !== 100 && ` ×${it.dose_pct}%`}
             </span>
             <span className="ml-auto telemetry-num tabular-nums text-act-300">
               {Math.round(it.mg)} mg
@@ -633,6 +646,7 @@ function EditModal({
                   "instant_coffee",
                   "canned_coffee",
                   "nespresso",
+                  "drip_coffee",
                   "green_tea",
                   "ibuquick",
                   "bufferin_premium",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Ear, Eye, VolumeX, Wind } from "lucide-react";
+import { AudioWaveform, Brain, ChevronDown, Ear, Eye, VolumeX, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type {
@@ -23,6 +23,8 @@ const ITEMS: { key: Key; label: string; icon: LucideIcon }[] = [
   { key: "eyemask", label: "アイマスク", icon: Eye },
   { key: "nose_strip", label: "ノーズブリーズ", icon: Wind },
   { key: "mouth_tape", label: "口テープ", icon: VolumeX },
+  { key: "breathing", label: "呼吸法", icon: AudioWaveform },
+  { key: "meditation", label: "瞑想", icon: Brain },
 ];
 
 // null → true → false → null
