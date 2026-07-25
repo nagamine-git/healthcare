@@ -471,8 +471,12 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     weight = prof.target_weight_kg or 60.0
     # ベースライン水分損失 (発汗以外: 尿・不感蒸泄) ≈ 1.5L/日 を 24h に配分
     baseline_per_h = 1500.0 / 24.0
-    if goal_ml is None and weight:
-        goal_ml = round(weight * 35.0)  # 35ml/kg/日 の目安
+    # 目標は **1 か所 (scoring/hydration.goal_ml) に統一** する。
+    # 以前は Garmin の goalInML をそのまま出していたが、純正 Hydration を使わなくなると
+    # 値が古いまま固定される。加えて時計 (32ml/kg)・ここ (35ml/kg)・純正 で
+    # 3 種類の目標が並立し、どれが本当か判らない状態だった。
+    # 発汗は Garmin 実測を引き継ぐので、純正の目標に含まれていた補正は失われない。
+    goal_ml = hydration.goal_ml(weight, sweat_ml, sex=prof.sex)
 
     # 摂取カーブ: TIDE の実イベントがあれば累積して段階線に (時刻が正確)。
     # 無ければ純正のスナップショット、それも無ければ末尾に総量 1 点
