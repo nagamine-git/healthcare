@@ -19,11 +19,16 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import CaffeineIntake, MetricSample
+from app.scoring import hydration
 from app.scoring.timewindow import JST
 
 # 累積する習慣。push=True は「多いほど良い → 遅れたら促す」。
 HABITS: list[dict[str, Any]] = [
-    {"key": "water", "label": "水分", "metric": "garmin_hydration_ml", "unit": "ml",
+    # 水分は純正 Hydration + TIDE の合計 (scoring/hydration.py)。
+    # TIDE は 1 タップ 1 行で **実際に飲んだ時刻** が入るため、ペース判定の精度は
+    # TIDE を使っている日ほど上がる (純正は 1 日 1 行のスナップショットで、
+    # その日の総量が同期時刻にまとめて計上される)
+    {"key": "water", "label": "水分", "metric": hydration.PRIMARY_KEYS, "unit": "ml",
      "emoji": "💧", "verb": "1杯 (250ml) 飲もう", "push": True},
     {"key": "steps", "label": "歩数", "metric": "step_count", "unit": "歩",
      "emoji": "👣", "verb": "少し歩こう", "push": True},
@@ -43,7 +48,7 @@ def _now_jst() -> datetime:
     return datetime.now(JST).replace(tzinfo=None)
 
 
-def _cumulative_by_time(metric: str, now_jst: datetime) -> tuple[float | None, int, float]:
+def _cumulative_by_time(metric: str | tuple[str, ...], now_jst: datetime) -> tuple[float | None, int, float]:
     """(期待値=過去日の同時刻までの累積の中央値, 履歴日数, 今日の同時刻までの実績)。"""
     cutoff_sec = now_jst.hour * 3600 + now_jst.minute * 60
     today = now_jst.date()
@@ -61,7 +66,7 @@ def _cumulative_by_time(metric: str, now_jst: datetime) -> tuple[float | None, i
         else:
             rows = s.execute(
                 select(MetricSample.ts, MetricSample.value)
-                .where(MetricSample.metric_key == metric, MetricSample.ts >= lo, MetricSample.ts < hi)
+                .where(hydration.key_predicate(metric), MetricSample.ts >= lo, MetricSample.ts < hi)
             ).all()
 
     per_day: dict[Any, float] = {}
@@ -85,7 +90,8 @@ def _cumulative_by_time(metric: str, now_jst: datetime) -> tuple[float | None, i
 
 
 def intraday_profile(
-    metric: str, ref_date: Any, *, days: int = _HISTORY_DAYS, step_h: float = 0.5,
+    metric: str | tuple[str, ...], ref_date: Any, *, days: int = _HISTORY_DAYS,
+    step_h: float = 0.5,
     spread: tuple[float, float] = (7.0, 22.0),
 ) -> list[dict[str, float]]:
     """終日の「いつものペース」累積カーブ [{h: 時刻, v: 累積}]。
@@ -107,7 +113,7 @@ def intraday_profile(
         else:
             rows = s.execute(
                 select(MetricSample.ts, MetricSample.value)
-                .where(MetricSample.metric_key == metric, MetricSample.ts >= lo, MetricSample.ts < hi)
+                .where(hydration.key_predicate(metric), MetricSample.ts >= lo, MetricSample.ts < hi)
             ).all()
 
     daily: dict[Any, float] = {}

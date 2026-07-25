@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import statistics
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Any
@@ -27,6 +28,7 @@ from app.models import (
     MigraineEpisode,
     SleepSession,
 )
+from app.scoring import hydration
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
 from app.scoring.circadian import circular_mean_hour
 from app.scoring.migraine_stats import benjamini_hochberg, onset_profile, permutation_test
@@ -37,6 +39,9 @@ WINDOW_H = 24  # 発症前ウィンドウ (時間)
 ANALYSIS_DAYS = 120  # 遡る最大日数
 FDR_Q = 0.05
 MIN_GROUP = 3  # ケース/対照それぞれ最低この数の有効値が必要
+# 飲水のベースライン (中央値) を出すのに必要な記録日数。
+# 数日の記録から個人平均を名乗ると、たまたま多かった/少なかった日に引きずられる
+MIN_WATER_DAYS = 14
 
 
 def _to_jst(ts: datetime) -> datetime:
@@ -92,6 +97,8 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         alcohol_rows = session.execute(
             select(AlcoholIntake.ts, AlcoholIntake.grams).where(AlcoholIntake.ts >= since - window)
         ).all()
+        # 飲水は JST 暦日の合計。記録の無い日はキーごと入らない (0 mL の日を作らない)
+        water_by_day = hydration.daily_map(session, since - window, end_dt)
 
     profile = onset_profile([_to_jst(e) for e in episodes])
     episode_count = len(episodes)
@@ -148,6 +155,33 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         v = hrv_rows.get(d)
         return (baseline - float(v)) if v is not None else None
 
+    # 飲水の個人ベースライン = 記録のある日の中央値。
+    # 平均でなく中央値なのは、一括記録で 1 日だけ極端な値が入ることがあるため
+    water_vals = sorted(water_by_day.values())
+    water_baseline = statistics.median(water_vals) if len(water_vals) >= MIN_WATER_DAYS else None
+
+    def hydration_deficit(onset: datetime) -> float | None:
+        """**前日**の飲水量の、個人ベースラインからの不足量 (mL)。高いほど脱水寄り。
+
+        前日を見る理由: ``garmin_hydration_ml`` は 1 日 1 行のスナップショットで
+        ``ts`` が同期時刻 (実測では毎日 09:00) なので、発症直前の実摂取量を
+        切り出せない。日単位でしか信用できない以上、発症当日の「途中まで」を使うと
+        同期タイミング次第で値が跳ねる。前日の完全な 1 日分の方が頑健で、
+        水分制限から頭痛までに時間差がある (Blau 2004, water-deprivation headache)
+        機序とも整合する。
+
+        絶対目標 (35 mL/kg 等) ではなく個人中央値からの偏差にするのはカフェイン因子と
+        同じ理由 — 目標値の定義論争を持ち込まず「その日がいつもと違ったか」だけを見る。
+
+        ⚠️ 記録の無い日は ``None`` を返して除外する。合計 0 を「飲まなかった」と
+        読むと偽の脱水日を量産し、偽陽性を生む。
+        """
+        if water_baseline is None:
+            return None
+        d = _to_jst(onset).date() - timedelta(days=1)
+        v = water_by_day.get(d)
+        return (water_baseline - v) if v is not None else None
+
     hrv_vals = [float(v) for v in hrv_rows.values() if v is not None]
     hrv_baseline = sum(hrv_vals) / len(hrv_vals) if hrv_vals else 0.0
 
@@ -187,6 +221,12 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "alcohol_prev", "label": "前日の飲酒",
          "case": lambda a: alcohol_prev_g(a),
          "ctrl": lambda a: alcohol_prev_g(a)},
+        # 脱水は片頭痛の誘発因子として繰り返し報告されている (Blau 2004 の
+        # water-deprivation headache、Kelman 2007 の誘因調査)。飲水記録が揃って
+        # 初めて検定できる因子で、記録日数が足りなければ自動的に落ちる
+        {"key": "dehydration", "label": "水分不足 (前日)",
+         "case": lambda a: hydration_deficit(a),
+         "ctrl": lambda a: hydration_deficit(a)},
     ]
 
     results = []

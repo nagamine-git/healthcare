@@ -14,6 +14,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models import MetricSample
+from app.scoring import hydration
 from app.scoring.timewindow import jst_day_bounds, jst_window_start
 
 # Apple Health の食事系メトリクスキー (Health Auto Export が送る実際の名前)
@@ -32,13 +33,15 @@ _NUTRITION_KEYS = {
 _ENERGY_KEYS = ("active_energy", "basal_energy_burned")
 
 
-def _sum_for_day(session: Session, metric_key: str, target: date_type) -> float | None:
+def _sum_for_day(
+    session: Session, metric_key: str | tuple[str, ...], target: date_type
+) -> float | None:
     """JST 暦の target 日の合計 (DB は UTC naive なので JST→UTC 境界で範囲指定)。"""
     start, end = jst_day_bounds(target)
     val = session.execute(
         select(func.sum(MetricSample.value)).where(
             and_(
-                MetricSample.metric_key == metric_key,
+                hydration.key_predicate(metric_key),
                 MetricSample.ts >= start,
                 MetricSample.ts < end,
             )
@@ -49,7 +52,7 @@ def _sum_for_day(session: Session, metric_key: str, target: date_type) -> float 
 
 def _avg_daily(
     session: Session,
-    metric_key: str,
+    metric_key: str | tuple[str, ...],
     target: date_type,
     window_days: int,
     *,
@@ -68,7 +71,7 @@ def _avg_daily(
         )
         .where(
             and_(
-                MetricSample.metric_key == metric_key,
+                hydration.key_predicate(metric_key),
                 MetricSample.ts >= start,
                 MetricSample.ts < end,
             )
@@ -160,9 +163,12 @@ def aggregate_nutrition(session: Session, target: date_type) -> dict[str, Any]:
         "active_kcal_avg_14d": round(active_avg, 0) if active_avg else None,
     }
 
-    # 水分は Garmin Hydration を優先
-    garmin_water = _sum_for_day(session, "garmin_hydration_ml", target)
-    garmin_water_avg, _gw_n = _avg_daily(session, "garmin_hydration_ml", target, 14, min_value=100.0)
+    # 水分は純正 Hydration と TIDE の合計 (詳細は scoring/hydration.py)。
+    # 片方だけ見ていると、記録アプリを替えた瞬間にゼロになる
+    garmin_water = _sum_for_day(session, hydration.PRIMARY_KEYS, target)
+    garmin_water_avg, _gw_n = _avg_daily(
+        session, hydration.PRIMARY_KEYS, target, 14, min_value=hydration.MIN_LOGGED_ML
+    )
 
     # 食事系の min_value (それ未満はログ無し扱い)
     nutrition_min = {

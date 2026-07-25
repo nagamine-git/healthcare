@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 
 from app.db import session_scope
 from app.models import BodyBatteryDaily, MetricSample, MigraineEpisode
+from app.scoring import hydration
 from app.scoring import bodyload
 
 _HYDRATION_TARGET_ML = 2000.0  # EFSA 目安 (飲料由来)。これで 100%
@@ -47,10 +48,10 @@ def _hp_gauges(
             select(BodyBatteryDaily.morning_value)
             .where(BodyBatteryDaily.date == today)
         ).scalar()
-        # 腹: 当日の水分 (Garmin hydration ml 合計)
+        # 腹: 当日の水分 (純正 Hydration + TIDE の合計。scoring/hydration.py)
         water_ml = session.execute(
             select(func.sum(MetricSample.value)).where(
-                MetricSample.metric_key == "garmin_hydration_ml",
+                hydration.key_predicate(hydration.PRIMARY_KEYS),
                 MetricSample.ts >= day_start,
                 MetricSample.ts <= now,
             )

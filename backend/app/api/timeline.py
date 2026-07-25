@@ -26,6 +26,7 @@ from app.models import (
     SubjectiveCheckin,
     Workout,
 )
+from app.scoring import hydration
 from app.scoring.timewindow import app_today, jst_day_bounds
 
 router = APIRouter()
@@ -387,6 +388,17 @@ def _context_windows(target, origin_utc, start_utc, end_utc, off, g):
     return out
 
 
+def _hydration_source(hyd, tide_total: float, hae) -> str | None:
+    """摂取量がどこ由来かのラベル。両方あれば併記する (二重記録に気付けるように)。"""
+    if hyd and tide_total > 0:
+        return "garmin+tide"
+    if tide_total > 0:
+        return "tide"
+    if hyd:
+        return "garmin"
+    return "hae" if hae is not None else None
+
+
 def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     """水分の累積摂取カーブ (実測スナップショット) + 目標・発汗・収支。
 
@@ -408,6 +420,10 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
         ).all()
         # 目標・発汗 (当日の Garmin hydration raw_json)
         d_start, d_end = jst_day_bounds(target)
+        # TIDE は 1 タップ 1 行で **実際に飲んだ時刻** を持つ。
+        # 「個別飲水の時刻ログは取れない」という前提はもう成り立たないので、
+        # TIDE がある日は累積スナップショットではなく実イベントでカーブを描く
+        tide_events = hydration.events(session, d_start, d_end)
         hyd = session.execute(
             select(MetricSample.value, MetricSample.raw_json).where(
                 MetricSample.metric_key == "garmin_hydration_ml",
@@ -427,6 +443,7 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     intake_total = None
     goal_ml = None
     sweat_ml = 0.0
+    tide_total = sum(v for _, v in tide_events)
     if hyd:
         intake_total = float(hyd[0]) if hyd[0] is not None else None
         raw = hyd[1]
@@ -438,10 +455,16 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
         if isinstance(raw, dict):
             goal_ml = float(raw.get("goalInML")) if raw.get("goalInML") else None
             sweat_ml = float(raw.get("sweatLossInML") or 0.0)
-    elif hae is not None:
+    elif hae is not None and tide_total <= 0:
+        # Apple Health は Ascend が TIDE 分を書き戻すため、TIDE がある日に足すと
+        # 二重計上になる。TIDE が無い日だけのフォールバック (scoring/hydration.py)
         intake_total = float(hae)
 
-    if intake_total is None and not snaps:
+    # 純正と TIDE は独立した記録経路なので合計が実際の飲水量になる
+    if tide_total > 0:
+        intake_total = (intake_total or 0.0) + tide_total
+
+    if intake_total is None and not snaps and not tide_events:
         return None, None
 
     prof = resolve_profile()
@@ -451,8 +474,16 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
     if goal_ml is None and weight:
         goal_ml = round(weight * 35.0)  # 35ml/kg/日 の目安
 
-    # 摂取カーブ: スナップショット (実測累積) を段階線に。なければ末尾に総量1点
-    intake_pts = [{"h": off(t), "ml": float(v)} for t, v in snaps]
+    # 摂取カーブ: TIDE の実イベントがあれば累積して段階線に (時刻が正確)。
+    # 無ければ純正のスナップショット、それも無ければ末尾に総量 1 点
+    intake_pts = []
+    if tide_events:
+        run = 0.0
+        for t, v in tide_events:
+            run += v
+            intake_pts.append({"h": off(t), "ml": round(run, 1)})
+    else:
+        intake_pts = [{"h": off(t), "ml": float(v)} for t, v in snaps]
     if not intake_pts and intake_total is not None:
         intake_pts = [{"h": off(end_utc - timedelta(minutes=1)), "ml": intake_total}]
 
@@ -461,7 +492,7 @@ def _water_curve(target, origin_utc, start_utc, end_utc, off, energy_pairs):
         "intake_total_ml": round(intake_total) if intake_total is not None else None,
         "goal_ml": round(goal_ml) if goal_ml else None,
         "sweat_ml": round(sweat_ml),
-        "source": "garmin" if hyd else ("hae" if hae is not None else None),
+        "source": _hydration_source(hyd, tide_total, hae),
     }
     return out, baseline_per_h
 
@@ -632,7 +663,9 @@ def _gather_events(start_utc, end_utc, off) -> list[dict[str, Any]]:
     return events
 
 
-def _habit_expected_curve(metric: str, target, off) -> list[dict[str, float]]:
+def _habit_expected_curve(
+    metric: str | tuple[str, ...], target, off
+) -> list[dict[str, float]]:
     """習慣の「いつもの累積カーブ」を窓オフセットにマップ (前後日も繋いで日次リセット)。"""
     from app.scoring.habit_pace import intraday_profile
 
@@ -675,7 +708,7 @@ async def day_timeline(
     pressure_curve = _pressure_curve(start_utc, end_utc, off)
     ctx = _context_windows(est_date, origin_utc, start_utc, end_utc, off, g)
     water, _ = _water_curve(est_date, origin_utc, start_utc, end_utc, off, g["_energy"])
-    water_expected = _habit_expected_curve("garmin_hydration_ml", est_date, off)
+    water_expected = _habit_expected_curve(hydration.PRIMARY_KEYS, est_date, off)
     if water is not None:
         water["expected_curve"] = water_expected
     elif water_expected:
