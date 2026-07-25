@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { FlaskConical, Moon } from "lucide-react";
+import { FlaskConical, Moon, TrendingDown, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import type {
   SleepDriverFactor,
@@ -33,11 +33,8 @@ type Row = {
 };
 
 const TIER_RANK: Record<string, number> = { strong: 3, suggestive: 2, trend: 1 };
-// tier=強い/示唆 は opacity-100/90 だとほぼ見分けがつかなかった (特に濃い色のテキストは
-// 90%でも実質フルに見える)ので、効果が薄いものほど文字も明確に薄くなるよう差を広げる。
-const TIER_OP: Record<string, string> = {
-  strong: "opacity-100", suggestive: "opacity-75", trend: "opacity-55",
-  weak: "opacity-35", preliminary: "opacity-45",
+const TIER_LABEL: Record<string, string> = {
+  strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い", preliminary: "暫定",
 };
 // 行名 (介入/ドライバー名) のベース色もtierで変える。opacity だけだと濃い文字色に対しては
 // 効きが弱いため、ベース自体を下位tierほど暗い ink トーンにして「薄さ」を強調する。
@@ -45,9 +42,17 @@ const TIER_NAME_COLOR: Record<string, string> = {
   strong: "text-ink", suggestive: "text-ink", trend: "text-ink-dim",
   weak: "text-ink-faint", preliminary: "text-ink-dim",
 };
-const TIER_LABEL: Record<string, string> = {
-  strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い", preliminary: "暫定",
-};
+
+/**
+ * 確度 → 不透明度を **連続値** で出す (tier 単位の固定5段階だと同じ tier 内の差が潰れるため)。
+ * 基準は有意性そのもの: powered なら q 値、未補正 (preliminary) なら p 値を 1段階割り引く。
+ * q=0 (完全に有意) → 1.0、q>=0.5 → 下限 0.3 に向けて滑らかに落ちる。
+ */
+function opacityFor(r: Row): number {
+  const sig = r.q ?? Math.min(1, (r.p ?? 1) * 1.5); // preliminary は p を割り引いて弱める
+  const t = Math.min(1, Math.max(0, sig / 0.5));    // 0 (強い) 〜 1 (弱い)
+  return Math.round((1 - t * 0.7) * 100) / 100;     // 1.0 → 0.3
+}
 
 function confKey(r: Row): [number, number, number] {
   return [-(TIER_RANK[r.tier] ?? 0), r.q ?? 1, r.p ?? 1];
@@ -84,14 +89,18 @@ function RowView({ r }: { r: Row }) {
   const good = r.direction === "改善";
   const Icon = r.kind === "intervention" ? FlaskConical : Moon;
   return (
-    <div className={`flex items-baseline gap-2 rounded-lg bg-void/30 px-2.5 py-2 text-[11px] ${TIER_OP[r.tier]}`}>
+    <div
+      className="flex items-baseline gap-2 rounded-lg bg-void/30 px-2.5 py-2 text-[11px]"
+      style={{ opacity: opacityFor(r) }}
+    >
       <Icon size={11} className="shrink-0 translate-y-0.5 text-ink-faint" />
       <span className="min-w-0 flex-1 truncate text-ink-dim">
         <span className={TIER_NAME_COLOR[r.tier]}>{r.name}</span>
         <span className="text-ink-faint"> → {r.outcome_label}</span>
       </span>
-      <span className={`shrink-0 font-semibold ${good ? "text-prog-300" : "text-risk"}`}>
-        {good ? "↑改善" : "↓悪化"}
+      {/* 方向はセクション見出しで既知なので、ここは効果量 (差分) を出す方が情報量が高い */}
+      <span className={`shrink-0 font-semibold tabular-nums ${good ? "text-prog-300" : "text-risk"}`}>
+        {r.diff > 0 ? "+" : ""}{r.diff}
       </span>
       <span className="shrink-0 text-[9px] text-ink-faint">{TIER_LABEL[r.tier]} {r.nLabel}</span>
     </div>
@@ -140,7 +149,10 @@ export function SleepEffectivenessPanel() {
     const ka = confKey(a), kb = confKey(b);
     return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
   });
-  const shown = rows.slice(0, 12);
+  // 「効くもの」と「妨げるもの」は行動の意味が逆 (増やす vs 減らす) なので分けて見せる。
+  // 各セクション内は既存の確度順 (rows のソート順) を保つ。
+  const helps = rows.filter((r) => r.direction === "改善").slice(0, 8);
+  const hurts = rows.filter((r) => r.direction === "悪化").slice(0, 8);
   const anyStrong = rows.some((r) => r.tier === "strong" || r.tier === "suggestive");
   const nights = Math.max(iv?.n_nights ?? 0, dr?.n_nights ?? 0);
   const reliability = iv?.reliability ?? dr?.reliability;
@@ -196,17 +208,33 @@ export function SleepEffectivenessPanel() {
         <p className="text-[10px] text-act-300/80">まだ確かな要因は出ていません（傾向どまり）。下記は弱い示唆として薄く表示。</p>
       )}
 
-      {shown.length > 0 ? (
-        <div className="space-y-1">{shown.map((r, i) => <RowView key={i} r={r} />)}</div>
-      ) : (
+      {helps.length === 0 && hurts.length === 0 && (
         <p className="text-[11px] text-ink-faint">有意な傾向はまだありません。記録が貯まると見えてきます。</p>
+      )}
+      {helps.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp size={11} className="text-prog-300" />
+            <span className="text-[10px] font-semibold text-prog-300">睡眠を良くするもの</span>
+          </div>
+          {helps.map((r, i) => <RowView key={i} r={r} />)}
+        </div>
+      )}
+      {hurts.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <TrendingDown size={11} className="text-risk" />
+            <span className="text-[10px] font-semibold text-risk">睡眠を妨げるもの</span>
+          </div>
+          {hurts.map((r, i) => <RowView key={i} r={r} />)}
+        </div>
       )}
 
       <p className="text-[9px] text-ink-faint">
         介入(耳栓・アイマスク・鼻呼吸・口テープ・呼吸法・瞑想=着脱の二値)とドライバー(活動量・
         カフェイン/飲酒のタイミング・運動等=連続量の高低)を同じ検定(並べ替え+FDR補正)で評価し、
-        確度(tier)→有意性(q値)の順にまとめてランク付け。単一被験者(n-of-1)のため判定には
-        各条件で複数夜が必要です。
+        確度順にランク付け。文字の濃さは有意性(q値)に連動——薄いほど確証が弱い。
+        単一被験者(n-of-1)のため判定には各条件で複数夜が必要です。
       </p>
     </section>
   );
