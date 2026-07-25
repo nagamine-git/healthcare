@@ -51,11 +51,23 @@ FDR_Q = 0.05
 # より総合的な sleep_score / deep_min の方を信頼すること。
 # 効率単独の「改善」から生活変更を勧めてはいけない (_action_text は改善方向の
 # irregular に文言を持たず、結果として助言化されない作りになっている)。
+#
+# restlessness_inv (体動の少なさ) は上記の交絡への対処として追加した指標。
+# 体動回数 (Garmin restlessMomentsCount) は「床上時間に対する睡眠時間の割合」
+# ではなく実際の身体の動きそのものを数えるため、効率のように睡眠時間の長短に
+# 引きずられにくい (寝付きの速さでは変わらない、時間非依存の質指標)。効率単独では
+# 語れない夜も、体動回数となら安全に語れる場面がある。
+# ⚠️ 元データは「体動が多いほど悪い」向きなので、符号を反転して格納する
+# (他の全アウトカムと同じ「高いほど良い」に統一するため)。
+# ⚠️ ただし体動の「絶対回数」は寝ている時間が長いほど機会が増えて自明に増える
+# (実データで duration↑→restlessness_inv↓, p=0.0 を確認)。efficiency 等と同じ
+# 理由で duration ドライバーの対象からは除外している (analyze() 内)。
 _OUTCOMES: list[tuple[str, str, str]] = [
     ("efficiency", "睡眠効率", "quality"),
     ("deep_min", "深睡眠", "quality"),
     ("sleep_score", "睡眠スコア", "quality"),
     ("hrv_overnight", "夜間HRV", "quality"),
+    ("restlessness_inv", "体動の少なさ", "quality"),
     ("morning_bb", "翌朝の回復(BB)", "next_day"),
     ("energy", "翌日の活力", "next_day"),
 ]
@@ -126,6 +138,15 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         ):
             if v is not None:
                 midpoint[_jst(ts).date()] = float(v)
+        # 体動回数 (Garmin restlessMomentsCount)。ingest/sleep_extras.py が
+        # 睡眠セッションと同じ日付規約 (target 07:00) で MetricSample に書いている。
+        restless: dict[date_type, float] = {}
+        for ts, v in s.execute(
+            select(MetricSample.ts, MetricSample.value)
+            .where(MetricSample.metric_key == "sleep_restless_moments", MetricSample.ts >= lo, MetricSample.ts < hi)
+        ):
+            if v is not None:
+                restless[_jst(ts).date()] = float(v)
         caf_rows = [(_jst(ts), float(mg), src) for ts, mg, src in s.execute(
             select(CaffeineIntake.ts, CaffeineIntake.mg, CaffeineIntake.source)
             .where(CaffeineIntake.ts >= lo, CaffeineIntake.ts < hi)
@@ -169,10 +190,13 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         )
         load = sum(ld for t, ld in loads if prev <= t.date() <= d)
         mid = midpoint.get(d)
+        rm = restless.get(d)
         rows.append({
             # outcomes
             "efficiency": eff, "deep_min": sl["deep"], "sleep_score": sl["score"],
-            "hrv_overnight": sl["hrv"], "morning_bb": bb.get(d),
+            "hrv_overnight": sl["hrv"],
+            "restlessness_inv": (-rm if rm is not None else None),  # 符号反転 (少ないほど良い→高いほど良い)
+            "morning_bb": bb.get(d),
             "energy": checkin.get(d, {}).get("energy"),
             # drivers
             "midpoint": (mid + 24 if mid is not None and mid < 12 else mid),
@@ -197,8 +221,13 @@ def analyze(target: date_type | None = None) -> dict[str, Any]:
     tests: list[dict[str, Any]] = []
     for okey, olabel, group in _OUTCOMES:
         for dkey, dlabel in _DRIVERS:
-            if dkey == "duration" and okey in ("efficiency", "deep_min", "sleep_score", "hrv_overnight"):
-                continue  # 睡眠時間→睡眠の質は自明寄りなので翌日のみ対象
+            if dkey == "duration" and okey in (
+                "efficiency", "deep_min", "sleep_score", "hrv_overnight", "restlessness_inv",
+            ):
+                # 睡眠時間→睡眠の質は自明寄りなので翌日のみ対象。restlessness_inv (体動回数の
+                # 符号反転) も、寝ている時間が長いほど体動の絶対回数が増える自明の関係が
+                # 実データで確認できた (duration↑→restlessness_inv↓, p=0.0) ため同様に除外。
+                continue
             pairs = [(r[dkey], r[okey]) for r in rows if r.get(dkey) is not None and r.get(okey) is not None]
             if len(pairs) < _MIN_PAIRS_PRELIM:
                 continue

@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.db import session_scope
-from app.models import AlcoholIntake, MetricSample, SleepSession
+from app.models import AlcoholIntake, BodyBatteryDaily, MetricSample, SleepSession
 from app.scoring import sleep_drivers as sd
 
 
@@ -87,3 +87,64 @@ def test_morning_light_predicts_sleep_score(db_engine):
     )
     assert ml is not None, out["quality"]
     assert ml["direction"] == "改善"
+
+
+def test_alcohol_worsens_restlessness(db_engine):
+    """夜に飲酒した夜は体動が多い(=restlessness_inv は悪化方向、符号反転の確認)。"""
+    today = date(2026, 6, 15)
+    with session_scope() as s:
+        for i in range(1, 41):
+            d = today - timedelta(days=i)
+            drank = i % 2 == 0
+            s.add(SleepSession(date=d, source="garmin", total_min=420, awake_min=30, sleep_score=70))
+            # 体動回数 (生値): 飲酒夜は多い(悪い)、非飲酒夜は少ない(良い)
+            restless_val = 40.0 if drank else 8.0
+            ts = datetime.combine(d, datetime.min.time()).replace(hour=7)
+            s.add(MetricSample(source="garmin", metric_key="sleep_restless_moments", ts=ts, value=restless_val))
+            if drank:
+                alc_ts = datetime.combine(d - timedelta(days=1), datetime.min.time()).replace(hour=11)
+                s.add(AlcoholIntake(ts=alc_ts, source="beer", grams=20.0))
+    out = sd.analyze(today)
+    assert out["status"] == "analyzed"
+    r = next(
+        (f for f in out["quality"] if f["driver"] == "alcohol_eve" and f["outcome"] == "restlessness_inv"),
+        None,
+    )
+    assert r is not None, out["quality"]
+    # 飲酒夜(体動多い=restlessness_inv低い)が「悪化」方向で出ることを確認
+    assert r["direction"] == "悪化"
+
+
+def test_duration_excluded_from_restlessness(db_engine):
+    """睡眠時間が長いほど体動の絶対回数が増える自明の関係を duration ドライバーの
+    対象から除外していること (efficiency 等の既存除外と同じ理由)。ここでは duration と
+    restlessness_inv がわざと強く相関するデータを用意し、それでも quality の
+    duration×restlessness_inv 行が出ないことを確認する。"""
+    today = date(2026, 6, 15)
+    with session_scope() as s:
+        for i in range(1, 41):
+            d = today - timedelta(days=i)
+            long_night = i % 2 == 0
+            total = 480 if long_night else 300
+            s.add(SleepSession(date=d, source="garmin", total_min=total, awake_min=30, sleep_score=70))
+            # 長く寝た夜ほど体動の絶対回数(生値)も多い、という自明の関係を再現
+            restless_val = 60.0 if long_night else 10.0
+            ts = datetime.combine(d, datetime.min.time()).replace(hour=7)
+            s.add(MetricSample(source="garmin", metric_key="sleep_restless_moments", ts=ts, value=restless_val))
+            # duration が全く何とも比較されないと tests が空になってしまうため、
+            # duration×next_day (除外対象外) を成立させる目的でのみ翌朝BBを入れる
+            s.add(BodyBatteryDaily(date=d, morning_value=70.0 if long_night else 50.0))
+    out = sd.analyze(today)
+    assert out["status"] == "analyzed"
+    dur_vs_restless = next(
+        (f for f in out["quality"] if f["driver"] == "duration" and f["outcome"] == "restlessness_inv"),
+        None,
+    )
+    assert dur_vs_restless is None, out["quality"]
+    # duration 自体は次日アウトカムに対しては引き続きテストされていることの確認
+    # (除外がドライバー全体でなく quality グループ限定であることの検証)
+    dur_vs_bb = next(
+        (f for f in out["next_day"] if f["driver"] == "duration" and f["outcome"] == "morning_bb"),
+        None,
+    )
+    assert dur_vs_bb is not None, out["next_day"]
