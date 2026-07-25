@@ -377,3 +377,28 @@ def test_sleep_recommendations_are_surfaced_as_actions():
     hits = [c for c in cands if c["key"] == "sleep_driver"]
     assert len(hits) == 1
     assert hits[0]["title"] == "就寝を 00:54±30分に揃える"
+
+
+def test_all_models_imported_by_next_action_are_exported():
+    """`next_action` が `app.models` から import する名前がすべて export されていること。
+
+    回帰テスト: `_collect()` の各 gather は `safe()` で例外を握りつぶすため、
+    ImportError で入力が丸ごと欠落しても **エンドポイントは 200 のまま**で気づけない。
+    実際 `CashflowTx` が `models/__init__` の明示 export リストから漏れており、
+    入出金の鮮度 (`cashflow_days_old`) が恒常的に None のままになっていた。
+    """
+    import ast
+    from pathlib import Path
+
+    import app.models as models_pkg
+    import app.scoring.next_action as na
+
+    src = Path(na.__file__).read_text(encoding="utf-8")
+    wanted: set[str] = set()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.models":
+            wanted |= {a.name for a in node.names}
+
+    assert wanted, "app.models からの import が検出できていない (テストの前提が壊れている)"
+    missing = sorted(n for n in wanted if not hasattr(models_pkg, n))
+    assert not missing, f"app.models から export されていない: {missing}"
