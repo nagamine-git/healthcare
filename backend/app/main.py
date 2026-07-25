@@ -17,6 +17,7 @@ from app.api import body_comp as body_comp_api
 from app.api import body_distribution as body_distribution_api
 from app.api import bodyload as bodyload_api
 from app.api import caffeine as caffeine_api
+from app.api import tide as tide_api
 from app.api import checkin as checkin_api
 from app.api import checkup as checkup_api
 from app.api import consult as consult_api
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(speech_api.router)
     app.include_router(admin_api.router)
     app.include_router(caffeine_api.router)
+    app.include_router(tide_api.router)
     app.include_router(bodyload_api.router)
     app.include_router(sleep_drivers_api.router)
     app.include_router(sleep_intervention_api.router)

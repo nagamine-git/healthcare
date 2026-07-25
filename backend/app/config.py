@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     garmin_token_dir: Path | None = None
 
     hae_ingest_token: str | None = None
+    # TIDE (Garmin ウォッチアプリ) からの取り込み用。env TIDE_INGEST_TOKEN
+    tide_ingest_token: str | None = None
 
     # ExerciseDB (RapidAPI): 種目デモ GIF 用。env EXERCISEDB_API_KEY (本番は .env.runtime)。
     exercisedb_api_key: str | None = None
