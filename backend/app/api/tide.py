@@ -225,7 +225,7 @@ def _habitual_bed_minute(session) -> int | None:
         h = circular_mean_hour(beds)
         if h is None:
             return None
-        return int(round(h * 60)) % 1440
+        return round(h * 60) % 1440
     except Exception:
         return None
 

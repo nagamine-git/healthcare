@@ -157,7 +157,7 @@ def goal_ml(weight_kg: float | None, sweat_ml: float = 0.0, *, sex: str | None =
     floor = FLOOR_MALE_ML if (sex or "").lower().startswith("m") else FLOOR_OTHER_ML
     if base < floor:
         base = float(floor)
-    return int(round(base + max(0.0, sweat_ml)))
+    return round(base + max(0.0, sweat_ml))
 
 
 def _as_date(v) -> date_type:
