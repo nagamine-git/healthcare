@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
 from app.config import Settings, get_settings
@@ -104,6 +104,41 @@ def _apply_migraine_event(session, ts: datetime, ev: str) -> str:
     return "skip"
 
 
+def _delete_entry(session, ts: datetime, k: int) -> int:
+    """時計の「直前を取り消し」。(ts, 種別) に一致する **TIDE 由来の行だけ** を消す。
+
+    Web UI から手で入れた記録を巻き込まないことが要件。水分は ``source="tide"`` で、
+    カフェインは ``note="TIDE"`` で由来を限定する (カフェインの ``source`` は
+    ``drip_coffee`` 等の飲み物種別で、手入力と共有されるため由来の判別に使えない)。
+
+    見つからなくても例外にしない。時計は再送するので、2 回目以降は 0 件になるのが正常
+    (冪等)。
+    """
+    n = 0
+    for row in session.execute(
+        select(MetricSample).where(
+            MetricSample.source == SOURCE,
+            MetricSample.metric_key == HYDRATION_METRIC_KEY,
+            MetricSample.ts == ts,
+        )
+    ).scalars():
+        session.delete(row)
+        n += 1
+
+    src = TYPE_TO_CAFFEINE_SOURCE.get(k)
+    if src is not None:
+        for row in session.execute(
+            select(CaffeineIntake).where(
+                CaffeineIntake.ts == ts,
+                CaffeineIntake.source == src,
+                CaffeineIntake.note == "TIDE",
+            )
+        ).scalars():
+            session.delete(row)
+            n += 1
+    return n
+
+
 def _verify_token(
     authorization: str | None = Header(default=None),
     settings: Settings = Depends(get_settings),
@@ -133,6 +168,16 @@ class TideEntry(BaseModel):
         description='イベント種別。"mig_start" / "mig_end" のとき偏頭痛エピソードを操作する '
         "(この場合 ml/mg は無視)",
     )
+    # 時計側の「直前を取り消し」。誤タップは押した直後に気づくので、対象は ts で一意に決まる。
+    # 追加と同じキューに乗るため、同一 payload 内に add と del が並ぶことがある
+    # (取り消しが送信前に行われた場合)。**del は add の後に適用する**ので差し引き 0 になる。
+    del_: bool = Field(
+        default=False,
+        alias="del",
+        description="真なら (t, k) に一致する TIDE 由来の記録を削除する。ml/mg は無視",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class TidePayload(BaseModel):
@@ -150,6 +195,7 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
     water_added = 0
     caffeine_added = 0
     migraine_applied = 0
+    deleted = 0
     skipped = 0
 
     # ⚠️ 同一 payload 内で ts が衝突しうる (同じ秒に「水」と「珈琲」を続けてタップする等)。
@@ -165,9 +211,13 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
     caffeine_kind: dict[tuple[datetime, str], int] = {}
 
     events: list[tuple[datetime, str]] = []
+    deletes: list[tuple[datetime, int]] = []
 
     for e in payload.entries:
         ts = datetime.fromtimestamp(e.t, tz=UTC).replace(tzinfo=None)  # UTC naive で統一
+        if e.del_:
+            deletes.append((ts, e.k))
+            continue                      # 削除行は ml/mg を持たない
         if e.ev:
             events.append((ts, e.ev))
             continue                      # イベント行は ml/mg を持たない
@@ -234,6 +284,16 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
             else:
                 migraine_applied += 1
 
+        # **削除は追加の後**。取り消しが送信前に行われると同一 payload に add と del が
+        # 並ぶため、この順序でないと差し引き 0 にならない
+        session.flush()
+        for ts, k in deletes:
+            n = _delete_entry(session, ts, k)
+            if n == 0:
+                skipped += 1
+            else:
+                deleted += n
+
         moh = _moh_days(session)
 
     # 時計は "moh" を見て鎮痛薬の記録画面に「今月 n/10 日」を出す。
@@ -244,6 +304,7 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
         "c": caffeine_added,
         "s": skipped,
         "m": migraine_applied,
+        "x": deleted,
         "moh": moh,
         "mohMax": MOH_LIMIT_DAYS,
     }
