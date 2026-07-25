@@ -177,6 +177,32 @@ def test_sleep_deviation_catches_oversleep(db_engine):
     assert sf["case_mean"] > 0  # 片側 (480-total) なら寝過ぎは負値になり検出できなかった
 
 
+def test_detects_sleep_breath_disruption_factor(db_engine):
+    """頭痛日の前夜だけ呼吸の乱れ (severity) が高い → sleep_breath_disruption が有意。"""
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    today = date(2026, 6, 30)
+    episode_days = {today - timedelta(days=i * 2) for i in range(12)}
+    with session_scope() as s:
+        # 31日分、頭痛日は HIGH(2.0)、他は LOW(0.0) の breathingDisruptionSeverity
+        for i in range(31):
+            d = today - timedelta(days=i)
+            severity = 2.0 if d in episode_days else 0.0
+            ts = datetime.combine(d, datetime.min.time()).replace(hour=7)
+            s.add(MetricSample(
+                source="garmin", metric_key="sleep_breath_disruption", ts=ts, value=severity))
+        for d in episode_days:
+            onset = datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)
+            s.add(MigraineEpisode(started_at=onset))
+
+    out = analyze_triggers(today, min_episodes=10)
+    assert "sleep_breath_disruption" in out["tested"]
+    bf = next((f for f in out["factors"] if f["key"] == "sleep_breath_disruption"), None)
+    assert bf is not None, f"sleep_breath_disruption should be significant: {out['status']} {out['factors']}"
+    assert bf["direction"] == "誘発"
+    assert bf["case_mean"] > bf["control_mean"]
+
+
 def test_no_significant_factor_when_flat(db_engine):
     """気圧が常に一定 → どの要因も有意でない。"""
     from app.scoring.migraine_triggers import analyze_triggers

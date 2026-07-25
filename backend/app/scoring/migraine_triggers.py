@@ -85,6 +85,15 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
                 select(SleepSession.date, SleepSession.total_min).where(SleepSession.date >= since.date())
             ).all()
         }
+        # 睡眠中の呼吸の乱れ (ingest/sleep_extras.py が毎晩書いているが参照ゼロだった)。
+        # metric_key="sleep_breath_disruption" (LOW=0/MODERATE=1/HIGH=2)、ts はその夜の
+        # 対象日 07:00 マーカー (SleepSession.date と同じ日付キー、ts.date() で直接引ける)
+        breath_rows = session.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.metric_key == "sleep_breath_disruption",
+                MetricSample.ts >= since,
+            )
+        ).all()
         hrv_rows = {
             d: v for d, v in session.execute(
                 select(HrvDaily.date, HrvDaily.last_night_avg).where(HrvDaily.date >= since.date())
@@ -197,6 +206,30 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         d = _to_jst(onset).date()
         tot = sleep_rows.get(d)
         return abs(480 - float(tot)) if tot is not None else None
+
+    # ts は ingest/sleep_extras.py が対象日 07:00 に書くマーカーなので、_to_jst の
+    # UTC→JST 変換は不要 (ts.date() が既に「その夜が属する日」そのもの)
+    breath_by_date = {ts.date(): v for ts, v in breath_rows if v is not None}
+
+    def breath_disruption(onset: datetime) -> float | None:
+        """前夜の睡眠中の呼吸の乱れ (Garmin breathingDisruptionSeverity: LOW=0/MODERATE=1/HIGH=2)。
+
+        ingest/sleep_extras.py が毎晩書いているが、これまでどこからも参照されて
+        いなかった値。起床時頭痛の型は睡眠関連呼吸障害との関連が知られているため、
+        「呼吸の乱れが多い夜の翌日に頭痛が多いか」という相関の有無だけを見る。
+
+        ⚠️ ここでは疾患の診断・推定は一切しない。有意であっても「睡眠時無呼吸が
+        ある」等の解釈をラベル・コメント・UI に書き足さないこと — 見えるのは
+        あくまで統計的な関連で、それ以上の意味付けは医療機器でないこのアプリの
+        範囲を超える。
+
+        記録の無い夜 (Garmin が severity を返さなかった日) は None で除外する。
+        0 (LOW) と「記録なし」を区別しないと、未記録の夜を「乱れが無かった」と
+        誤読して偽陽性を生む。
+        """
+        d = _to_jst(onset).date()
+        v = breath_by_date.get(d)
+        return float(v) if v is not None else None
 
     def hrv_drop(onset: datetime, baseline: float) -> float | None:
         d = _to_jst(onset).date()
@@ -319,6 +352,11 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "exercise_load", "label": "前日の運動負荷",
          "case": lambda a: exercise_prev_load(a),
          "ctrl": lambda a: exercise_prev_load(a)},
+        # 診断はしない。「呼吸の乱れが多い夜の翌日に頭痛が多いか」の関連のみを見る
+        # (breath_disruption() の docstring 参照)。
+        {"key": "sleep_breath_disruption", "label": "睡眠中の呼吸の乱れ (前夜)",
+         "case": lambda a: breath_disruption(a),
+         "ctrl": lambda a: breath_disruption(a)},
     ]
 
     results = []
