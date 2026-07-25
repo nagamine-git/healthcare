@@ -27,11 +27,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import Settings, get_settings
 from app.db import session_scope
-from app.models import CaffeineIntake, MetricSample
+from app.models import CaffeineIntake, MetricSample, MigraineEpisode
+from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
 
 router = APIRouter()
 
@@ -47,6 +48,60 @@ TYPE_TO_CAFFEINE_SOURCE: dict[int, str] = {
     4: "manual",      # エナジードリンク。healthcare 側に専用プリセットが無いため manual 扱い
     6: "ibuquick",    # 鎮痛薬。MOH 判定と偏頭痛分析の除外対象に載せるため専用ソースにする
 }
+
+
+# 偏頭痛の未終了エピソードをこの時間まで active とみなす (migraine.py と揃える。
+# これを超えたものは終了し忘れの放置データで、残ると新規記録を永久に弾く事故になる)
+_ACTIVE_MAX_AGE_H = 48
+
+# ICHD-3: カフェイン配合の複合鎮痛薬は月10日で乱用域 (単純鎮痛薬の15日ではない)
+MOH_LIMIT_DAYS = 10
+
+
+def _moh_days(session) -> int:
+    """直近30日で頭痛薬を飲んだ **日数** (JST日付でdistinct。同日複数回は1日)。
+
+    集計方法は ``scoring/wellbeing_alerts._check_moh_risk`` と揃えてある。
+    ここで返すのは時計側に「今何日目か」を出すためで、判定そのものはサーバーが持つ。
+    """
+    lo = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    day_expr = func.date(CaffeineIntake.ts, "+9 hours")
+    n = session.execute(
+        select(func.count(func.distinct(day_expr))).where(
+            CaffeineIntake.ts >= lo,
+            CaffeineIntake.source.in_(tuple(MEDICATION_CAFFEINE_SOURCES)),
+        )
+    ).scalar()
+    return int(n or 0)
+
+
+def _apply_migraine_event(session, ts: datetime, ev: str) -> str:
+    """偏頭痛イベントを適用する。**例外を投げないこと** —
+    1件の異常で payload 全体が 500 になると、時計が同じ payload を再送し続けて
+    同期が永久に詰まる (同一秒2件の不具合と同じ失敗様式)。
+
+    冪等性: 時計は送信失敗をキューに積んで再送するため、同じイベントが複数回届きうる。
+    - mig_start: 既に active なエピソードがあれば何もしない (重複作成を防ぐ)
+    - mig_end:   active が無ければ何もしない
+    """
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=_ACTIVE_MAX_AGE_H)
+    active = session.execute(
+        select(MigraineEpisode)
+        .where(MigraineEpisode.ended_at.is_(None), MigraineEpisode.started_at >= cutoff)
+        .order_by(MigraineEpisode.started_at.desc())
+    ).scalars().first()
+
+    if ev == "mig_start":
+        if active is not None:
+            return "skip"
+        session.add(MigraineEpisode(started_at=ts, ended_at=None, severity=None, note="TIDE"))
+        return "start"
+    if ev == "mig_end":
+        if active is None:
+            return "skip"
+        active.ended_at = ts if ts > active.started_at else active.started_at
+        return "end"
+    return "skip"
 
 
 def _verify_token(
@@ -73,6 +128,11 @@ class TideEntry(BaseModel):
     k: int = Field(description="種別 ID (0=水小 1=水大 2=珈琲 3=茶 4=エナジー 5=酒 6=鎮痛薬)")
     ml: int = Field(default=0, ge=0, le=5000, description="水分 mL")
     mg: int = Field(default=0, ge=0, le=1000, description="カフェイン mg")
+    ev: str | None = Field(
+        default=None,
+        description='イベント種別。"mig_start" / "mig_end" のとき偏頭痛エピソードを操作する '
+        "(この場合 ml/mg は無視)",
+    )
 
 
 class TidePayload(BaseModel):
@@ -89,6 +149,7 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
     """
     water_added = 0
     caffeine_added = 0
+    migraine_applied = 0
     skipped = 0
 
     # ⚠️ 同一 payload 内で ts が衝突しうる (同じ秒に「水」と「珈琲」を続けてタップする等)。
@@ -103,8 +164,13 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
     caffeine_mg: dict[tuple[datetime, str], float] = {}
     caffeine_kind: dict[tuple[datetime, str], int] = {}
 
+    events: list[tuple[datetime, str]] = []
+
     for e in payload.entries:
         ts = datetime.fromtimestamp(e.t, tz=UTC).replace(tzinfo=None)  # UTC naive で統一
+        if e.ev:
+            events.append((ts, e.ev))
+            continue                      # イベント行は ml/mg を持たない
         if e.ml > 0:
             water_ml[ts] = water_ml.get(ts, 0.0) + float(e.ml)
             water_kind.setdefault(ts, e.k)
@@ -161,7 +227,26 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
             )
             caffeine_added += 1
 
-    return {"ok": True, "w": water_added, "c": caffeine_added, "s": skipped}
+        # 偏頭痛イベントは時系列順に適用する (start→end の順序が崩れると active 判定がずれる)
+        for ts, ev in sorted(events):
+            if _apply_migraine_event(session, ts, ev) == "skip":
+                skipped += 1
+            else:
+                migraine_applied += 1
+
+        moh = _moh_days(session)
+
+    # 時計は "moh" を見て鎮痛薬の記録画面に「今月 n/10 日」を出す。
+    # 判定基準はサーバー側 (MOH_LIMIT_DAYS) を正とし、時計はそれを表示するだけにする。
+    return {
+        "ok": True,
+        "w": water_added,
+        "c": caffeine_added,
+        "s": skipped,
+        "m": migraine_applied,
+        "moh": moh,
+        "mohMax": MOH_LIMIT_DAYS,
+    }
 
 
 class TideWaterOut(BaseModel):
