@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from app.db import session_scope
-from app.models import CaffeineIntake, MetricSample, MigraineEpisode
+from app.models import CaffeineIntake, MetricSample, MigraineEpisode, SubjectiveCheckin
 
 # DB は UTC naive。JST 15:00 = UTC 06:00。
 JST_AFTERNOON_UTC_HOUR = 6
@@ -93,6 +93,33 @@ def test_caffeine_single_factor_not_mirror(db_engine):
     # 頭痛日に多い → 過多・誘発
     assert caf[0]["label"] == "カフェイン過多"
     assert caf[0]["direction"] == "誘発"
+
+
+def test_detects_subjective_stress_factor(db_engine):
+    """発症前日〜当日の主観ストレスが高い → subjective_stress が有意。"""
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    today = date(2026, 6, 30)
+    # episode_days 同士が重ならないよう 5 日間隔で配置 (前日〜当日窓が他の頭痛日と衝突しない)
+    episode_days = {today - timedelta(days=i * 5) for i in range(12)}
+    with session_scope() as s:
+        # 70日分のベースライン記録。頭痛当日だけ主観ストレスが高い (5)、他は低い (1)
+        for i in range(70):
+            d = today - timedelta(days=i)
+            stress = 5 if d in episode_days else 1
+            s.add(SubjectiveCheckin(
+                date=d, stress=stress,
+                updated_at=datetime.combine(d, datetime.min.time())))
+        for d in episode_days:
+            onset = datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)
+            s.add(MigraineEpisode(started_at=onset))
+
+    out = analyze_triggers(today, min_episodes=10)
+    assert "subjective_stress" in out["tested"]
+    sf = next((f for f in out["factors"] if f["key"] == "subjective_stress"), None)
+    assert sf is not None, f"subjective_stress should be significant: {out['status']} {out['factors']}"
+    assert sf["direction"] == "誘発"
+    assert sf["case_mean"] > sf["control_mean"]
 
 
 def test_no_significant_factor_when_flat(db_engine):

@@ -27,6 +27,7 @@ from app.models import (
     MetricSample,
     MigraineEpisode,
     SleepSession,
+    SubjectiveCheckin,
 )
 from app.scoring import hydration
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
@@ -42,6 +43,8 @@ MIN_GROUP = 3  # ケース/対照それぞれ最低この数の有効値が必�
 # 飲水のベースライン (中央値) を出すのに必要な記録日数。
 # 数日の記録から個人平均を名乗ると、たまたま多かった/少なかった日に引きずられる
 MIN_WATER_DAYS = 14
+# 主観ストレスのベースライン (中央値) を出すのに必要な記録日数。飲水と同じ理由。
+MIN_STRESS_DAYS = 14
 
 
 def _to_jst(ts: datetime) -> datetime:
@@ -84,6 +87,14 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         hrv_rows = {
             d: v for d, v in session.execute(
                 select(HrvDaily.date, HrvDaily.last_night_avg).where(HrvDaily.date >= since.date())
+            ).all()
+        }
+        # 主観ストレスは sleep_drivers.py の stress ドライバーで既に使われているが
+        # 頭痛側では未接続だった。JST 暦日 1 値 (1-5, 高いほど悪い)
+        stress_rows = {
+            d: v for d, v in session.execute(
+                select(SubjectiveCheckin.date, SubjectiveCheckin.stress).where(
+                    SubjectiveCheckin.date >= since.date())
             ).all()
         }
         # 食事性カフェインのみ。頭痛薬カフェイン(イブクイック等)は頭痛の「治療」として
@@ -182,6 +193,42 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         v = water_by_day.get(d)
         return (water_baseline - v) if v is not None else None
 
+    # 主観ストレスの個人ベースライン = 記録のある日の中央値。飲水と同じ理由
+    # (少数記録が平均を極端な1日に引きずられないよう中央値を使う)
+    stress_vals = sorted(v for v in stress_rows.values() if v is not None)
+    stress_baseline = statistics.median(stress_vals) if len(stress_vals) >= MIN_STRESS_DAYS else None
+
+    def stress_deviation(onset: datetime) -> float | None:
+        """発症前日〜当日の主観ストレス (1-5, 高いほど悪い) の、個人ベースライン (中央値) からの偏差。
+
+        片頭痛の誘因としてもっとも報告頻度が高いのがストレスだが、これまで
+        sleep_drivers.py の stress ドライバー (睡眠側) でしか使われておらず、
+        頭痛側には未接続だった。
+
+        窓を「前日〜当日」の2日平均にする理由: SubjectiveCheckin は JST 暦日
+        1 値の自己申告で、記録タイミングが朝晩ばらつく。発症直前だけを見ると
+        「まだ入力していないだけ」で欠測扱いになりやすく、また蓄積したストレスが
+        遅れて頭痛に出る型 (let-down headache 的な経過) もあるため、2 日を均して使う。
+
+        生値でなく個人ベースライン (中央値) 偏差にする理由: 1-5 の主観評価は
+        個人内較正の差が大きい (常に3と答える人・常に1と答える人がいる)。
+        カフェイン/飲水と同じ理由で「絶対値」ではなく「その人にとっていつもと
+        違うか」を見る。
+
+        ⚠️ SubjectiveCheckin は記録が疎な運用が前提のため、ベースラインは
+        MIN_STRESS_DAYS 件以上の記録が揃うまで作らない (作れなければ常に None
+        を返し、この要因は MIN_GROUP 割れで自動的に落ちる — それが正しい挙動)。
+        前日・当日ともに未記録なら None を返して除外する。0 を代入すると
+        「ストレスが低かった日」を偽装し、偽陽性を生む。
+        """
+        if stress_baseline is None:
+            return None
+        d = _to_jst(onset).date()
+        vals = [stress_rows[dd] for dd in (d - timedelta(days=1), d) if stress_rows.get(dd) is not None]
+        if not vals:
+            return None
+        return (sum(vals) / len(vals)) - stress_baseline
+
     hrv_vals = [float(v) for v in hrv_rows.values() if v is not None]
     hrv_baseline = sum(hrv_vals) / len(hrv_vals) if hrv_vals else 0.0
 
@@ -227,6 +274,9 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "dehydration", "label": "水分不足 (前日)",
          "case": lambda a: hydration_deficit(a),
          "ctrl": lambda a: hydration_deficit(a)},
+        {"key": "subjective_stress", "label": "主観ストレス (前日〜当日)",
+         "case": lambda a: stress_deviation(a),
+         "ctrl": lambda a: stress_deviation(a)},
     ]
 
     results = []
