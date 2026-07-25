@@ -42,6 +42,9 @@ services:
       GARMIN_EMAIL: ${GARMIN_EMAIL:?GARMIN_EMAIL is required}
       GARMIN_PASSWORD: ${GARMIN_PASSWORD:?GARMIN_PASSWORD is required}
       HAE_INGEST_TOKEN: ${HAE_INGEST_TOKEN:?HAE_INGEST_TOKEN is required}
+      # TIDE (Garmin ウォッチアプリ) からの取り込み用。未設定だと POST /api/tide/ingest が
+      # 500 を返し時計からの記録が一切通らない (必須ではないので optional にしてある)。
+      TIDE_INGEST_TOKEN: ${TIDE_INGEST_TOKEN:-}
       EXERCISEDB_API_KEY: ${EXERCISEDB_API_KEY:-}
       FREEE_CLIENT_ID: ${FREEE_CLIENT_ID:-}
       FREEE_CLIENT_SECRET: ${FREEE_CLIENT_SECRET:-}
