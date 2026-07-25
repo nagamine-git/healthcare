@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db import session_scope
 from app.models import (
     AlcoholIntake,
@@ -30,6 +31,7 @@ from app.models import (
 )
 from app.scoring.caffeine import is_dietary_caffeine
 from app.scoring.migraine_stats import benjamini_hochberg, permutation_test
+from app.scoring.morning_light import compute_morning_light_score
 from app.scoring.timewindow import app_today
 
 _DAYS = 120        # 解析窓
@@ -58,6 +60,11 @@ _OUTCOMES: list[tuple[str, str, str]] = [
     ("energy", "翌日の活力", "next_day"),
 ]
 # ドライバー (key, ラベル)
+#
+# ⚠️ morning_light は実測 lux ではない。scoring/morning_light.py が
+# 「起床+3h の歩数 (屋内デスクワーク等は歩数が伸びないことを利用した proxy) /
+# Apple Watch の time_in_daylight (取得できていれば優先)」から 0-100 に推定した
+# 間接指標。lux センサー実測ではないことを混同しないこと。
 _DRIVERS: list[tuple[str, str]] = [
     ("midpoint", "就寝が遅い"),
     ("irregular", "就寝時刻の乱れ"),
@@ -68,6 +75,7 @@ _DRIVERS: list[tuple[str, str]] = [
     ("steps", "日中の活動量"),
     ("stress", "ストレス(主観)"),
     ("duration", "睡眠時間"),
+    ("morning_light", "朝の光(推定・実測lux不可)"),
 ]
 
 
@@ -131,6 +139,14 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         loads = [(_jst(ts), float(ld)) for ts, ld in s.execute(
             select(Workout.start, Workout.training_load).where(Workout.start >= lo, Workout.start < hi)
         ) if ld is not None]
+        # 朝の光 (推定 proxy): 「その夜の睡眠」に効くのは前日(prev)朝の光暴露。
+        # steps/stress と同じ prev 起点の作法に揃える (就寝前の日中の話なので)。
+        wake_hhmm = str(get_settings().target_wake_time)
+        morning_light: dict[date_type, float] = {}
+        for pd in {d - timedelta(days=1) for d in sleep_rows}:
+            score = compute_morning_light_score(s, pd, wake_hhmm=wake_hhmm).get("score")
+            if score is not None:
+                morning_light[pd] = float(score)
 
     # midpoint の中央値 (規則性=ここからの逸脱)
     mid_vals = sorted(midpoint.values())
@@ -165,6 +181,7 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
             "medication": med_day,
             "steps": steps.get(prev), "stress": checkin.get(prev, {}).get("stress"),
             "duration": total,
+            "morning_light": morning_light.get(prev),
         })
     return rows
 

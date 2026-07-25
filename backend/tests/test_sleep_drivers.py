@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.db import session_scope
-from app.models import AlcoholIntake, SleepSession
+from app.models import AlcoholIntake, MetricSample, SleepSession
 from app.scoring import sleep_drivers as sd
 
 
@@ -61,3 +62,28 @@ def test_preliminary_signal_below_gate(db_engine):
     assert alc is not None, out
     assert alc["tier"] == "preliminary"
     assert alc["direction"] == "悪化"
+
+
+def test_morning_light_predicts_sleep_score(db_engine):
+    """前日朝によく歩いた(=光を浴びた proxy)夜ほど睡眠スコアが良い → morning_light が改善方向。"""
+    today = date(2026, 6, 15)
+    tz = ZoneInfo("Asia/Tokyo")
+    with session_scope() as s:
+        for i in range(1, 41):
+            d = today - timedelta(days=i)
+            prev = d - timedelta(days=1)
+            bright = i % 2 == 0
+            score = 85 if bright else 55
+            s.add(SleepSession(date=d, source="garmin", total_min=420, awake_min=30, sleep_score=score))
+            # 前日(prev) 06:30 JST (起床想定) から3h以内に歩数を計上 = 朝の光 proxy
+            wake_utc = datetime(prev.year, prev.month, prev.day, 6, 30, tzinfo=tz).astimezone(UTC).replace(tzinfo=None)
+            steps_val = 4000.0 if bright else 100.0
+            s.add(MetricSample(source="test", metric_key="steps", ts=wake_utc + timedelta(hours=1), value=steps_val))
+    out = sd.analyze(today)
+    assert out["status"] == "analyzed"
+    ml = next(
+        (f for f in out["quality"] if f["driver"] == "morning_light" and f["outcome"] == "sleep_score"),
+        None,
+    )
+    assert ml is not None, out["quality"]
+    assert ml["direction"] == "改善"
