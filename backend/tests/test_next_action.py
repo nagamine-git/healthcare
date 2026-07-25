@@ -315,3 +315,65 @@ def test_atlas_focus_quiet_when_high_achievement_low_weight():
     # 達成98・重み1 → pri 小 → 出さない
     inp = Inputs(atlas_focus={"label": "健診", "score": 98, "weight": 1.0, "key": "checkup", "pri": 2})
     assert all(x["key"] != "atlas_focus" for x in build_candidates(inp, _at(14)))
+
+
+# ----- 因果分析の還流 (migraine_triggers / sleep_drivers → いまコレ) -----
+
+
+def test_migraine_hot_fires_only_when_today_exceeds_baseline():
+    """裏づけのある要因でも、今日の曝露が普段どおりなら行動を促さない。
+
+    「あなたの頭痛の最大要因はカフェイン」と分かっていても、今日それが平常なら
+    今すぐ打つ手は無い。_collect 側で today_value > control_mean を課しているので、
+    ここでは候補生成が hot リストを素直に候補化することを確認する。
+    """
+    hot = [{"key": "caffeine", "label": "カフェイン過多", "tier": "strong",
+            "today_value": 180.0, "control_mean": 90.0}]
+    cands = build_candidates(Inputs(migraine_hot=hot), _at(14))
+    hits = [c for c in cands if c["key"] == "migraine_hot"]
+    assert len(hits) == 1
+    # 要因名の言い換えではなく、今日打てる具体的な一手になっていること
+    assert "カフェイン" in hits[0]["title"]
+    # 利用者向けの文言に統計用語を出さない
+    blob = hits[0]["title"] + hits[0]["why"]
+    for ng in ("有意", "p=", "p値", "q=", "FDR"):
+        assert ng not in blob
+
+    # 要因が無ければ何も出ない
+    assert not [c for c in build_candidates(Inputs(), _at(14)) if c["key"] == "migraine_hot"]
+
+
+def test_causal_candidates_never_outrank_safety_alerts():
+    """安全警告より上に置かない (critical/warning が必ず勝つ)。"""
+    hot = [{"key": "caffeine", "label": "カフェイン過多", "tier": "strong",
+            "today_value": 180.0, "control_mean": 90.0}]
+    inp = Inputs(
+        alerts=[{"severity": "critical", "title": "危険", "action": "いますぐ休む"},
+                {"severity": "warning", "title": "注意", "action": "様子を見る"}],
+        migraine_hot=hot,
+        sleep_recs=[{"text": "就寝を揃える", "basis": "睡眠スコアに効く", "tier": "strong"}],
+    )
+    cands = sorted(build_candidates(inp, _at(14)), key=lambda x: -x["priority"])
+    by_key = {c["key"]: c["priority"] for c in cands}
+    assert by_key["alert_critical"] > by_key["migraine_hot"]
+    assert by_key["alert_warning"] > by_key["migraine_hot"]
+    assert by_key["migraine_hot"] > by_key["sleep_driver"]
+
+
+def test_migraine_hot_strong_outranks_suggestive():
+    def prio(tier: str) -> int:
+        hot = [{"key": "dehydration", "label": "水分不足", "tier": tier,
+                "today_value": 500.0, "control_mean": 100.0}]
+        c = [x for x in build_candidates(Inputs(migraine_hot=hot), _at(14))
+             if x["key"] == "migraine_hot"]
+        return c[0]["priority"]
+
+    assert prio("strong") > prio("suggestive")
+
+
+def test_sleep_recommendations_are_surfaced_as_actions():
+    recs = [{"text": "就寝を 00:54±30分に揃える", "basis": "睡眠スコアに効く", "tier": "strong"}]
+    cands = build_candidates(Inputs(sleep_recs=recs), _at(21))
+    hits = [c for c in cands if c["key"] == "sleep_driver"]
+    assert len(hits) == 1
+    assert hits[0]["title"] == "就寝を 00:54±30分に揃える"

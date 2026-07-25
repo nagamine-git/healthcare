@@ -48,6 +48,11 @@ class Inputs:
     days_since_strength: int | None = None      # 最後の筋トレからの日数。None=記録なし
     trained_today: bool = False                 # 今日すでに何かトレーニング済みか
     morning_bb: float | None = None             # 今朝の Body Battery (夜間回復ピーク・弱い補助信号)
+    # 本人データで裏づけの取れた因果要因のうち、**今日ぶり返しているもの**。
+    # {key,label,tier,today_value,control_mean} — migraine_triggers から。
+    migraine_hot: list[dict[str, Any]] = field(default_factory=list)
+    # 睡眠ドライバー分析が出した「今夜やること」(既に行動文になっている)。
+    sleep_recs: list[dict[str, Any]] = field(default_factory=list)
     strength_days_14: int = 0                   # 直近14日の筋トレ日数 (週頻度の判定)
     last_night_min: float | None = None         # 前夜 (target 付け) の総睡眠分。睡眠負債の算定に使う
     target_sleep_min: int = 480                 # 目標睡眠分 (負債の基準。settings.target_sleep_min)
@@ -243,6 +248,21 @@ def _atlas_concrete_action(af: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
+# 頭痛トリガーの key → 今日打てる具体的な一手。
+# 分析が「何が効くか」を出しても、行動文が無ければ動けない。要因名の言い換えではなく
+# **今日その曝露を下げる操作**を書く。マップに無い key は汎用文にフォールバックする。
+_MIGRAINE_ACTION: dict[str, str] = {
+    "caffeine": "カフェインを普段の量に戻す (増やしも切らしもしない)",
+    "dehydration": "水を多めに飲む (今日は不足寄り)",
+    "sleep_short": "今夜は睡眠時間を普段どおりに戻す",
+    "alcohol_prev": "今夜の飲酒を控える",
+    "subjective_stress": "ストレスを下げる一手を挟む (呼吸法・散歩)",
+    "exercise_load": "今日の運動強度を上げすぎない",
+    "hrv_low": "回復を優先する (強度を落とす・早めに休む)",
+    "pressure_drop": "気圧が下がっている — 早めに休息と水分を取る",
+}
+
+
 def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
     """優先度つき候補リスト (降順ソートは呼び出し側)。now は JST naive。"""
     c: list[dict[str, Any]] = []
@@ -296,6 +316,25 @@ def build_candidates(inp: Inputs, now: datetime) -> list[dict[str, Any]]:
     if inp.stress_recent is not None and inp.stress_recent >= 70:
         add("stress_break", 72, "4-7-8呼吸を2分 (画面から離れる)",
             f"直近30分のストレス平均 {int(inp.stress_recent)} — 高止まり中", None)
+
+    # --- 4.7 本人データで裏づけの取れた要因が、今日ぶり返している ---
+    # 位置づけ: 安全網 (alert 70-95) より下、ルーチン (30 台) より上。
+    # 「起きてから対処する」アラートと違い「起きる前に外せる」ので日常の作業より優先するが、
+    # 実際に不調が出ている警告より上には置かない。
+    # 文言に統計用語 (有意・p値) は出さない。本人の実績として言い切る。
+    for f in inp.migraine_hot[:2]:                    # 出しすぎない (上位2件まで)
+        label = f["label"]
+        title = _MIGRAINE_ACTION.get(f["key"]) or f"{label}を今日は抑える"
+        add("migraine_hot", 68 if f["tier"] == "strong" else 58, title,
+            f"あなたの頭痛は{label}と結びついている実績があり、今日はそれが普段より高め"
+            " — 先に外しておくと発症前に手を打てる",
+            "#tab-migraine")
+
+    # --- 4.8 睡眠ドライバー分析の「今夜やること」(既に行動文になっている) ---
+    for r in inp.sleep_recs[:2]:
+        add("sleep_driver", 55, str(r.get("text", "")),
+            f"あなたの記録では{r.get('basis', '睡眠の質に効く')}要因 — 今夜これを守ると効きやすい",
+            "#tab-sleep")
 
     # --- 4.5 トレーニングギャップ (筋トレ/HIIT/ラッキング) ---
     # トレ可否は睡眠を主軸に見る (夜トレ前提。BBは朝ピーク→日中で下がる指標なので判断軸に
@@ -565,8 +604,40 @@ def _collect(target: date_type) -> tuple[Inputs, datetime]:
         with session_scope() as db:
             inp.mental_prompt = prompt_status(db, target)
 
+    def _causal():
+        """本人データで裏づけの取れた因果分析を、今日の行動に還流する。
+
+        頭痛トリガー: 確からしさが strong/suggestive の要因のうち、**今日の曝露が
+        普段 (対照日の平均) を上回っているもの** だけを拾う。「あなたの頭痛の最大要因は
+        カフェイン」と分かっていても、今日それが平常なら行動を促す理由が無いため。
+        曝露値は ``migraine_triggers`` が検定に使った定義そのもの (``today_value``) を
+        使う — ここで窓やベースラインを再実装すると分析と食い違う。
+
+        睡眠ドライバー: ``analyze()`` の ``recommendations`` は既に trend 以上に
+        限定され、具体的な行動文に落ちているのでそのまま使う。
+        """
+        from app.scoring import migraine_triggers, sleep_drivers
+
+        mig = migraine_triggers.analyze_triggers(target)
+        for f in mig.get("factors", []):
+            if f.get("tier") not in ("strong", "suggestive"):
+                continue
+            today, ctrl = f.get("today_value"), f.get("control_mean")
+            if today is None or ctrl is None or today <= ctrl:
+                continue
+            inp.migraine_hot.append({
+                "key": f["key"], "label": f["label"], "tier": f["tier"],
+                "today_value": today, "control_mean": ctrl,
+            })
+
+        sd = sleep_drivers.analyze()
+        inp.sleep_recs = [
+            r for r in (sd.get("recommendations") or [])
+            if r.get("tier") in ("strong", "suggestive")
+        ]
+
     for fn in (_alerts, _advice, _tonight, _physio, _nutrition, _logs, _training,
-               _sleep_exp, _atlas, _mental):
+               _sleep_exp, _atlas, _mental, _causal):
         safe(fn)
     return inp, now
 

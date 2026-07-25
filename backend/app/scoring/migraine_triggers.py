@@ -317,6 +317,16 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
                 jst_anchor.astimezone(UTC).replace(tzinfo=None))
         day += timedelta(days=1)
 
+    # 「今日の曝露」を測るアンカー。対照アンカーと**同じ作り方**にする (target 日の平均発症時刻)。
+    # next_action がこれを使って「有意な要因が今日は普段より高い」を判定する。
+    # 曝露の定義は各要因の case ラムダをそのまま再利用する — next_action 側で窓や
+    # ベースラインを再実装すると、分析と行動提案で定義がドリフトして食い違うため。
+    # 曝露はアンカーより過去を見る窓なので、実時刻が anchor より前でも未来のデータは入らない
+    # (まだ存在しないだけで、その時点までの実績が入る)。
+    _today_jst = datetime.combine(target, datetime.min.time()).replace(
+        tzinfo=JST) + timedelta(hours=mean_onset_h)
+    today_anchor = _today_jst.astimezone(UTC).replace(tzinfo=None)
+
     # 各要因の (case値, control値) を集め検定
     factor_defs: list[dict[str, Any]] = [
         {"key": "pressure_drop", "label": "気圧変動 (低下)",
@@ -371,11 +381,19 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         p, diff = permutation_test(case_vals, ctrl_vals)
         if p is None:
             continue
+        # 今日の曝露 (取得できなければ None)。要因の case ラムダをそのまま使うので、
+        # 検定に使った曝露定義と必ず一致する。例外は握りつぶす — 1 要因の欠測で
+        # 分析全体を落とさない (dehydration 等は記録が無いと None を返す設計)。
+        try:
+            today_value = fd["case"](today_anchor)
+        except Exception:
+            today_value = None
         results.append({
             "key": fd["key"], "label": fd["label"], "p": round(p, 4), "diff": diff,
             "n_case": len(case_vals),
             "case_mean": round(sum(case_vals) / len(case_vals), 2),
             "control_mean": round(sum(ctrl_vals) / len(ctrl_vals), 2),
+            "today_value": round(today_value, 2) if today_value is not None else None,
         })
 
     base["tested"] = [r["key"] for r in results]
@@ -409,6 +427,8 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
             "key": r["key"], "label": label,
             "direction": direction,
             "case_mean": r["case_mean"], "control_mean": r["control_mean"],
+            # 今日の曝露。next_action が control_mean と比べて「今日は普段より高い」を判定する
+            "today_value": r["today_value"],
             "n_case": r["n_case"], "p": r["p"], "q": round(q, 4), "tier": tier,
         })
     # 確からしさ順 (q 昇順 = p 昇順に近い)
