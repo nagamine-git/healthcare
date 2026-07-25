@@ -136,3 +136,45 @@ def test_health_export_hours_filters_old_data(app_client):
 def test_health_export_no_auth_required(app_client):
     resp = app_client.get("/api/tide/health-export")
     assert resp.status_code == 200
+
+
+def test_same_second_water_entries_are_merged_not_500(app_client):
+    """同一秒に水分を伴う記録が 2 件来ても 500 にならず、合算されること。
+
+    回帰テスト: MetricSample は (source, metric_key, ts) が UNIQUE。以前は 1 件ずつ
+    add しており、事前の exists チェックが未 flush の行を見られずすり抜けて commit 時に
+    IntegrityError → **payload 全体が 500**。時計は失敗した payload を再送し続けるため、
+    同じ秒に 2 回タップしただけで同期が永久に詰まる状態だった。
+    """
+    now = int(datetime.now(UTC).timestamp())
+    # 水 500mL と、珈琲 (水分 200mL + カフェイン 100mg) を同じ秒に記録
+    _ingest(
+        app_client,
+        [
+            {"t": now, "k": 1, "ml": 500, "mg": 0},
+            {"t": now, "k": 2, "ml": 200, "mg": 100},
+        ],
+    )
+
+    body = app_client.get("/api/tide/health-export").json()
+    # 1 ts = 1 行に合算される (500 + 200 = 700mL)。取りこぼさない。
+    assert len(body["water"]) == 1
+    assert body["water"][0]["ml"] == 700.0
+    assert len(body["caffeine"]) == 1
+    assert body["caffeine"][0]["mg"] == 100.0
+
+
+def test_same_second_caffeine_entries_are_merged(app_client):
+    """同一秒・同一種別のカフェインが 2 件来たら合算される (取りこぼさない)。"""
+    now = int(datetime.now(UTC).timestamp())
+    _ingest(
+        app_client,
+        [
+            {"t": now, "k": 2, "ml": 0, "mg": 100},
+            {"t": now, "k": 2, "ml": 0, "mg": 80},
+        ],
+    )
+
+    body = app_client.get("/api/tide/health-export").json()
+    assert len(body["caffeine"]) == 1
+    assert body["caffeine"][0]["mg"] == 180.0

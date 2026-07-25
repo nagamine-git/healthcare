@@ -91,56 +91,75 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
     caffeine_added = 0
     skipped = 0
 
+    # ⚠️ 同一 payload 内で ts が衝突しうる (同じ秒に「水」と「珈琲」を続けてタップする等)。
+    # MetricSample は (source, metric_key, ts) が UNIQUE なので、素朴に 1 件ずつ add すると
+    # 事前の exists チェックは**未 flush の行を見られず**すり抜け、commit 時に IntegrityError で
+    # payload 全体が 500 になる。時計は失敗した payload を再送し続けるため、
+    # **同じ秒に 2 回タップしただけで同期が永久に詰まる**。
+    # 秒単位で合算して 1 ts = 1 行にすることで回避する (合算は意味的にも正しい —
+    # その秒に実際に飲んだ総量になる)。カフェインも同じ理由で (ts, source) 単位に合算する。
+    water_ml: dict[datetime, float] = {}
+    water_kind: dict[datetime, int] = {}
+    caffeine_mg: dict[tuple[datetime, str], float] = {}
+    caffeine_kind: dict[tuple[datetime, str], int] = {}
+
+    for e in payload.entries:
+        ts = datetime.fromtimestamp(e.t, tz=UTC).replace(tzinfo=None)  # UTC naive で統一
+        if e.ml > 0:
+            water_ml[ts] = water_ml.get(ts, 0.0) + float(e.ml)
+            water_kind.setdefault(ts, e.k)
+        if e.mg > 0:
+            key = (ts, TYPE_TO_CAFFEINE_SOURCE.get(e.k, "manual"))
+            caffeine_mg[key] = caffeine_mg.get(key, 0.0) + float(e.mg)
+            caffeine_kind.setdefault(key, e.k)
+
     with session_scope() as session:
-        for e in payload.entries:
-            ts = datetime.fromtimestamp(e.t, tz=UTC).replace(tzinfo=None)  # UTC naive で統一
+        for ts, ml in sorted(water_ml.items()):
+            exists = session.execute(
+                select(MetricSample.id).where(
+                    MetricSample.source == SOURCE,
+                    MetricSample.metric_key == HYDRATION_METRIC_KEY,
+                    MetricSample.ts == ts,
+                )
+            ).first()
+            if exists:
+                skipped += 1
+                continue
+            session.add(
+                MetricSample(
+                    source=SOURCE,
+                    metric_key=HYDRATION_METRIC_KEY,
+                    ts=ts,
+                    value=ml,
+                    unit="mL",
+                    raw_json={"type": water_kind[ts], "dev": payload.dev},
+                )
+            )
+            water_added += 1
 
-            if e.ml > 0:
-                exists = session.execute(
-                    select(MetricSample.id).where(
-                        MetricSample.source == SOURCE,
-                        MetricSample.metric_key == HYDRATION_METRIC_KEY,
-                        MetricSample.ts == ts,
-                    )
-                ).first()
-                if exists:
-                    skipped += 1
-                else:
-                    session.add(
-                        MetricSample(
-                            source=SOURCE,
-                            metric_key=HYDRATION_METRIC_KEY,
-                            ts=ts,
-                            value=float(e.ml),
-                            unit="mL",
-                            raw_json={"type": e.k, "dev": payload.dev},
-                        )
-                    )
-                    water_added += 1
-
-            if e.mg > 0:
-                src = TYPE_TO_CAFFEINE_SOURCE.get(e.k, "manual")
-                dup = session.execute(
-                    select(CaffeineIntake.id).where(
-                        CaffeineIntake.ts == ts,
-                        CaffeineIntake.source == src,
-                    )
-                ).first()
-                if dup:
-                    skipped += 1
-                else:
-                    session.add(
-                        CaffeineIntake(
-                            ts=ts,
-                            source=src,
-                            amount=1.0,
-                            unit="杯" if e.k in (2, 3) else ("錠" if e.k == 6 else "mg"),
-                            mg=float(e.mg),
-                            note="TIDE",
-                            dose_pct=100.0,
-                        )
-                    )
-                    caffeine_added += 1
+        for (ts, src), mg in sorted(caffeine_mg.items()):
+            dup = session.execute(
+                select(CaffeineIntake.id).where(
+                    CaffeineIntake.ts == ts,
+                    CaffeineIntake.source == src,
+                )
+            ).first()
+            if dup:
+                skipped += 1
+                continue
+            k = caffeine_kind[(ts, src)]
+            session.add(
+                CaffeineIntake(
+                    ts=ts,
+                    source=src,
+                    amount=1.0,
+                    unit="杯" if k in (2, 3) else ("錠" if k == 6 else "mg"),
+                    mg=mg,
+                    note="TIDE",
+                    dose_pct=100.0,
+                )
+            )
+            caffeine_added += 1
 
     return {"ok": True, "w": water_added, "c": caffeine_added, "s": skipped}
 
