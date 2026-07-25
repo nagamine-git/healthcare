@@ -33,9 +33,17 @@ type Row = {
 };
 
 const TIER_RANK: Record<string, number> = { strong: 3, suggestive: 2, trend: 1 };
+// tier=強い/示唆 は opacity-100/90 だとほぼ見分けがつかなかった (特に濃い色のテキストは
+// 90%でも実質フルに見える)ので、効果が薄いものほど文字も明確に薄くなるよう差を広げる。
 const TIER_OP: Record<string, string> = {
-  strong: "opacity-100", suggestive: "opacity-90", trend: "opacity-70",
-  weak: "opacity-45", preliminary: "opacity-60",
+  strong: "opacity-100", suggestive: "opacity-75", trend: "opacity-55",
+  weak: "opacity-35", preliminary: "opacity-45",
+};
+// 行名 (介入/ドライバー名) のベース色もtierで変える。opacity だけだと濃い文字色に対しては
+// 効きが弱いため、ベース自体を下位tierほど暗い ink トーンにして「薄さ」を強調する。
+const TIER_NAME_COLOR: Record<string, string> = {
+  strong: "text-ink", suggestive: "text-ink", trend: "text-ink-dim",
+  weak: "text-ink-faint", preliminary: "text-ink-dim",
 };
 const TIER_LABEL: Record<string, string> = {
   strong: "強い", suggestive: "示唆", trend: "傾向", weak: "弱い", preliminary: "暫定",
@@ -79,7 +87,7 @@ function RowView({ r }: { r: Row }) {
     <div className={`flex items-baseline gap-2 rounded-lg bg-void/30 px-2.5 py-2 text-[11px] ${TIER_OP[r.tier]}`}>
       <Icon size={11} className="shrink-0 translate-y-0.5 text-ink-faint" />
       <span className="min-w-0 flex-1 truncate text-ink-dim">
-        <span className="text-ink">{r.name}</span>
+        <span className={TIER_NAME_COLOR[r.tier]}>{r.name}</span>
         <span className="text-ink-faint"> → {r.outcome_label}</span>
       </span>
       <span className={`shrink-0 font-semibold ${good ? "text-prog-300" : "text-risk"}`}>
