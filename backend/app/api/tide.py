@@ -22,10 +22,10 @@ TIDE は Instinct 3 上で動く Connect IQ アプリで、水分とカフェイ
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -143,3 +143,90 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
                     caffeine_added += 1
 
     return {"ok": True, "w": water_added, "c": caffeine_added, "s": skipped}
+
+
+class TideWaterOut(BaseModel):
+    id: int
+    ts: str
+    ml: float
+
+
+class TideCaffeineOut(BaseModel):
+    id: int
+    ts: str
+    mg: float
+
+
+class TideHealthExportOut(BaseModel):
+    water: list[TideWaterOut]
+    caffeine: list[TideCaffeineOut]
+
+
+def _iso_utc(ts: datetime) -> str:
+    ts_utc = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts
+    return ts_utc.isoformat()
+
+
+@router.get("/api/tide/health-export", response_model=TideHealthExportOut)
+def tide_health_export(
+    hours: int = Query(default=72, ge=1, le=720),
+) -> TideHealthExportOut:
+    """TIDE 由来の水分・カフェインを **Apple Health へミラーするための読み出し専用** API。
+
+    Ascend (iOS) がこのエンドポイントを定期的に叩き、TIDE (Garmin ウォッチアプリ) で
+    記録された水分・カフェインを HealthKit へ書き込む。ingest (`POST /api/tide/ingest`)
+    と対になる、逆方向 (healthcare → Apple Health) のデータフローを担う。
+
+    認証は掛けていない。他の read 系エンドポイントと同じく tailnet 限定運用が前提。
+    `POST /api/tide/ingest` の token 認証 (``_verify_token``) はそのまま維持している —
+    ここを無認証にしたのは書き込みではなく読み出しのみだから。
+
+    設計上、絶対に崩してはいけない制約:
+
+    - **水分は ``metric_key == HYDRATION_METRIC_KEY`` (= ``tide_hydration_ml``) の
+      ``MetricSample`` のみを返す。``dietary_water`` を絶対に含めないこと。**
+      ``dietary_water`` は Ascend が Apple Health から読み取って healthcare に送って
+      いる値であり、それをここで折り返して Apple Health に書き戻すと
+      無限ループ・二重計上になる。
+    - **カフェインは ``CaffeineIntake.note == "TIDE"`` のものだけを返す。**
+      ``source`` は手動記録 (``app/api/caffeine.py``) と共有される値のため、
+      TIDE 由来かどうかの判別には使えない (`ingest_tide` の docstring 参照)。
+    - ``id`` は DB の autoincrement PK をそのまま返す。Ascend はこれを HealthKit の
+      ``HKMetadataKeySyncIdentifier`` として使い、同じ記録を何度書き込んでも重複しない
+      ようにする (冪等な書き込み)。安定した一意値であることが要件。
+    """
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
+
+    with session_scope() as session:
+        water_rows = (
+            session.execute(
+                select(MetricSample)
+                .where(
+                    MetricSample.source == SOURCE,
+                    MetricSample.metric_key == HYDRATION_METRIC_KEY,
+                    MetricSample.ts >= since,
+                )
+                .order_by(MetricSample.ts)
+            )
+            .scalars()
+            .all()
+        )
+        caffeine_rows = (
+            session.execute(
+                select(CaffeineIntake)
+                .where(CaffeineIntake.note == "TIDE", CaffeineIntake.ts >= since)
+                .order_by(CaffeineIntake.ts)
+            )
+            .scalars()
+            .all()
+        )
+
+        return TideHealthExportOut(
+            water=[
+                TideWaterOut(id=r.id, ts=_iso_utc(r.ts), ml=float(r.value or 0.0))
+                for r in water_rows
+            ],
+            caffeine=[
+                TideCaffeineOut(id=r.id, ts=_iso_utc(r.ts), mg=r.mg) for r in caffeine_rows
+            ],
+        )
