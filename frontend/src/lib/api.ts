@@ -846,6 +846,24 @@ export type WindDown = {
   target_bedtime: string | null;
 };
 
+// 就寝前の瞑想 (注意訓練): 呼吸は操作せず、注意の向け先 (ボディスキャン部位 / 呼吸を観る)
+// を segments で順送りする。呼吸法 (WindDown) とは意図的に別モデル — 混同すると n-of-1 が壊れる。
+export type MeditationSegment = { label: string; seconds: number };
+export type Meditation = {
+  action: "meditate" | "none";
+  protocol: "body_scan" | "breath_awareness" | null;
+  minutes: number;
+  headline: string;
+  reason: string;
+  steps: string[];
+  segments: MeditationSegment[];
+  // body_scan は部位の切替そのものが再アンカーになるため null (ベル無し) になりうる。
+  bell_interval_sec: number | null;
+  minutes_to_bedtime: number | null;
+  stress_level: number | null;
+  target_bedtime: string | null;
+};
+
 // 就寝前の介入 (耳栓/アイマスク/ノーズブリーズ/口テープ) の記録と効果分析
 export type SleepInterventionFlags = {
   earplugs: boolean | null;
@@ -2039,6 +2057,7 @@ export const api = {
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
   windDown: () => request<WindDown>("/api/wind-down"),
+  meditation: () => request<Meditation>("/api/meditation"),
   exerciseGuide: (name: string) =>
     request<ExerciseGuide>(`/api/exercise-guide?name=${encodeURIComponent(name)}`),
   exerciseGuideGenerate: (name: string) =>

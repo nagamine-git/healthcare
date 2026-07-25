@@ -17,7 +17,6 @@ from app.api import body_comp as body_comp_api
 from app.api import body_distribution as body_distribution_api
 from app.api import bodyload as bodyload_api
 from app.api import caffeine as caffeine_api
-from app.api import tide as tide_api
 from app.api import checkin as checkin_api
 from app.api import checkup as checkup_api
 from app.api import consult as consult_api
@@ -36,6 +35,7 @@ from app.api import imputation as imputation_api
 from app.api import journal as journal_api
 from app.api import learning as learning_api
 from app.api import life as life_api
+from app.api import meditation as meditation_api
 from app.api import mental as mental_api
 from app.api import migraine as migraine_api
 from app.api import next_action as next_action_api
@@ -47,6 +47,7 @@ from app.api import screentime as screentime_api
 from app.api import sleep_drivers as sleep_drivers_api
 from app.api import sleep_intervention as sleep_intervention_api
 from app.api import speech as speech_api
+from app.api import tide as tide_api
 from app.api import timeline as timeline_api
 from app.api import weather as weather_api
 from app.api import wind_down as wind_down_api
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(weather_api.router)
     app.include_router(identity_api.router)
     app.include_router(wind_down_api.router)
+    app.include_router(meditation_api.router)
     app.include_router(debug.router)
     return app
 

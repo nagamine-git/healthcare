@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioWaveform, Settings as SettingsIcon } from "lucide-react";
+import { AudioWaveform, Flower2, Settings as SettingsIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { OverallScoreHero } from "../components/OverallScoreHero";
 import { DayStory } from "../components/DayStory";
@@ -39,6 +39,7 @@ import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
 import { SleepEffectivenessPanel } from "../components/SleepEffectivenessPanel";
 import { WindDownCard } from "../components/WindDownCard";
+import { MeditationCard } from "../components/MeditationCard";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
 import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
 import { SyncMenu } from "../components/SyncMenu";
@@ -370,8 +371,10 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 睡眠 ============ */}
       {tab === "sleep" && (
       <div className="space-y-3">
-        {/* 就寝前の一手: 状態から「すぐ寝ろ or この呼吸法」を出し分ける (押し付けない) */}
+        {/* 就寝前の一手: 状態から「すぐ寝ろ or この呼吸法」を出し分ける (押し付けない)。
+            呼吸法 (整える/操作する) と瞑想 (観る/操作しない) は別モデルなのでカードも分ける。 */}
         <WindDownCard />
+        <MeditationCard />
         <SectionHeader label="今夜の計画" hint="起床から逆算した就寝・入浴・夕食の目安" />
         <TonightPlanPanel plan={data.tonight_plan} />
         <SectionHeader label="就寝前の介入 × 睡眠の質" hint="耳栓・アイマスク・鼻呼吸・口テープ・呼吸法・瞑想の効果をn-of-1検証" />
@@ -383,6 +386,16 @@ export function TodayPage({ onOpenDebug }: Props) {
         >
           <AudioWaveform size={14} className="shrink-0 text-prog-300" />
           呼吸で整える(上のセッションを開始)
+          <span className="ml-auto text-ink-faint">↑</span>
+        </button>
+        <button
+          onClick={() =>
+            document.getElementById("meditate-entry")?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+          className="press flex w-full items-center gap-2 rounded-lg border border-dashed border-hairline bg-hull/30 px-3 py-2 text-left text-[12px] text-ink-dim"
+        >
+          <Flower2 size={14} className="shrink-0 text-act-300" />
+          瞑想する(上のセッションを開始)
           <span className="ml-auto text-ink-faint">↑</span>
         </button>
         <SleepInterventionCard />

@@ -284,6 +284,25 @@ class Settings(BaseSettings):
     wind_down_slow6_min_min: int = 5
     wind_down_slow6_max_min: int = 10
 
+    # --- 瞑想 (就寝前:認知的覚醒への対応。wind_down=生理的覚醒とは役割分担、docstring 参照) ---
+    # 主観ストレス (1-5) がこの値以上なら「反芻思考が走りやすい」とみなし body_scan を選ぶ
+    # (personal: ストレスの感じ方・報告の仕方には個人差があるため env 上書き余地)。
+    meditation_stress_high_threshold: int = 4
+    # ボディスキャンの実施分数レンジ (personal: 就寝までの残り時間で実際にはこの範囲に収める)。
+    # MBSR/MBTI の典型的なセッション長 (8-15分程度) を目安にした初期値。
+    meditation_body_scan_min_min: int = 8
+    meditation_body_scan_max_min: int = 15
+    # 呼吸瞑想 (呼吸を観るだけ) の実施分数レンジ。body_scan より短くても成立しやすい。
+    meditation_breath_awareness_min_min: int = 5
+    meditation_breath_awareness_max_min: int = 12
+    # breath_awareness (単一セグメントで部位の切り替えによる自然な再アンカーが無い) で、
+    # 注意を呼吸へ定期的に戻すためのベル間隔 (秒、personal: 集中力・好みに応じて調整余地)。
+    meditation_bell_interval_sec: int = 90
+    # 主観ストレスを「今の状態」として使える鮮度の上限 (日)。ストレスは日単位で変わる状態量なので、
+    # 何週間も前のチェックインを今夜の判定に使ってはいけない (古い高ストレス値が body_scan を
+    # 選び続けてしまう)。これを超えて古い値しか無ければ stress 不明として扱う。
+    meditation_stress_max_age_days: int = 1
+
     # --- トレーニング処方の開始重量 (前回実績が無いときの保守的スタート) ---
     # 腰のケガ歴を考慮し、ヒンジ系は 8kg から、全般に控えめに開始。
     # 利用可能な刻みは 2/4/8/12/16/20kg のみ なので、それ以外を絶対に使わない。
