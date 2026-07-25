@@ -31,8 +31,9 @@ from sqlalchemy import func, select
 
 from app.config import Settings, get_settings
 from app.db import session_scope
-from app.models import CaffeineIntake, MetricSample, MigraineEpisode
+from app.models import CaffeineIntake, MetricSample, MigraineEpisode, SleepSession
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
+from app.scoring.timewindow import JST, jst_day_bounds
 
 router = APIRouter()
 
@@ -155,6 +156,82 @@ def _delete_entry(session, ts: datetime, k: int) -> int:
             session.delete(row)
             n += 1
     return n
+
+
+def _today_goal_ml(session) -> int | None:
+    """今日の飲水目標 (mL)。体重ベース + **Garmin 実測の発汗損失**。
+
+    時計側は発汗を知りようがない (CIQ に sweatLoss は無い) ので、純正 Hydration に
+    唯一劣っていたこの点をサーバーが補う。
+    """
+    from app.scoring import hydration
+    from app.scoring.profile import resolve_profile
+
+    try:
+        prof = resolve_profile()
+        d_start, d_end = jst_day_bounds(datetime.now(UTC).astimezone(JST).date())
+        sweat = hydration.latest_sweat_ml(session, d_start, d_end)
+        return hydration.goal_ml(prof.target_weight_kg, sweat, sex=prof.sex)
+    except Exception:
+        return None          # 目標が出せなくても取り込み自体は成功させる
+
+
+def _habitual_bed_minute(session) -> int | None:
+    """**実測**の習慣的就寝時刻 (0-1439 分)。直近 14 晩から算出。
+
+    時計が持っているのは Garmin Connect に設定した「予定」就寝時刻で、実際に
+    何時に寝ているかとはズレる。カフェインの締切は就寝時刻から逆算するので、
+    予定ではなく実測を使う方が締切が現実に合う。
+
+    Garmin の ``sleepStartTimestampLocal`` から導いた ``sleep_midpoint_hour`` と
+    睡眠時間から就寝時刻を戻す (sleep_drivers と同じ導出)。
+    就寝時刻は日付をまたぐ循環量 (23:50 と 00:10 の平均は 00:00 であって 12:00 では
+    ない) なので、算術平均ではなく ``circular_mean_hour`` で平均する。
+
+    5 晩未満なら ``None``。少数の夜から習慣を名乗ると、たまたま夜更かしした日に
+    締切が引きずられる。
+    """
+    from app.scoring.circadian import circular_mean_hour
+
+    try:
+        lo = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=14)
+        mids = {
+            _as_day(ts): float(v)
+            for ts, v in session.execute(
+                select(MetricSample.ts, MetricSample.value).where(
+                    MetricSample.metric_key == "sleep_midpoint_hour",
+                    MetricSample.ts >= lo,
+                    MetricSample.value.isnot(None),
+                )
+            ).all()
+        }
+        if len(mids) < 5:
+            return None
+        durs = {
+            d: float(t)
+            for d, t in session.execute(
+                select(SleepSession.date, SleepSession.total_min).where(
+                    SleepSession.total_min.isnot(None)
+                )
+            ).all()
+        }
+        beds = [
+            mid - durs[d] / 120.0          # 中点 - 睡眠時間の半分 = 就寝時刻 (時)
+            for d, mid in mids.items()
+            if d in durs
+        ]
+        if len(beds) < 5:
+            return None
+        h = circular_mean_hour(beds)
+        if h is None:
+            return None
+        return int(round(h * 60)) % 1440
+    except Exception:
+        return None
+
+
+def _as_day(ts: datetime):
+    return (ts + timedelta(hours=9)).date()
 
 
 def _verify_token(
@@ -313,6 +390,8 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
                 deleted += n
 
         moh = _moh_days(session)
+        goal = _today_goal_ml(session)
+        bed = _habitual_bed_minute(session)
 
     # 時計は "moh" を見て鎮痛薬の記録画面に「今月 n/10 日」を出す。
     # 判定基準はサーバー側 (MOH_LIMIT_DAYS) を正とし、時計はそれを表示するだけにする。
@@ -325,6 +404,10 @@ def ingest_tide(payload: TidePayload, _: None = Depends(_verify_token)) -> dict[
         "x": deleted,
         "moh": moh,
         "mohMax": MOH_LIMIT_DAYS,
+        # 時計が自力で出せない値だけ返す。発汗は CIQ に API が無く、
+        # 実測就寝時刻は Garmin Connect の「予定」しか時計から見えないため
+        "goal": goal,
+        "bed": bed,
     }
 
 

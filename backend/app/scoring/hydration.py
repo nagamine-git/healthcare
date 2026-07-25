@@ -133,21 +133,30 @@ def events(session, start: datetime, end: datetime) -> list[tuple[datetime, floa
     return [(ts, float(v)) for ts, v in rows]
 
 
-def goal_ml(weight_kg: float | None, sweat_ml: float = 0.0) -> int:
+# ⚠️ 以下 4 定数は TIDE 側 (garmin-tide/source/Model.mc) と同じ値であること。
+# ズレると時計とサーバーで違う目標が出てユーザーが混乱する
+ML_PER_KG = 32.0        # 総水分の目安 (成人 30-35 mL/kg/日 の中央値)
+FOOD_FRACTION = 0.25    # 食品由来が占める割合 → 飲料目標は残り 75%
+FLOOR_MALE_ML = 1800    # EFSA 2.5 L/日 から食品由来を引いた飲料目標の下限
+FLOOR_OTHER_ML = 1400   # 同 2.0 L/日
+
+
+def goal_ml(weight_kg: float | None, sweat_ml: float = 0.0, *, sex: str | None = None) -> int:
     """その日の飲水目標 (mL)。
 
-    ``35 mL/kg/日`` は体重あたりの総水分必要量の一般的な目安 (成人)。
-    ここから **食品由来の約 25%** を引いた分が飲料で摂るべき量になる。
+    体重あたりの総水分必要量 (成人で 30-35 mL/kg/日) から **食品由来の約 25%** を
+    引いた分が、飲料で摂るべき量になる。下限は EFSA の適正摂取量から引いた値。
+
     発汗損失は補填が必要なので上乗せする (ACSM の水分補給指針の考え方。
     Garmin も純正 Hydration の目標を ``sweatLossInML`` で同様に押し上げている)。
-
-    ⚠️ TIDE 側 (``Model.goalMl``) と同じ式にしてあること。値がズレると
-    時計とサーバーで違う目標が出てユーザーが混乱する。
+    ここが純正アプリに唯一劣っていた点で、TIDE 単体では発汗を知りようがないため
+    サーバーが計算して同期レスポンスで返す。
     """
     w = weight_kg or 60.0
-    base = w * 35.0 * 0.75
-    if base < 1400.0:
-        base = 1400.0
+    base = w * ML_PER_KG * (1.0 - FOOD_FRACTION)
+    floor = FLOOR_MALE_ML if (sex or "").lower().startswith("m") else FLOOR_OTHER_ML
+    if base < floor:
+        base = float(floor)
     return int(round(base + max(0.0, sweat_ml)))
 
 
