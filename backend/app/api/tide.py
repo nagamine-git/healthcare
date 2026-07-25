@@ -101,6 +101,24 @@ def _apply_migraine_event(session, ts: datetime, ev: str) -> str:
             return "skip"
         active.ended_at = ts if ts > active.started_at else active.started_at
         return "end"
+    if ev == "mig_del":
+        # ``ts`` は **削除対象の開始時刻** (イベント発生時刻ではない)。
+        # 終了済みのエピソードも消せるよう、開始時刻で同定する。
+        #
+        # 誤って START した発作を「もう一度押して END」で片付けると長さ 0 の偽エピソードが
+        # 残り、時刻対応ケースクロスオーバー分析に偽の症例日を持ち込む。だから削除が要る。
+        #
+        # Web UI から手で入れたエピソードを巻き込まないよう note="TIDE" に限定する。
+        target = session.execute(
+            select(MigraineEpisode).where(
+                MigraineEpisode.started_at == ts,
+                MigraineEpisode.note == "TIDE",
+            )
+        ).scalars().first()
+        if target is None:
+            return "skip"          # 再送の2回目以降はここに来るのが正常 (冪等)
+        session.delete(target)
+        return "del"
     return "skip"
 
 
