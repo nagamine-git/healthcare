@@ -161,7 +161,10 @@ def _current_personal_risk(now_jst: datetime, triggers: list[dict]) -> list[dict
                     select(SleepSession.total_min).order_by(SleepSession.date.desc()).limit(1)
                 ).first()
                 if row and row[0] is not None:
-                    cur = 480 - float(row[0])  # 8h からの不足分
+                    # migraine_triggers.sleep_deficit と同じ定義 (8h からの絶対乖離。
+                    # 不足/過多どちらも拾う) に揃える。片側のままだと case_mean/control_mean
+                    # の単位とずれて誤判定する。
+                    cur = abs(480 - float(row[0]))
             if cur is None:
                 continue
             if cur >= cm:

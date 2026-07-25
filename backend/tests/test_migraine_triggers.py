@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from app.db import session_scope
-from app.models import CaffeineIntake, MetricSample, MigraineEpisode, SubjectiveCheckin, Workout
+from app.models import (
+    CaffeineIntake,
+    MetricSample,
+    MigraineEpisode,
+    SleepSession,
+    SubjectiveCheckin,
+    Workout,
+)
 
 # DB は UTC naive。JST 15:00 = UTC 06:00。
 JST_AFTERNOON_UTC_HOUR = 6
@@ -143,6 +150,31 @@ def test_detects_exercise_load_factor(db_engine):
     assert ef is not None, f"exercise_load should be significant: {out['status']} {out['factors']}"
     assert ef["direction"] == "誘発"
     assert ef["case_mean"] > ef["control_mean"]
+
+
+def test_sleep_deviation_catches_oversleep(db_engine):
+    """sleep_short は片側 (不足) だけでなく寝過ぎ (過多) も両側乖離として拾う。"""
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    today = date(2026, 6, 30)
+    episode_days = {today - timedelta(days=i * 2) for i in range(12)}
+    with session_scope() as s:
+        # 頭痛日だけ 600 分 (8h 目標より2h の寝過ぎ)、他は目標通り 480 分
+        for i in range(31):
+            d = today - timedelta(days=i)
+            total = 600 if d in episode_days else 480
+            s.add(SleepSession(date=d, source="garmin", total_min=total))
+        for d in episode_days:
+            onset = datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)
+            s.add(MigraineEpisode(started_at=onset))
+
+    out = analyze_triggers(today, min_episodes=10)
+    assert "sleep_short" in out["tested"]
+    sf = next((f for f in out["factors"] if f["key"] == "sleep_short"), None)
+    assert sf is not None, f"sleep_short should be significant: {out['status']} {out['factors']}"
+    assert sf["direction"] == "誘発"
+    assert sf["case_mean"] > sf["control_mean"]
+    assert sf["case_mean"] > 0  # 片側 (480-total) なら寝過ぎは負値になり検出できなかった
 
 
 def test_no_significant_factor_when_flat(db_engine):

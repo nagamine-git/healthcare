@@ -186,9 +186,17 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         return sum(tl for ts, tl in workouts if lo <= ts <= hi)
 
     def sleep_deficit(onset: datetime) -> float | None:
+        """前夜の総睡眠時間 (分) の、8h 目標からの絶対乖離。
+
+        従来は ``480 - total`` の片側 (不足のみ) だったが、それでは「寝過ぎ」を
+        誘因とする頭痛 (休日頭痛 = weekend headache のような、普段より長く寝た
+        朝に出る古典的な型) を原理的に拾えなかった。abs() にして両側を見る。
+        不足由来か過多由来かはこの関数では判定しない (case_mean/control_mean を
+        見れば分かる) — 診断的な意味づけをしないのはこのモジュール共通の方針。
+        """
         d = _to_jst(onset).date()
         tot = sleep_rows.get(d)
-        return (480 - float(tot)) if tot is not None else None  # 8h 目標からの不足分
+        return abs(480 - float(tot)) if tot is not None else None
 
     def hrv_drop(onset: datetime, baseline: float) -> float | None:
         d = _to_jst(onset).date()
@@ -288,7 +296,9 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "caffeine", "label": "カフェイン (離脱/過多)",
          "case": lambda a: caffeine_window_mg(a - window, a) - caf_daily_baseline,
          "ctrl": lambda a: caffeine_window_mg(a - window, a) - caf_daily_baseline},
-        {"key": "sleep_short", "label": "睡眠不足 (前夜)",
+        # キー名は sleep_short のまま (下流の forecast.py 等が参照) だが、中身は
+        # 不足/過多どちらも拾う両側乖離。ラベルもそれに合わせて中立化する。
+        {"key": "sleep_short", "label": "睡眠時間の逸脱 (前夜)",
          "case": lambda a: sleep_deficit(a),
          "ctrl": lambda a: sleep_deficit(a)},
         {"key": "hrv_low", "label": "HRV 低下",
