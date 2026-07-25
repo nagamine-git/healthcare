@@ -28,6 +28,7 @@ from app.models import (
     MigraineEpisode,
     SleepSession,
     SubjectiveCheckin,
+    Workout,
 )
 from app.scoring import hydration
 from app.scoring.caffeine import MEDICATION_CAFFEINE_SOURCES
@@ -110,6 +111,10 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         ).all()
         # 飲水は JST 暦日の合計。記録の無い日はキーごと入らない (0 mL の日を作らない)
         water_by_day = hydration.daily_map(session, since - window, end_dt)
+        # 運動負荷は alcohol と同じ「前日まるごと」窓で見る (exercise_prev_load 参照)
+        workout_rows = session.execute(
+            select(Workout.start, Workout.training_load).where(Workout.start >= since - window)
+        ).all()
 
     profile = onset_profile([_to_jst(e) for e in episodes])
     episode_count = len(episodes)
@@ -155,6 +160,30 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         # 前日 (発症の 24-48h 前) のアルコール
         lo, hi = onset - timedelta(hours=48), onset - timedelta(hours=24)
         return sum(g for ts, g in alcohol if lo <= ts <= hi)
+
+    workouts = [(ts, float(tl)) for ts, tl in workout_rows if tl is not None]
+
+    def exercise_prev_load(onset: datetime) -> float:
+        """前日 (発症の 24-48h 前) の運動負荷 (Workout.training_load) 合計。
+
+        sleep_drivers.py の exercise ドライバー (睡眠側) では既に使われているが、
+        頭痛側は未接続だった。運動には労作性頭痛 (exertional headache) のように
+        誘発する型と、有酸素運動が発作頻度を下げるという報告 (予防効果) の両面が
+        あるため、この関数では方向を決め打ちしない — 誘発/抑制のどちらかは
+        後段の permutation 検定の diff 符号 (case_mean と control_mean の大小) で
+        表現される。
+
+        窓を alcohol_prev_g と同じ「前日まるごと (24-48h 前)」にする理由も同じ:
+        training_load はワークアウト終了時にしか記録されないため、発症直前だけ
+        切り出すと大半のケースで単に「その時間は運動していなかった」を拾って
+        しまい、運動と頭痛の時間差 (労作後しばらくして痛む型) も拾えなくなる。
+
+        ワークアウト記録の無い日の合計は 0.0 (これは「記録が無い」ではなく
+        「運動しなかった」の意味— Garmin は行ったワークアウトを漏れなく記録する
+        前提のため、自己申告のストレス/飲水とは違い 0 を代入しても偽陽性にならない)。
+        """
+        lo, hi = onset - timedelta(hours=48), onset - timedelta(hours=24)
+        return sum(tl for ts, tl in workouts if lo <= ts <= hi)
 
     def sleep_deficit(onset: datetime) -> float | None:
         d = _to_jst(onset).date()
@@ -277,6 +306,9 @@ def analyze_triggers(target: date_type, *, min_episodes: int = MIN_EPISODES) -> 
         {"key": "subjective_stress", "label": "主観ストレス (前日〜当日)",
          "case": lambda a: stress_deviation(a),
          "ctrl": lambda a: stress_deviation(a)},
+        {"key": "exercise_load", "label": "前日の運動負荷",
+         "case": lambda a: exercise_prev_load(a),
+         "ctrl": lambda a: exercise_prev_load(a)},
     ]
 
     results = []

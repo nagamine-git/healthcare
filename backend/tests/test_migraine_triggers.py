@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from app.db import session_scope
-from app.models import CaffeineIntake, MetricSample, MigraineEpisode, SubjectiveCheckin
+from app.models import CaffeineIntake, MetricSample, MigraineEpisode, SubjectiveCheckin, Workout
 
 # DB は UTC naive。JST 15:00 = UTC 06:00。
 JST_AFTERNOON_UTC_HOUR = 6
@@ -120,6 +120,29 @@ def test_detects_subjective_stress_factor(db_engine):
     assert sf is not None, f"subjective_stress should be significant: {out['status']} {out['factors']}"
     assert sf["direction"] == "誘発"
     assert sf["case_mean"] > sf["control_mean"]
+
+
+def test_detects_exercise_load_factor(db_engine):
+    """発症の前日 (24-48h前) に高い運動負荷 → exercise_load が有意 (誘発方向)。"""
+    from app.scoring.migraine_triggers import analyze_triggers
+
+    today = date(2026, 6, 30)
+    with session_scope() as s:
+        for i in range(12):
+            d = today - timedelta(days=i * 2)
+            onset = datetime.combine(d, datetime.min.time()).replace(hour=JST_AFTERNOON_UTC_HOUR)
+            s.add(MigraineEpisode(started_at=onset))
+            # 発症の24-48h前 (前日) に高負荷ワークアウトを 1 件だけ入れる
+            s.add(Workout(
+                id=f"wk-{i}", source="garmin",
+                start=onset - timedelta(hours=30), training_load=120.0))
+
+    out = analyze_triggers(today, min_episodes=10)
+    assert "exercise_load" in out["tested"]
+    ef = next((f for f in out["factors"] if f["key"] == "exercise_load"), None)
+    assert ef is not None, f"exercise_load should be significant: {out['status']} {out['factors']}"
+    assert ef["direction"] == "誘発"
+    assert ef["case_mean"] > ef["control_mean"]
 
 
 def test_no_significant_factor_when_flat(db_engine):
