@@ -57,7 +57,8 @@ async def get_physique_distribution() -> dict[str, Any]:
         )
         vo2max: float | None = measured[0] if measured else None
         vo2max_as_of: date_type | None = measured[1] if measured else None
-        # Garmin 実測が無ければ、公表式による推定 (metric_sample: vo2max_estimated) で代替
+        # Garmin 実測が無ければ、公表式による推定 (metric_sample: vo2max_estimated) で代替。
+        # 書き込みは ingest/garmin_sync.py:_upsert_vo2max_estimates (ラン系ワークアウト同期時)。
         vo2max_estimated = False
         if vo2max is None:
             est = (

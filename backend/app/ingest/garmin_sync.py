@@ -71,6 +71,13 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
                 _upsert_summary(session, target, summary)
             counts["summary"] = 1
 
+        # VO2Max 推定 (公表式) の永続化。Garmin 実測 VO2max が欠測している期間の
+        # api/body_distribution.py フォールバックに使う。summary 同期の後に置き、
+        # 当日の安静時心拍 (DailySummary.resting_hr) を参照できるようにする。
+        if workouts:
+            with session_scope() as session:
+                counts["vo2max_estimated"] = _upsert_vo2max_estimates(session, workouts)
+
         stress = client.get_stress(target)
         if stress:
             with session_scope() as session:
@@ -283,6 +290,53 @@ def _upsert_workouts(session: Session, workouts: list[dict[str, Any]]) -> int:
                 setattr(existing, k, v)
         else:
             session.add(Workout(id=wid, **fields))
+        n += 1
+    return n
+
+
+def _upsert_vo2max_estimates(session: Session, workouts: list[dict[str, Any]]) -> int:
+    """ラン系ワークアウトごとに VO2Max を公表式で推定し metric_sample へ保存する。
+
+    source="estimate" / metric_key="vo2max_estimated" / ts=ワークアウト開始時刻。
+    ts がワークアウトごとに一意なので (source, metric_key, ts) の UNIQUE 制約上そのまま
+    upsert すれば再同期しても重複しない。実装 (DB 参照込みの推定) は
+    scoring/vo2max_estimate.py に集約 (api/workout_review.py のオンデマンド表示と共用)。
+    """
+    from app.scoring.vo2max_estimate import estimate_for_workout
+
+    n = 0
+    for w in workouts:
+        start = w.get("start")
+        if not isinstance(start, datetime):
+            continue
+        est = estimate_for_workout(
+            session,
+            workout_type=w.get("type"),
+            start=start,
+            duration_s=w.get("duration_s"),
+            avg_hr=w.get("avg_hr"),
+            max_hr=w.get("max_hr"),
+            distance_m=w.get("distance_m"),
+            raw_json=w.get("raw_json"),
+        )
+        if est is None:
+            continue
+        ts = start.replace(tzinfo=None) if start.tzinfo else start
+        stmt = sqlite_insert(MetricSample).values(
+            [{
+                "source": "estimate",
+                "metric_key": "vo2max_estimated",
+                "ts": ts,
+                "value": est["mid"],
+                "unit": "ml/kg/min",
+                "raw_json": est,
+            }]
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[MetricSample.source, MetricSample.metric_key, MetricSample.ts],
+            set_={"value": stmt.excluded.value, "raw_json": stmt.excluded.raw_json},
+        )
+        session.execute(stmt)
         n += 1
     return n
 

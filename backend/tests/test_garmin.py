@@ -326,6 +326,33 @@ def test_sync_garmin_persists_readiness_and_wellness_metrics(db_engine, session)
     assert by_key["floors_up"][0] == 8.0  # 3 + 5
 
 
+def test_sync_garmin_persists_vo2max_estimate_for_run(db_engine, session):
+    """ラン系ワークアウト同期時、公表式の VO2Max 推定を metric_sample に保存する
+    (body_distribution.py の Garmin 実測欠測時フォールバックとして参照される)。"""
+    from app.models import MetricSample
+
+    api = FakeGarminAPI()
+    client = GarminClient(api)
+    target = date(2026, 5, 1)
+
+    sync_garmin(client, target=target)
+
+    row = session.execute(
+        select(MetricSample).where(MetricSample.metric_key == "vo2max_estimated")
+    ).scalar_one_or_none()
+    assert row is not None
+    assert row.source == "estimate"
+    assert row.value is not None and row.value > 0
+    assert row.raw_json is not None and "methods" in row.raw_json
+
+    # 再同期しても (source, metric_key, ts) の UNIQUE 制約で重複行が増えない
+    sync_garmin(client, target=target)
+    rows = session.execute(
+        select(MetricSample).where(MetricSample.metric_key == "vo2max_estimated")
+    ).scalars().all()
+    assert len(rows) == 1
+
+
 def test_sync_garmin_records_error_when_login_fails(db_engine, session):
     class FailingAPI(FakeGarminAPI):
         def login(self, **_):
