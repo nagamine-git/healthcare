@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from app.scoring.sleep_interventions import _analyze_rows
+from app.scoring.sleep_interventions import _MIN_STD_EFFECT, _analyze_rows
 
 
 def _night(i: int, **kw: Any) -> dict[str, Any]:
@@ -201,3 +201,166 @@ def test_meditation_in_explore_order_gets_tonight_suggestion():
     res = _analyze_rows([])
     assert res["suggestion"] is not None
     assert res["suggestion"]["kind"] == "explore"
+
+
+# ===== worth_verifying (「確かめる価値があるもの」): 効果量 (標準化) × データの薄さ =====
+
+
+def test_worth_verifying_empty_when_no_candidates():
+    # 記録なし → 候補になりうる (介入×アウトカム) が存在しない → 空配列。
+    res = _analyze_rows([])
+    assert res["worth_verifying"] == []
+
+
+def test_worth_verifying_picks_large_effect_thin_data():
+    # nose_strip → deep_min を模した実データ相当のケース: 効果量が大きく (標準化効果量>=1)、
+    # 着けた夜が少ない (5夜) のに対し外した夜は多い (13夜)。p はギリギリ 0.05 を超える程度に
+    # overlap させ、q (このケースは powered な検定がこれ1件のみなので q=p) が strong の
+    # 閾値 (<0.05) を割らないようにする (=strong に昇格させない)。
+    did_vals = [65, 71, 59, 73, 67]  # 5夜
+    didnt_vals = [70, 75, 65, 80, 72, 68, 78, 74, 66, 76, 71, 69, 77]  # 13夜
+    rows: list[dict[str, Any]] = []
+    for i, v in enumerate(did_vals):
+        rows.append(_night(i, nose_strip=True, deep_min=v))
+    for i, v in enumerate(didnt_vals):
+        rows.append(_night(i + 100, nose_strip=False, deep_min=v))
+    res = _analyze_rows(rows)
+    nose = _find(res, "nose_strip")
+    deep = next(o for o in nose["outcomes"] if o["outcome"] == "deep_min")
+    assert deep["tier"] != "strong"  # まだ確定していないケースを検証しているか確認
+    assert deep["n_did"] == 5 and deep["n_didnt"] == 13
+
+    wv = res["worth_verifying"]
+    assert len(wv) >= 1
+    top = wv[0]
+    assert top["key"] == "nose_strip"
+    assert top["outcome"] == "deep_min"
+    assert top["n_did"] == 5 and top["n_didnt"] == 13
+    assert "少数例では効果が大きく出やすい" in top["reason"]
+
+
+def test_worth_verifying_excludes_small_effect_thick_data():
+    # 就寝時刻の乱れ的なケースを模す: 効果量はごく小さい (diff 小・SD 大) が n=82 と厚い。
+    # 標準化効果量が小さいので候補から除外されるべき (効果が確定していなくても検証の価値は薄い)。
+    import random
+
+    rng = random.Random(42)
+    did_vals = [70 + rng.uniform(-10, 10) for _ in range(41)]
+    didnt_vals = [69.2 + rng.uniform(-10, 10) for _ in range(41)]  # diff は小さい, SD は大きい
+    rows: list[dict[str, Any]] = []
+    for i, v in enumerate(did_vals):
+        rows.append(_night(i, earplugs=True, efficiency=v))
+    for i, v in enumerate(didnt_vals):
+        rows.append(_night(i + 200, earplugs=False, efficiency=v))
+    res = _analyze_rows(rows)
+    ear = _find(res, "earplugs")
+    eff = next(o for o in ear["outcomes"] if o["outcome"] == "efficiency")
+    assert eff["tier"] != "strong"  # 前提確認: strong 昇格による除外ではなく効果量による除外を見る
+    assert eff["n_did"] == 41 and eff["n_didnt"] == 41
+
+    keys = [(w["key"], w["outcome"]) for w in res["worth_verifying"]]
+    assert ("earplugs", "efficiency") not in keys
+
+
+def test_worth_verifying_excludes_strong_tier():
+    # 明確な差 (耳栓あり/なしで sleep_score が完全に分離) → strong に確定するはず。
+    # strong はもう結論が出ているので worth_verifying の対象外。
+    rows: list[dict[str, Any]] = []
+    for i in range(10):
+        rows.append(_night(i, earplugs=True, sleep_score=90 + (i % 3)))
+    for i in range(10, 20):
+        rows.append(_night(i, earplugs=False, sleep_score=40 + (i % 3)))
+    res = _analyze_rows(rows)
+    ear = _find(res, "earplugs")
+    primary = ear["primary"]
+    assert primary["tier"] == "strong"  # 前提確認: このケースは strong になる
+
+    keys = [(w["key"], w["outcome"]) for w in res["worth_verifying"]]
+    assert ("earplugs", "sleep_score") not in keys
+
+
+def test_worth_verifying_normalizes_across_outcome_units():
+    # アウトカムごとに単位・散らばりが違う: sleep_score (0-100点、ばらつき大) と
+    # deep_min (分、ばらつき小)。生の diff だけを比べると sleep_score 側の方が大きいのに、
+    # 標準化効果量で見ると deep_min 側の方が大きく逆転する ── これが「単位で判定しない」
+    # 正規化の効果を示す。
+    rows: list[dict[str, Any]] = []
+    # earplugs: sleep_score の生 diff は大きい (約9点) が、ばらつきも大きく標準化効果量は小さい
+    scores_did = [80, 60, 90, 70, 95, 65]
+    scores_didnt = [74, 54, 84, 64, 89, 40]
+    for i, v in enumerate(scores_did):
+        rows.append(_night(i, earplugs=True, sleep_score=v))
+    for i, v in enumerate(scores_didnt):
+        rows.append(_night(i + 100, earplugs=False, sleep_score=v))
+    # mouth_tape: deep_min の生 diff は小さい (約4分) が、ばらつきが小さく標準化効果量は大きい
+    deep_did = [63, 65, 62, 64, 68, 61]
+    deep_didnt = [60, 58, 61, 59, 64, 57]
+    for i, v in enumerate(deep_did):
+        rows.append(_night(i + 200, mouth_tape=True, deep_min=v))
+    for i, v in enumerate(deep_didnt):
+        rows.append(_night(i + 300, mouth_tape=False, deep_min=v))
+    res = _analyze_rows(rows)
+
+    ear = _find(res, "earplugs")
+    ear_score = next(o for o in ear["outcomes"] if o["outcome"] == "sleep_score")
+    tape = _find(res, "mouth_tape")
+    tape_deep = next(o for o in tape["outcomes"] if o["outcome"] == "deep_min")
+
+    # 生の diff は sleep_score 側の方が大きいのに、標準化効果量は deep_min 側の方が大きい (逆転)
+    assert abs(ear_score["diff"]) > abs(tape_deep["diff"])
+    assert ear_score["std_effect"] is not None and tape_deep["std_effect"] is not None
+    assert tape_deep["std_effect"] > ear_score["std_effect"]
+    assert ear_score["std_effect"] < _MIN_STD_EFFECT <= tape_deep["std_effect"]
+    assert tape_deep["tier"] != "strong"  # 前提確認: 除外は effect size 基準であって strong ではない
+
+    keys = [(w["key"], w["outcome"]) for w in res["worth_verifying"]]
+    assert ("mouth_tape", "deep_min") in keys
+    assert ("earplugs", "sleep_score") not in keys
+
+
+def test_worth_verifying_capped_at_three():
+    # 4つの (介入×アウトカム) が全部候補条件を満たしても、上位3件までしか出さない。
+    # (同一の did/didnt パターンを4介入に適用 = 同一 p なので BH 補正後も全て非 strong で揃う)
+    rows: list[dict[str, Any]] = []
+    pairs = ["earplugs", "eyemask", "nose_strip", "mouth_tape"]
+    did_vals = [65, 71, 59, 73, 67]
+    didnt_vals = [70, 75, 65, 80, 72, 68, 78, 74, 66, 76, 71, 69, 77]
+    for idx, ikey in enumerate(pairs):
+        for i, v in enumerate(did_vals):
+            rows.append(_night(idx * 1000 + i, sleep_score=v, **{ikey: True}))
+        for i, v in enumerate(didnt_vals):
+            rows.append(_night(idx * 1000 + i + 100, sleep_score=v, **{ikey: False}))
+    res = _analyze_rows(rows)
+    for iv in res["interventions"]:
+        primary = iv.get("primary")
+        assert primary is not None and primary["tier"] != "strong"  # 前提: 全件 strong ではない
+    assert len(res["worth_verifying"]) == 3  # 4件条件を満たすが上限3件に切り詰められる
+
+
+def test_tonight_plan_prefers_larger_effect_when_coverage_tied():
+    # explore-on: eyemask と nose_strip がともに未検証 (n_did=2 で同点タイ)。
+    # 固定優先順 (_EXPLORE_ORDER) では eyemask の方が先だが、nose_strip の方が
+    # (暫定段階でも) 標準化効果量が明らかに大きいので、そちらを優先して提案するべき。
+    # 他の介入 (earplugs/mouth_tape/breathing/meditation) は両群十分なデータ (no_effect)
+    # にして on/off どちらの候補にもならないようにし、eyemask vs nose_strip の一騎打ちにする。
+    rows: list[dict[str, Any]] = []
+    no_effect_did = [70, 72, 68, 71]
+    no_effect_didnt = [71, 69, 73, 70]
+    for j, key in enumerate(["earplugs", "mouth_tape", "breathing", "meditation"]):
+        for i, v in enumerate(no_effect_did):
+            rows.append(_night(j * 100 + i, sleep_score=v, **{key: True}))
+        for i, v in enumerate(no_effect_didnt):
+            rows.append(_night(j * 100 + i + 10, sleep_score=v, **{key: False}))
+    # eyemask: ほぼ差がない (効果量小)
+    rows.append(_night(1000, eyemask=True, sleep_score=70))
+    rows.append(_night(1001, eyemask=True, sleep_score=71))
+    rows.append(_night(1002, eyemask=False, sleep_score=70))
+    rows.append(_night(1003, eyemask=False, sleep_score=71))
+    # nose_strip: 差が大きい (効果量大)
+    rows.append(_night(1004, nose_strip=True, sleep_score=95))
+    rows.append(_night(1005, nose_strip=True, sleep_score=96))
+    rows.append(_night(1006, nose_strip=False, sleep_score=40))
+    rows.append(_night(1007, nose_strip=False, sleep_score=41))
+    res = _analyze_rows(rows)
+    assert res["suggestion"]["kind"] == "explore"
+    assert "ノーズブリーズ" in res["suggestion"]["text"]
