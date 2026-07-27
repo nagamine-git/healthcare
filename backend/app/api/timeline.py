@@ -20,6 +20,7 @@ from app.db import session_scope
 from app.models import (
     BodyBattery,
     CaffeineIntake,
+    DailySummary,
     MetricSample,
     MigraineEpisode,
     SleepSession,
@@ -688,6 +689,62 @@ def _habit_expected_curve(
     return out
 
 
+def _daily_summary_fallback(
+    session, start_utc: datetime, end_utc: datetime
+) -> tuple[float | None, float | None]:
+    """歩数・消費カロリーの合計を Garmin `DailySummary` からフォールバック取得する。
+
+    「今日の流れ」の合計タイルは元々 HAE (Apple Health) の MetricSample
+    (step_count / active_energy) を積算していたが、iPhone 側の Health Auto
+    Export 取り込みが止まると HAE の行が無くなり 0 表示になってしまう
+    (`/api/today` は Garmin の DailySummary を見ているので実際は 0 ではない)。
+    ここでは HAE 合計が 0/欠測の時だけ呼ばれ、生きている方の値を埋める。
+
+    - window=day: 対象の暦日 1 日分の DailySummary をそのまま使う (按分不要)。
+    - window=24h: ウィンドウ (直近21h+未来3h) は暦日をまたぎうる。DailySummary は
+      「暦日 1 本」の値しか持たないため、日ごとに扱いを変える:
+        - ウィンドウが触れる日が「今日」(app_today()) の場合: その行の値は
+          常に「当日 00:00 〜 直近 Garmin 同期時点」までの累積であり、これは
+          window の「今日部分」(day-start 〜 だいたい now 近辺) とほぼ同じ範囲を
+          指している。ここを按分すると二重に目減りするので、そのまま加算する。
+        - それ以外の日 (既に終わった前日、またはまだ何もない翌日): ウィンドウと
+          その暦日の重なり時間 / 24h で按分する (活動が一様分布という粗い近似。
+          過剰に精密化するより「大きくは外れない」ことを優先した)。
+    見つからなければ (None, None) を返す (=呼び出し側は HAE 側の値をそのまま使う)。
+    """
+    today = app_today()
+    touched: set = set()
+    for probe in (start_utc, end_utc - timedelta(seconds=1)):
+        touched.add(probe.replace(tzinfo=UTC).astimezone(JST).date())
+
+    steps_total = 0.0
+    kcal_total = 0.0
+    found = False
+    for d in sorted(touched):
+        summary = session.get(DailySummary, d)
+        if summary is None:
+            continue
+        s_val = summary.steps or 0
+        k_val = summary.active_kcal or 0
+        if d == today:
+            steps_total += s_val
+            kcal_total += k_val
+            found = True
+            continue
+        d_start, d_end = jst_day_bounds(d)
+        overlap_h = (min(end_utc, d_end) - max(start_utc, d_start)).total_seconds() / 3600
+        if overlap_h <= 0:
+            continue
+        frac = max(0.0, min(1.0, overlap_h / 24.0))
+        steps_total += s_val * frac
+        kcal_total += k_val * frac
+        found = True
+
+    if not found:
+        return None, None
+    return steps_total, kcal_total
+
+
 @router.get("/api/timeline")
 async def day_timeline(
     date: str | None = Query(default=None),
@@ -791,9 +848,26 @@ async def day_story(
     # クイック統計 (情報量を補う数値サマリ)
     stress_vals = [p["v"] for p in g["stress"]]
     mod, vig = g["_intensity"]
+    hae_steps = sum(v for _, v in g["_steps"])
+    hae_kcal = sum(v for _, v in g["_energy"])
+    steps_val = hae_steps
+    kcal_val = hae_kcal
+    if hae_steps <= 0 or hae_kcal <= 0:
+        # HAE (Apple Health) の取り込みが途切れていると合計が 0 になる。
+        # Garmin DailySummary が生きていればそちらをフォールバックにする
+        # (詳しい按分方針は _daily_summary_fallback のドキュメントを参照)。
+        with session_scope() as fb_session:
+            fb_steps, fb_kcal = _daily_summary_fallback(fb_session, start_utc, end_utc)
+        if hae_steps <= 0 and fb_steps is not None:
+            steps_val = fb_steps
+        if hae_kcal <= 0 and fb_kcal is not None:
+            kcal_val = fb_kcal
+    # 注: intensity_min (中/高強度分) はここでは Garmin フォールバックしない。
+    # DailySummary に intensity 分のカラムが無く、存在しない値を作ると実態と
+    # 乖離するため。取れない時は 0 のまま (UI 側は「未計測」と区別しない前提)。
     story["stats"] = {
-        "steps": int(sum(v for _, v in g["_steps"])),
-        "active_kcal": round(sum(v for _, v in g["_energy"])),
+        "steps": round(steps_val),
+        "active_kcal": round(kcal_val),
         "sleep_h": round(sleep["end_h"] - sleep["start_h"], 1) if sleep else None,
         "stress_avg": round(sum(stress_vals) / len(stress_vals)) if stress_vals else None,
         "caffeine_mg": round(sum(c["mg"] for c in g["caffeine"])),

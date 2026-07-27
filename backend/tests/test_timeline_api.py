@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date as date_type
 from datetime import timedelta
 
 import pytest
@@ -77,9 +78,61 @@ def test_timeline_24h_window(app_client):
     assert "origin_jst" in body
 
 
-def test_day_story_infers_segments(app_client):
-    from datetime import date as date_type
+def test_day_story_stats_falls_back_to_daily_summary_when_hae_empty(app_client):
+    """HAE (Apple Health) の step_count/active_energy が無い日は Garmin
+    DailySummary の合計を使う (取り込みが止まっても 0 表示にならない)。"""
+    from app.db import session_scope
+    from app.models import DailySummary
 
+    target = date_type(2026, 5, 21)
+    with session_scope() as s:
+        s.add(DailySummary(date=target, steps=2535, active_kcal=47.0))
+
+    body = app_client.get("/api/day-story?date=2026-05-21").json()
+    assert body["stats"]["steps"] == 2535
+    assert body["stats"]["active_kcal"] == 47
+
+
+def test_day_story_stats_prefers_hae_when_present(app_client):
+    """HAE 側にデータがあれば Garmin DailySummary の値より優先される。"""
+    from app.db import session_scope
+    from app.models import DailySummary, MetricSample
+
+    target = date_type(2026, 5, 22)
+    start, _ = jst_day_bounds(target)
+    with session_scope() as s:
+        for m in range(0, 60, 15):
+            s.add(MetricSample(source="hae", metric_key="step_count",
+                               ts=start + timedelta(hours=10, minutes=m), value=100.0))
+        s.add(MetricSample(source="hae", metric_key="active_energy",
+                           ts=start + timedelta(hours=10), value=25.0))
+        # DailySummary にも値があるが、HAE が生きているのでこちらは無視される
+        s.add(DailySummary(date=target, steps=99999, active_kcal=999.0))
+
+    body = app_client.get("/api/day-story?date=2026-05-22").json()
+    assert body["stats"]["steps"] == 400
+    assert body["stats"]["active_kcal"] == 25
+
+
+def test_day_story_24h_window_falls_back_to_daily_summary(app_client):
+    """window=24h は当日+前日にまたがりうる。当日分は按分せず全量、前日分は
+    重なり時間/24hで按分するので、合計は当日単独の値以上・単純合算以下になる。"""
+    from app.db import session_scope
+    from app.models import DailySummary
+    from app.scoring.timewindow import app_today
+
+    today = app_today()
+    yesterday = today - timedelta(days=1)
+    with session_scope() as s:
+        s.add(DailySummary(date=today, steps=2535, active_kcal=47.0))
+        s.add(DailySummary(date=yesterday, steps=4444, active_kcal=98.0))
+
+    body = app_client.get("/api/day-story?window=24h").json()
+    assert 2535 <= body["stats"]["steps"] <= 2535 + 4444
+    assert 47 <= body["stats"]["active_kcal"] <= 47 + 98
+
+
+def test_day_story_infers_segments(app_client):
     from app.db import session_scope
     from app.models import MetricSample, SleepSession, Workout
 
