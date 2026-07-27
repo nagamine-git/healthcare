@@ -1,0 +1,54 @@
+"""「昨夜の睡眠」評価 API。
+
+薄いだけ: DB から今日 (=起床日) の ``SleepSession`` と、個人の目標睡眠時間
+(``scoring/profile.py:resolve_profile()``) を引き、n-of-1 の実証要因
+(``scoring/sleep_drivers.py:analyze()``) と合わせて ``scoring/sleep_quality.py:evaluate_last_night``
+に渡すだけ。判定ロジックは一切ここに書かない。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter
+
+from app.db import session_scope
+from app.models import SleepSession
+from app.scoring import sleep_drivers
+from app.scoring.profile import resolve_profile
+from app.scoring.sleep_quality import evaluate_last_night
+from app.scoring.timewindow import app_today
+
+router = APIRouter()
+
+
+@router.get("/api/sleep/last-night")
+async def get_last_night() -> dict[str, Any]:
+    """昨夜 (SleepSession.date = 起床日 = 今日) の評価。データが無ければ available:false。"""
+    target = app_today()
+    with session_scope() as session:
+        sleep = session.get(SleepSession, target)
+
+    if sleep is None or sleep.total_min is None:
+        return {"date": target.isoformat(), "available": False}
+
+    profile = resolve_profile()
+    # sleep_drivers.analyze() は本人の n-of-1 統計分析。改善点の personal 根拠に使う
+    # (strong/suggestive のみ実証済みとみなす、モジュール側の作法どおり)。
+    driver = sleep_drivers.analyze(target)
+
+    result = evaluate_last_night(
+        total_min=sleep.total_min,
+        deep_min=sleep.deep_min,
+        rem_min=sleep.rem_min,
+        light_min=sleep.light_min,
+        awake_min=sleep.awake_min,
+        sleep_score=sleep.sleep_score,
+        sleep_need_min=profile.sleep_need_min,
+        driver_quality=driver.get("quality"),
+        driver_recommendations=driver.get("recommendations"),
+    )
+    if result is None:
+        return {"date": target.isoformat(), "available": False}
+
+    return {"date": target.isoformat(), "available": True, **result}
