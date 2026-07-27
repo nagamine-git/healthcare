@@ -334,11 +334,18 @@ def _worth_verifying(interventions: list[dict[str, Any]]) -> list[dict[str, Any]
                 "outcome": o["outcome"], "outcome_label": o["outcome_label"],
                 "diff": o["diff"], "direction": o["direction"], "tier": o["tier"],
                 "n_did": o["n_did"], "n_didnt": o["n_didnt"],
+                # 薄い側がどちらかで**次に取るべき行動が真逆**になる (着ける夜を増やすのか、
+                # 外す夜を作るのか)。「両方少ない」と一括りにすると行動に落ちないので、
+                # 少ない方を名指しして次の一手まで言い切る。
                 "reason": (
                     f"{iv['label']}は{o['outcome_label']}への影響が大きそうですが、"
-                    f"着けた夜{o['n_did']}・外した夜{o['n_didnt']}とまだ少なく、結論は確定して"
-                    "いません。少数例では効果が大きく出やすいため、もう数夜のデータで判断が"
-                    "変わる可能性があります。"
+                    + (
+                        f"着けた夜が{o['n_did']}夜しかありません。着ける夜を増やすと"
+                        if o["n_did"] <= o["n_didnt"]
+                        else f"外した夜が{o['n_didnt']}夜しかありません。外す夜を作ると"
+                    )
+                    + "確かめられます。少数例では効果が大きく出やすいので、現時点の数字は"
+                    "確定した効果ではありません。"
                 ),
                 "_score": score,
             })
