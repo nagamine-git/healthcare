@@ -20,6 +20,7 @@ class GarminAPIProtocol(Protocol):
     def get_hrv_data(self, cdate: str) -> Any: ...
     def get_body_battery(self, startdate: str, enddate: str | None = ...) -> Any: ...
     def get_activities_by_date(self, startdate: str, enddate: str) -> Any: ...
+    def get_activity_exercise_sets(self, activity_id: int | str) -> Any: ...
     def get_user_summary(self, cdate: str) -> Any: ...
     def get_stress_data(self, cdate: str) -> Any: ...
     def get_heart_rates(self, cdate: str) -> Any: ...
@@ -95,6 +96,19 @@ class GarminClient:
         if not raw:
             return []
         return [_normalise_workout(a) for a in raw]
+
+    def get_exercise_sets(self, activity_id: int | str) -> dict[str, Any] | None:
+        """筋トレアクティビティのセット明細 (種目/rep/重量) を取得する。
+
+        `/activity-service/activity/{id}/exerciseSets` 相当。対応端末のワークアウト
+        (Instinct 3 等) のみ値が返る。取得失敗/未対応は None (呼び出し側で無視する)。
+        """
+        self.login()
+        try:
+            raw = self._api.get_activity_exercise_sets(activity_id)
+        except Exception:
+            return None
+        return _normalise_exercise_sets(raw)
 
     def get_user_summary(self, target: date_type) -> dict[str, Any] | None:
         self.login()
@@ -319,6 +333,49 @@ def _normalise_workout(activity: dict[str, Any]) -> dict[str, Any]:
         "max_hr": activity.get("maxHR"),
         "raw_json": activity,
     }
+
+
+def _normalise_exercise_sets(raw: Any) -> dict[str, Any] | None:
+    """exerciseSets API のレスポンスから、評価に使うフィールドだけ抜く。
+
+    生レスポンスの例 (実機確認済み)::
+
+        {"activityId": ..., "exerciseSets": [
+            {"exercises": [{"category": "ROW", "name": null, "probability": 100.0}],
+             "duration": 59.25, "repetitionCount": 8, "weight": 12000.0,
+             "setType": "ACTIVE", "startTime": "2026-07-26T08:09:21.0", ...},
+            {"exercises": [], "duration": 64.4, "repetitionCount": null, "weight": null,
+             "setType": "REST", ...},
+            ...
+        ]}
+
+    ``setType == "REST"`` は評価に使わないので捨てる。``weight`` は g 単位なので
+    kg に変換する。``exercises`` は確度 (probability) 順の候補配列 — 先頭 (最有力)
+    のみ採用する。呼べたが中身が空 (筋トレでない/未対応端末) でも「取得済み」を
+    示すため空の ``sets: []`` を返す (呼び出し側の冪等判定はキーの有無で行う)。
+    """
+    if not isinstance(raw, dict):
+        return None
+    sets_raw = raw.get("exerciseSets")
+    if not isinstance(sets_raw, list):
+        return None
+    sets: list[dict[str, Any]] = []
+    for entry in sets_raw:
+        if not isinstance(entry, dict) or entry.get("setType") != "ACTIVE":
+            continue
+        exercises = entry.get("exercises") or []
+        best = exercises[0] if exercises and isinstance(exercises[0], dict) else {}
+        weight_g = entry.get("weight")
+        duration = entry.get("duration")
+        sets.append({
+            "category": best.get("category"),
+            "name": best.get("name"),
+            "reps": entry.get("repetitionCount"),
+            "weight_kg": round(weight_g / 1000, 2) if isinstance(weight_g, (int, float)) else None,
+            "duration_s": round(duration, 1) if isinstance(duration, (int, float)) else None,
+            "start": entry.get("startTime"),
+        })
+    return {"sets": sets}
 
 
 def _normalise_summary(raw: dict[str, Any]) -> dict[str, Any]:

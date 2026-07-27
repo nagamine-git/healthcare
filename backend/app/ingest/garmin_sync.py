@@ -35,6 +35,7 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
         "hrv": 0,
         "body_battery": 0,
         "workouts": 0,
+        "exercise_sets": 0,
         "summary": 0,
         "weight": 0,
         "stress": 0,
@@ -64,6 +65,8 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
         if workouts:
             with session_scope() as session:
                 counts["workouts"] = _upsert_workouts(session, workouts)
+            with session_scope() as session:
+                counts["exercise_sets"] = _upsert_exercise_sets(session, client, workouts)
 
         summary = client.get_user_summary(target)
         if summary:
@@ -272,6 +275,14 @@ def _upsert_workouts(session: Session, workouts: list[dict[str, Any]]) -> int:
         )
 
         existing = session.get(Workout, wid)
+        raw_json = w.get("raw_json")
+        # Garmin のアクティビティ一覧 raw_json には exerciseSets は含まれない (別 API)。
+        # 既に _upsert_exercise_sets が書き込んだ exercise_sets を、この再同期での
+        # raw_json 総取り替えで消してしまわないよう引き継ぐ (冪等判定のキーでもある)。
+        if existing is not None and isinstance(existing.raw_json, dict) and isinstance(raw_json, dict):
+            prior_sets = existing.raw_json.get("exercise_sets")
+            if prior_sets is not None and "exercise_sets" not in raw_json:
+                raw_json = {**raw_json, "exercise_sets": prior_sets}
         fields = {
             "source": "garmin",
             "start": start_naive,
@@ -283,13 +294,59 @@ def _upsert_workouts(session: Session, workouts: list[dict[str, Any]]) -> int:
             "training_load": w.get("training_load"),
             "avg_hr": w.get("avg_hr"),
             "max_hr": w.get("max_hr"),
-            "raw_json": w.get("raw_json"),
+            "raw_json": raw_json,
         }
         if existing:
             for k, v in fields.items():
                 setattr(existing, k, v)
         else:
             session.add(Workout(id=wid, **fields))
+        n += 1
+    return n
+
+
+def _is_strength_workout_type(wtype: str | None) -> bool:
+    """筋トレ系ワークアウトかどうか (exerciseSets を叩く対象の絞り込み用)。
+
+    llm/client.py の ``_days_since_last_strength_training`` と同じ判定基準に揃える
+    (strength_training / weight_training / indoor_climbing、または type 名に
+    "strength" を含むもの)。
+    """
+    from app.llm.client import _STRENGTH_TYPES
+
+    return bool(wtype) and (wtype in _STRENGTH_TYPES or "strength" in wtype.lower())
+
+
+def _upsert_exercise_sets(
+    session: Session, client: GarminClient, workouts: list[dict[str, Any]]
+) -> int:
+    """筋トレ系ワークアウトのセット明細 (種目/rep/重量) を Workout.raw_json に追記する。
+
+    スキーマは変更しない — ``raw_json["exercise_sets"]`` に格納する。
+    - 全アクティビティで叩くと API 呼び出しが無駄に増えるので、筋トレ系のみ対象。
+    - 冪等: 既に ``exercise_sets`` キーが入っている Workout は再取得しない
+      (再同期のたびに叩かない)。
+    - 取得失敗は ``GarminClient.get_exercise_sets`` 側で握りつぶされ None が返る
+      ので、ここでは単にスキップする (同期全体を止めない)。
+    """
+    n = 0
+    for w in workouts:
+        if not _is_strength_workout_type(w.get("type")):
+            continue
+        activity_id = w.get("id")
+        if activity_id is None:
+            continue
+        wid = f"garmin-{activity_id}"
+        existing = session.get(Workout, wid)
+        if existing is None:
+            continue
+        raw = existing.raw_json if isinstance(existing.raw_json, dict) else {}
+        if "exercise_sets" in raw:
+            continue  # 取得済み (冪等)
+        sets = client.get_exercise_sets(activity_id)
+        if sets is None:
+            continue
+        existing.raw_json = {**raw, "exercise_sets": sets}
         n += 1
     return n
 

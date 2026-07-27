@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.ingest.garmin_client import (
     GarminClient,
     _normalise_body_battery,
+    _normalise_exercise_sets,
     _normalise_sleep,
     _normalise_summary,
     _normalise_workout,
@@ -129,6 +130,55 @@ def test_normalise_workout_extracts_fields():
     assert n["duration_s"] == 1800
     assert n["distance_m"] == 5000.0
     assert n["type"] == "running"
+
+
+SAMPLE_EXERCISE_SETS = {
+    "activityId": 23735337178,
+    "exerciseSets": [
+        {
+            "exercises": [{"category": "ROW", "name": None, "probability": 100.0}],
+            "duration": 59.25,
+            "repetitionCount": 8,
+            "weight": 12000.0,
+            "setType": "ACTIVE",
+            "startTime": "2026-07-26T08:09:21.0",
+        },
+        {
+            "exercises": [],
+            "duration": 64.387,
+            "repetitionCount": None,
+            "weight": None,
+            "setType": "REST",
+            "startTime": "2026-07-26T08:10:20.0",
+        },
+        {
+            "exercises": [{"category": "CURL", "name": None, "probability": 100.0}],
+            "duration": 24.04,
+            "repetitionCount": 6,
+            "weight": 8000.0,
+            "setType": "ACTIVE",
+            "startTime": "2026-07-26T08:19:55.0",
+        },
+    ],
+}
+
+
+def test_normalise_exercise_sets_keeps_only_active_and_converts_weight_to_kg():
+    """実機確認済みの Garmin exerciseSets レスポンス形状 (activityId 23735337178) をもとにした回帰。"""
+    n = _normalise_exercise_sets(SAMPLE_EXERCISE_SETS)
+    assert n is not None
+    assert len(n["sets"]) == 2  # REST は捨てる
+    row = n["sets"][0]
+    assert row["category"] == "ROW"
+    assert row["reps"] == 8
+    assert row["weight_kg"] == 12.0  # g → kg
+    assert row["start"] == "2026-07-26T08:09:21.0"
+
+
+def test_normalise_exercise_sets_returns_none_for_bad_shape():
+    assert _normalise_exercise_sets(None) is None
+    assert _normalise_exercise_sets({"activityId": 1}) is None
+    assert _normalise_exercise_sets("not a dict") is None
 
 
 def test_normalise_summary():
@@ -351,6 +401,81 @@ def test_sync_garmin_persists_vo2max_estimate_for_run(db_engine, session):
         select(MetricSample).where(MetricSample.metric_key == "vo2max_estimated")
     ).scalars().all()
     assert len(rows) == 1
+
+
+class FakeStrengthGarminAPI(FakeGarminAPI):
+    """筋トレアクティビティ1件 + exerciseSets を返す fake (idempotency 検証用)。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.exercise_sets_calls = 0
+
+    def get_activities_by_date(self, startdate: str, enddate: str):
+        return [
+            {
+                "activityId": 555,
+                "activityType": {"typeKey": "strength_training"},
+                "startTimeGMT": "2026-05-01T08:00:00.0",
+                "duration": 1002,
+                "calories": 200,
+                "averageHR": 110,
+                "maxHR": 140,
+            }
+        ]
+
+    def get_activity_exercise_sets(self, activity_id):
+        self.exercise_sets_calls += 1
+        return SAMPLE_EXERCISE_SETS
+
+
+def test_sync_garmin_fetches_exercise_sets_for_strength_workout(db_engine, session):
+    """筋トレ系ワークアウトは exerciseSets を取得し raw_json["exercise_sets"] に保存する。"""
+    api = FakeStrengthGarminAPI()
+    client = GarminClient(api)
+    target = date(2026, 5, 1)
+
+    result = sync_garmin(client, target=target)
+    assert result["error"] is None
+    assert result["counts"]["exercise_sets"] == 1
+    assert api.exercise_sets_calls == 1
+
+    workout = session.get(Workout, "garmin-555")
+    assert workout is not None
+    stored = workout.raw_json["exercise_sets"]
+    assert len(stored["sets"]) == 2
+    assert stored["sets"][0]["category"] == "ROW"
+    assert stored["sets"][0]["weight_kg"] == 12.0
+
+
+def test_sync_garmin_does_not_refetch_exercise_sets_once_stored(db_engine, session):
+    """冪等性: 既に exercise_sets が入っている Workout は再同期時に exerciseSets API を叩かない。"""
+    api = FakeStrengthGarminAPI()
+    client = GarminClient(api)
+    target = date(2026, 5, 1)
+
+    sync_garmin(client, target=target)
+    assert api.exercise_sets_calls == 1
+
+    sync_garmin(client, target=target)
+    assert api.exercise_sets_calls == 1  # 2回目は叩かない
+
+
+def test_sync_garmin_does_not_fetch_exercise_sets_for_non_strength_workout(db_engine, session):
+    """筋トレ系以外 (running 等) では exerciseSets API を一切叩かない (無駄な呼び出し防止)。"""
+    api = FakeGarminAPI()  # デフォルトは running のみ
+    calls = {"n": 0}
+
+    def _track(activity_id):
+        calls["n"] += 1
+        return SAMPLE_EXERCISE_SETS
+
+    api.get_activity_exercise_sets = _track  # type: ignore[method-assign]
+
+    client = GarminClient(api)
+    result = sync_garmin(client, target=date(2026, 5, 1))
+    assert result["error"] is None
+    assert result["counts"]["exercise_sets"] == 0
+    assert calls["n"] == 0
 
 
 def test_sync_garmin_records_error_when_login_fails(db_engine, session):
