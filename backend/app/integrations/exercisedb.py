@@ -38,6 +38,8 @@ _JA_TO_EN: dict[str, str] = {
     "ダンベルショルダープレス": "dumbbell seated shoulder press",
     "ダンベルルーマニアンデッドリフト": "dumbbell romanian deadlift",
     "ダンベルrdl": "dumbbell romanian deadlift",
+    "片脚ルーマニアンデッドリフト": "dumbbell single leg deadlift",
+    "片脚rdl": "dumbbell single leg deadlift",
     "ダンベルロー": "dumbbell bent over row",
     "ダンベルゴブレットスクワット": "dumbbell goblet squat",
     "ゴブレットスクワット": "dumbbell goblet squat",
