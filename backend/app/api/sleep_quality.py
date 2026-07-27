@@ -26,10 +26,21 @@ router = APIRouter()
 async def get_last_night() -> dict[str, Any]:
     """昨夜 (SleepSession.date = 起床日 = 今日) の評価。データが無ければ available:false。"""
     target = app_today()
+    # ⚠️ ORM オブジェクトを with の外へ持ち出さない。session_scope を抜けると
+    # detach され、未ロード属性に触った瞬間 DetachedInstanceError で 500 になる。
+    # 必要な値は**セッション内で素の値として取り出す**こと。
     with session_scope() as session:
         sleep = session.get(SleepSession, target)
+        vals = None if sleep is None else {
+            "total_min": sleep.total_min,
+            "deep_min": sleep.deep_min,
+            "rem_min": sleep.rem_min,
+            "light_min": sleep.light_min,
+            "awake_min": sleep.awake_min,
+            "sleep_score": sleep.sleep_score,
+        }
 
-    if sleep is None or sleep.total_min is None:
+    if vals is None or vals["total_min"] is None:
         return {"date": target.isoformat(), "available": False}
 
     profile = resolve_profile()
@@ -38,12 +49,7 @@ async def get_last_night() -> dict[str, Any]:
     driver = sleep_drivers.analyze(target)
 
     result = evaluate_last_night(
-        total_min=sleep.total_min,
-        deep_min=sleep.deep_min,
-        rem_min=sleep.rem_min,
-        light_min=sleep.light_min,
-        awake_min=sleep.awake_min,
-        sleep_score=sleep.sleep_score,
+        **vals,
         sleep_need_min=profile.sleep_need_min,
         driver_quality=driver.get("quality"),
         driver_recommendations=driver.get("recommendations"),
