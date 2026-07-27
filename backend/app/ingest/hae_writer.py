@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -144,11 +145,43 @@ def _write_sleeps(session: Session, sleeps: list[NormalizedSleep]) -> int:
     return written
 
 
+# 同一ワークアウトとみなす開始時刻のズレ (秒)。Garmin と Apple Health で丸めが
+# 異なることがあるため完全一致は求めない。実測では両者とも同じ秒だった。
+_DUP_START_TOLERANCE_S = 120
+
+
+def _garmin_duplicate_exists(session: Session, w: NormalizedWorkout) -> bool:
+    """同じワークアウトが Garmin 由来で既にあるか。
+
+    ⚠️ **ワークアウトは一周して戻ってくる**: Garmin 時計 → Garmin Connect →
+    (Connect アプリが Apple Health に書く) → Ascend が HealthKit を読んで /ingest に送る。
+    一方 ``garmin_sync`` は Garmin から直接取り込むので、**同じ1回のトレーニングが
+    garmin と hae の2行になる** (id が別なので素の upsert では防げない)。
+
+    Garmin 側を正とする: ``training_load`` / HR ゾーン / 種目セット (exerciseSets) を
+    持っており情報量で優るため。Apple Health 側は同じ実体の劣化コピーでしかない。
+    """
+    start = w.start.replace(tzinfo=None)
+    lo = start - timedelta(seconds=_DUP_START_TOLERANCE_S)
+    hi = start + timedelta(seconds=_DUP_START_TOLERANCE_S)
+    return session.execute(
+        select(Workout.id).where(
+            Workout.source == "garmin",
+            Workout.start >= lo,
+            Workout.start <= hi,
+        ).limit(1)
+    ).first() is not None
+
+
 def _write_workouts(session: Session, workouts: list[NormalizedWorkout]) -> int:
     if not workouts:
         return 0
     written = 0
     for w in workouts:
+        # Garmin 由来の同一ワークアウトが既にあるなら取り込まない (二重計上を防ぐ)。
+        # 自分自身 (既に取り込み済みの hae 行) の更新は妨げないよう、新規時のみ判定する。
+        if session.get(Workout, w.id) is None and _garmin_duplicate_exists(session, w):
+            continue
         existing = session.get(Workout, w.id)
         if existing:
             existing.start = w.start.replace(tzinfo=None)

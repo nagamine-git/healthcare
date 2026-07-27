@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Any
 
@@ -262,6 +262,30 @@ def _upsert_body_battery(session: Session, target: date_type, bb: dict[str, Any]
     return written
 
 
+# 同一ワークアウトとみなす開始時刻のズレ (秒)。hae_writer 側と同じ値を使う。
+_DUP_START_TOLERANCE_S = 120
+
+
+def _drop_hae_duplicates(session: Session, start_naive: datetime) -> int:
+    """同時刻の Apple Health 由来ワークアウトを削除する (Garmin を正とする)。
+
+    ``hae_writer._garmin_duplicate_exists`` と対になる後始末。あちらは
+    「Garmin が先にある時に hae を取り込まない」、こちらは「hae が先に入っていた時に消す」。
+    両方無いと届く順序次第で2行残る。
+    """
+    from sqlalchemy import delete
+
+    lo = start_naive - timedelta(seconds=_DUP_START_TOLERANCE_S)
+    hi = start_naive + timedelta(seconds=_DUP_START_TOLERANCE_S)
+    return int(session.execute(
+        delete(Workout).where(
+            Workout.source != "garmin",
+            Workout.start >= lo,
+            Workout.start <= hi,
+        )
+    ).rowcount or 0)
+
+
 def _upsert_workouts(session: Session, workouts: list[dict[str, Any]]) -> int:
     n = 0
     for w in workouts:
@@ -273,6 +297,13 @@ def _upsert_workouts(session: Session, workouts: list[dict[str, Any]]) -> int:
         end_naive = (
             w["end"].replace(tzinfo=None) if isinstance(w.get("end"), datetime) and w["end"].tzinfo else w.get("end")
         )
+
+        # 同じワークアウトが Apple Health 経由でも入っていたら消す (Garmin を正とする)。
+        # 経路: Garmin 時計 → Connect → Connect アプリが Apple Health に書く →
+        # Ascend が読んで /ingest に送る。hae_writer 側でも取り込みを防いでいるが、
+        # **hae が先に届いた場合**はこちらで掃除しないと2行残る。
+        # Garmin 側は training_load / HR ゾーン / 種目セットを持ち情報量で優る。
+        _drop_hae_duplicates(session, start_naive)
 
         existing = session.get(Workout, wid)
         raw_json = w.get("raw_json")

@@ -595,3 +595,72 @@ def test_sync_garmin_job_runs_when_token_present(temp_data_dir, monkeypatch):
     assert "counts" in result
 
     monkeypatch.setattr(gc_module.GarminClient, "from_settings", original)
+
+
+# ----- Garmin と Apple Health の同一ワークアウト重複 -----
+# 経路: Garmin 時計 → Connect → Connect アプリが Apple Health に書く →
+# Ascend が読んで /ingest。garmin_sync は Garmin から直接取るので、
+# **同じ1回のトレーニングが garmin/hae の2行**になっていた (id が別で upsert が効かない)。
+
+
+def test_hae_workout_skipped_when_garmin_duplicate_exists(session):
+    """Garmin が先にある時、同時刻の hae ワークアウトは取り込まない。"""
+    from datetime import datetime
+
+    from sqlalchemy import select
+
+    from app.ingest.hae_parser import NormalizedWorkout
+    from app.ingest.hae_writer import _write_workouts
+    from app.models import Workout
+
+    start = datetime(2026, 7, 27, 8, 18, 24)
+    session.add(Workout(id="garmin-1", source="garmin", start=start,
+                        type="strength_training", duration_s=1151, training_load=5.5))
+    session.commit()
+
+    _write_workouts(session, [NormalizedWorkout(
+        id="hae-x", source="hae", start=start.replace(tzinfo=UTC), end=None,
+        type="Strength Training", duration_s=1151, distance_m=None, kcal=None,
+        avg_hr=None, max_hr=None, raw_json={})])
+    session.commit()
+
+    rows = session.execute(select(Workout)).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].source == "garmin"  # 情報量の多い方が残る
+
+
+def test_garmin_sync_removes_earlier_hae_duplicate(session):
+    """hae が先に入っていた場合は Garmin 取り込み時に消す (届く順序に依存しない)。"""
+    from datetime import datetime
+
+    from sqlalchemy import select
+
+    from app.ingest.garmin_sync import _drop_hae_duplicates
+    from app.models import Workout
+
+    start = datetime(2026, 7, 27, 8, 18, 24)
+    session.add(Workout(id="hae-x", source="hae", start=start,
+                        type="Strength Training", duration_s=1151))
+    session.commit()
+
+    assert _drop_hae_duplicates(session, start) == 1
+    session.commit()
+    assert session.execute(select(Workout)).scalars().all() == []
+
+
+def test_unrelated_workout_is_not_dropped(session):
+    """時刻が離れた別のワークアウトは消さない。"""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.ingest.garmin_sync import _drop_hae_duplicates
+    from app.models import Workout
+
+    start = datetime(2026, 7, 27, 8, 18, 24)
+    session.add(Workout(id="hae-other", source="hae", start=start + timedelta(hours=3),
+                        type="Walking", duration_s=600))
+    session.commit()
+
+    assert _drop_hae_duplicates(session, start) == 0
+    assert len(session.execute(select(Workout)).scalars().all()) == 1
