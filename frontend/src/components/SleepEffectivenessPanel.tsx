@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { FlaskConical, Moon, TrendingDown, TrendingUp } from "lucide-react";
+import { FlaskConical, HelpCircle, Moon, TrendingDown, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import type {
   SleepDriverFactor,
   SleepInterventionOutcome,
   SleepInterventionResult,
+  WorthVerifyingItem,
 } from "../lib/api";
 import { askAi } from "../lib/askAi";
 import { LoadingState } from "./ui/cockpit";
@@ -83,6 +84,34 @@ function driverRows(factors: SleepDriverFactor[]): Row[] {
       direction: f.direction, diff: f.diff, p: f.p, q: f.q, tier: f.tier,
       nLabel: `n${f.n}`,
     }));
+}
+
+/**
+ * 「確かめる価値があるもの」の1行。既存 RowView (確定/示唆の要因) より視覚的に控えめにする:
+ * - opacity を固定で下げ、確定行のように q 値で明るくなることはない
+ * - 効果量 (diff) の数値は出さない。方向 (改善/悪化) だけ見せ、「大きさ」を煽らない
+ * - なぜ検証対象なのか (reason: 着脱夜数 + 少数例の注意) を必ず1行添える
+ */
+function WorthVerifyingRow({ item }: { item: WorthVerifyingItem }) {
+  const good = item.direction === "改善";
+  return (
+    <div className="space-y-0.5 rounded-lg bg-void/20 px-2.5 py-2 text-[11px] opacity-70">
+      <div className="flex items-baseline gap-2">
+        <HelpCircle size={11} className="shrink-0 translate-y-0.5 text-ink-faint" />
+        <span className="min-w-0 flex-1 truncate text-ink-faint">
+          {item.label}
+          <span className="text-ink-faint/70"> → {item.outcome_label}</span>
+        </span>
+        <span className={`shrink-0 text-[9px] font-medium ${good ? "text-prog-300/70" : "text-risk/70"}`}>
+          {good ? "改善方向" : "悪化方向"}
+        </span>
+        <span className="shrink-0 text-[9px] text-ink-faint">
+          着{item.n_did}/外{item.n_didnt}夜
+        </span>
+      </div>
+      <p className="pl-[19px] text-[9px] leading-snug text-ink-faint">{item.reason}</p>
+    </div>
+  );
 }
 
 function RowView({ r }: { r: Row }) {
@@ -227,6 +256,28 @@ export function SleepEffectivenessPanel() {
             <span className="text-[10px] font-semibold text-risk">睡眠を妨げるもの</span>
           </div>
           {hurts.map((r, i) => <RowView key={i} r={r} />)}
+        </div>
+      )}
+
+      {/* 確かめる価値があるもの: 有意性 (tier) には効果の大きさとサンプル数が混ざっており、
+          「効果大×データ薄」(取りに行く価値あり) と「効果小×データ厚」(調べても無駄) が
+          同じ tier に潰れてしまう。ここは前者だけを抜き出した検証候補 (上位3件)。
+          strong (確定済み) は対象外、標準化効果量とデータの薄さで選定・順位付け
+          (詳細は backend/app/scoring/sleep_interventions.py:_worth_verifying)。
+          worth_verifying が空なら (=検証候補なし) セクションごと出さない。 */}
+      {iv?.worth_verifying && iv.worth_verifying.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <HelpCircle size={11} className="text-ink-faint" />
+            <span className="text-[10px] font-semibold text-ink-dim">確かめる価値があるもの</span>
+          </div>
+          <p className="text-[9px] text-ink-faint">
+            少数例では効果が大きく出やすいので、あくまで「もう数夜試して確かめる価値がある」という
+            意味です。効果が確定したわけではありません（確定した要因は上のセクションに出ます）。
+          </p>
+          <div className="space-y-1">
+            {iv.worth_verifying.map((item, i) => <WorthVerifyingRow key={i} item={item} />)}
+          </div>
         </div>
       )}
 

@@ -1017,6 +1017,7 @@ export type SleepInterventionOutcome = {
   direction: "改善" | "悪化";
   n_did?: number; // 暫定シグナルの各群夜数 (preliminary 表示に使う)
   n_didnt?: number;
+  std_effect?: number | null; // 標準化効果量 (Cohen's d 相当)。worth_verifying の選定に使用
 };
 export type SleepInterventionResult = {
   key: string;
@@ -1027,6 +1028,22 @@ export type SleepInterventionResult = {
   primary: SleepInterventionOutcome | null;
   outcomes: SleepInterventionOutcome[];
 };
+// 「確かめる価値があるもの」候補: tier がまだ確定 (strong) していない × 標準化効果量が大きい ×
+// データが薄い (介入群/非介入群の少ない方の夜数) を優先度順に並べたもの。
+// 少数例では効果が大きく出やすい (勝者の呪い) ため、これは「効果が確定した」という意味ではなく
+// あくまで「次に確かめる価値がある」という行動提案。UI でも確定した行より目立たせないこと。
+export type WorthVerifyingItem = {
+  key: string;
+  label: string;
+  outcome: string;
+  outcome_label: string;
+  diff: number;
+  direction: "改善" | "悪化";
+  tier: "suggestive" | "trend" | "weak" | "preliminary";
+  n_did: number;
+  n_didnt: number;
+  reason: string;
+};
 export type SleepInterventionAnalysis = {
   status: "analyzed" | "preliminary" | "accumulating";
   n_nights: number;
@@ -1034,6 +1051,7 @@ export type SleepInterventionAnalysis = {
   reliability?: "high" | "medium" | "low";
   interventions: SleepInterventionResult[];
   suggestion: { text: string; reason: string; kind?: string } | null;
+  worth_verifying?: WorthVerifyingItem[];
 };
 
 export type HabitPaceItem = {
