@@ -1753,6 +1753,38 @@ export type BodyCompDraft = {
 };
 export type BodyCompSample = BodyCompDraft & { id: number; date: string };
 export type BodyCompResponse = { latest: BodyCompSample | null; history: BodyCompSample[] };
+export type BodyMeasurementIn = {
+  date?: string | null;
+  waist_cm: number | null;
+  neck_cm: number | null;
+  chest_cm: number | null;
+  hip_cm: number | null;
+  note?: string | null;
+};
+export type BodyMeasurementSample = {
+  date: string;
+  waist_cm: number | null;
+  neck_cm: number | null;
+  chest_cm: number | null;
+  hip_cm: number | null;
+  note: string | null;
+};
+export type BodyMeasurementDiscrepancy = {
+  bia_pct: number;
+  navy_pct: number;
+  diff_pt: number;
+  status: "close" | "large";
+};
+export type BodyMeasurementResponse = {
+  latest: BodyMeasurementSample | null;
+  whtr: number | null;
+  whtr_status: "good" | "caution" | "high" | null;
+  navy_body_fat_pct: number | null;
+  bia_body_fat_pct: number | null;
+  discrepancy: BodyMeasurementDiscrepancy | null;
+  height_cm: number;
+  sex: string;
+};
 export type BookTaste = {
   total: number;
   seen?: number;
@@ -2315,6 +2347,14 @@ export const api = {
     }),
   bodyCompDelete: (id: number) =>
     request<BodyCompResponse>(`/api/body-composition/${id}`, { method: "DELETE" }),
+  bodyMeasurement: () => request<BodyMeasurementResponse>("/api/body-measurement"),
+  bodyMeasurementHistory: (days = 90) =>
+    request<{ history: BodyMeasurementSample[] }>(`/api/body-measurement/history?days=${days}`),
+  bodyMeasurementPut: (body: BodyMeasurementIn) =>
+    request<BodyMeasurementResponse>("/api/body-measurement", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   journalExtract: (text: string, date?: string) =>
     request<{
       date: string;

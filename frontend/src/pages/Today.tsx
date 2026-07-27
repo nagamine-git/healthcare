@@ -23,6 +23,7 @@ import { LifeSection } from "../components/LifeSection";
 import { SettingsTab } from "../components/SettingsTab";
 import { PhysiqueGapPlan } from "../components/PhysiqueGapPlan";
 import { BodyCompositionPanel } from "../components/BodyCompositionPanel";
+import { BodyMeasurementPanel } from "../components/BodyMeasurementPanel";
 import { AtlasTree } from "../components/AtlasTree";
 import { FitnessTestPanel, FitnessDueBanner } from "../components/FitnessTestPanel";
 import { DistributionPanel } from "../components/DistributionPanel";
@@ -426,6 +427,7 @@ export function TodayPage({ onOpenDebug }: Props) {
         <TrainingStatusStrip />
         <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
         <PhysiqueGapPlan />
+        <BodyMeasurementPanel />
         <BodyCompositionPanel />
         <DistributionPanel />
         <BodyLoadCard />
