@@ -74,3 +74,73 @@ def test_generate_persist_and_idempotent(app_client, session, monkeypatch):
 def test_unknown_workout_404(app_client):
     r = app_client.post("/api/workout-reviews/nope")
     assert r.status_code == 404
+
+
+# --- _gather_context: exercise_sets 有無でコンテキストが分岐する -----------------
+
+
+def _add_strength_workout(session, wid, start, exercise_sets=None):
+    from app.models import Workout
+
+    raw_json = {"activityId": 1} if exercise_sets is None else {
+        "activityId": 1, "exercise_sets": exercise_sets,
+    }
+    session.add(Workout(
+        id=wid, source="garmin", start=start, end=start + timedelta(minutes=15),
+        type="strength_training", duration_s=900, avg_hr=110.0, max_hr=140.0,
+        raw_json=raw_json,
+    ))
+    session.commit()
+
+
+SAMPLE_SETS = {
+    "sets": [
+        {"category": "ROW", "name": None, "reps": 8, "weight_kg": 12.0,
+         "duration_s": 59.3, "start": "2026-07-26T08:09:21.0"},
+        {"category": "ROW", "name": None, "reps": 8, "weight_kg": 12.0,
+         "duration_s": 39.4, "start": "2026-07-26T08:11:24.0"},
+        {"category": "CURL", "name": None, "reps": 6, "weight_kg": 8.0,
+         "duration_s": 24.0, "start": "2026-07-26T08:19:55.0"},
+    ]
+}
+
+
+def test_gather_context_includes_exercise_detail_when_present(app_client, session):
+    """exercise_sets があれば種目単位のボリューム/rep レンジ + 既往情報 + 直近セッションを渡す。"""
+    from app.llm.workout_review import _gather_context
+
+    _add_strength_workout(
+        session, "w-prev", datetime.utcnow() - timedelta(days=3), exercise_sets=SAMPLE_SETS
+    )
+    _add_strength_workout(
+        session, "w-today", datetime.utcnow() - timedelta(hours=1), exercise_sets=SAMPLE_SETS
+    )
+
+    ctx = _gather_context("w-today")
+    assert ctx is not None
+    exercises = ctx["workout"]["exercises"]
+    assert {e["category"] for e in exercises} == {"ROW", "CURL"}
+    row = next(e for e in exercises if e["category"] == "ROW")
+    assert row["set_count"] == 2
+    assert row["rep_range"] == [8, 8]
+    assert row["volume_kg"] == 12.0 * 8 * 2
+
+    assert "user_injury_notes" in ctx
+    assert any("腰" in note for note in ctx["user_injury_notes"])
+
+    assert len(ctx["recent_exercise_sessions"]) == 1
+    assert ctx["recent_exercise_sessions"][0]["exercises"][0]["category"] == "ROW"
+
+
+def test_gather_context_falls_back_when_no_exercise_sets(app_client, session):
+    """exercise_sets が無い (未対応/古いワークアウト) 場合は従来どおりのコンテキストのまま
+    種目情報を捏造しない (workout.exercises / recent_exercise_sessions が乗らない)。"""
+    from app.llm.workout_review import _gather_context
+
+    _add_strength_workout(session, "w-plain", datetime.utcnow() - timedelta(hours=1))
+
+    ctx = _gather_context("w-plain")
+    assert ctx is not None
+    assert "exercises" not in ctx["workout"]
+    assert "recent_exercise_sessions" not in ctx
+    assert "user_injury_notes" not in ctx
