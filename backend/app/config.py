@@ -250,6 +250,12 @@ class Settings(BaseSettings):
     bath_soak_duration_min: int = 12  # 湯船に浸かる時間 (入る=上がる−これ)。10-15分が目安
     bath_temp_c: int = 40  # 推奨湯温 (40-42℃)。受動的加温で寝つき改善 (Haghayegh 2019)
     dinner_to_bed_lead_min: int = 180  # 夕食〜就寝の理想ラグ (消化負荷を避ける)
+    # 高強度運動〜就寝の理想ラグ。就寝直前の高強度は深部体温・交感神経を上げ入眠を妨げる。
+    # (clinical: 誰にでも共通。sleep_drivers の助言文とも共有し二重定義を作らない)
+    exercise_to_bed_lead_min: int = 180
+    # 光を落とす時刻の、就寝からの逆算。夜の強い光はメラトニン分泌を抑制して
+    # 入眠位相を後退させる (clinical)。夕食終わり(180分前)と就寝の中間に置く。
+    dim_light_lead_min: int = 90
     dinner_eat_duration_min: int = 40  # 夕食にかかる時間 (食べ始め=食べ終わり−これ)
     # 夕食の「遅すぎない上限」: 起床からこの時間以内に食べ終える (夜遅い食事は代謝/血糖に悪い
     # = 概日の摂食ミスアライメント; Morris 2015)。就寝逆算とこの絶対上限の早い方を採る。

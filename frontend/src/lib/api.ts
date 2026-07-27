@@ -760,11 +760,17 @@ export type TonightPlan = {
   windows?: { bedtime: SleepWindow; wake: SleepWindow };
   caffeine_cutoff_time?: string;
   dim_light_time?: string;
+  exercise_cutoff_time?: string;
   morning_light?: { start: string; end: string };
   ideal_bedtime?: string;
   habitual_bedtime?: string | null;
+  /** 起床時刻がその日だけの上書きか (既定に戻す導線を出す判断に使う) */
+  wake_overridden?: boolean;
   notes: string[];
 };
+
+/** その夜だけの起床時刻。date は **起床する日**。 */
+export type SleepPlanOverride = { date: string; wake_time: string };
 
 export type ImputedMetric = {
   metric: string;
@@ -2058,6 +2064,18 @@ export const api = {
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
   windDown: () => request<WindDown>("/api/wind-down"),
   meditation: () => request<Meditation>("/api/meditation"),
+  // その夜だけの起床時刻 (date は起床する日)。恒久の既定は putProfile の wake_time。
+  sleepPlanOverride: (date?: string) =>
+    request<{ override: SleepPlanOverride | null }>(
+      `/api/sleep-plan/override${date ? `?date=${date}` : ""}`),
+  sleepPlanOverrideSet: (body: SleepPlanOverride) =>
+    request<{ ok: boolean; override: SleepPlanOverride }>("/api/sleep-plan/override", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  sleepPlanOverrideClear: (date?: string) =>
+    request<{ ok: boolean; deleted: number }>(
+      `/api/sleep-plan/override${date ? `?date=${date}` : ""}`, { method: "DELETE" }),
   exerciseGuide: (name: string) =>
     request<ExerciseGuide>(`/api/exercise-guide?name=${encodeURIComponent(name)}`),
   exerciseGuideGenerate: (name: string) =>

@@ -28,6 +28,34 @@ def _parse_hhmm(s: str) -> time:
     return time(int(h), int(m))
 
 
+def _wake_overrides(dates: tuple[date_type, ...]) -> dict[date_type, time]:
+    """指定日の起床時刻オーバーライド (起床日 → time)。無ければ空 dict。
+
+    ⚠️ 取得に失敗しても**例外を投げない**。``compute_tonight_plan`` は wind_down /
+    meditation / next_action / 通知 / LLM 助言など 11 モジュールが依存する中核なので、
+    ここで落とすと広範囲が壊れる。上書きが読めないだけなら既定値で計画を出す方が良い。
+    """
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import SleepPlanOverride
+
+    out: dict[date_type, time] = {}
+    try:
+        with session_scope() as ses:
+            for d, hhmm in ses.execute(
+                select(SleepPlanOverride.date, SleepPlanOverride.wake_time)
+                .where(SleepPlanOverride.date.in_(dates))
+            ).all():
+                try:
+                    out[d] = _parse_hhmm(hhmm)
+                except (ValueError, AttributeError):
+                    continue  # 壊れた値は無視して既定にフォールバック
+    except Exception:
+        return {}
+    return out
+
+
 def _habitual_phase(target: date_type, *, days: int = 14) -> dict[str, float] | None:
     """直近の実睡眠から習慣的な就寝時刻(h)・睡眠時間(min)を median 推定。"""
     from sqlalchemy import select
@@ -86,14 +114,30 @@ def compute_tonight_plan(
     prof = resolve_profile()
     target_sleep_min = prof.sleep_need_min
 
-    wake_t = _parse_hhmm(prof.wake_time)
+    default_wake_t = _parse_hhmm(prof.wake_time)
     # 通常は wake = target + 1 day (今日の夜→明朝)。ただし日付境界が 00:00 な一方
     # 起床は朝なので、深夜0時台〜起床前に呼ばれた時は「まだ target 自身の朝を迎えて
     # いない」= 前夜からの継続中。その場合は target 自身の朝を wake にする。
-    today_wake_dt = datetime.combine(target, wake_t, tz)
-    in_progress_night = now_dt < today_wake_dt
-    wake_dt = today_wake_dt if in_progress_night else today_wake_dt + timedelta(days=1)
+    #
+    # 日別オーバーライド (SleepPlanOverride) は **起床日** をキーに持つので、候補日ごとに
+    # 「その日の起床時刻 (上書き優先)」を当て、now を過ぎていない最初のものを採用する。
+    # こうすると上書きが無いときは従来の in_progress_night 判定と完全に一致し、
+    # 上書きで起床が前後しても「次に迎える起床」を正しく選べる (過ぎた上書きは自然に無視)。
+    overrides = _wake_overrides((target, target + timedelta(days=1)))
+    wake_dt = None
+    wake_overridden = False
+    for cand in (target, target + timedelta(days=1)):
+        t = overrides.get(cand) or default_wake_t
+        dt = datetime.combine(cand, t, tz)
+        if dt > now_dt:
+            wake_dt = dt
+            wake_overridden = cand in overrides
+            break
+    if wake_dt is None:  # 両日とも過ぎている (異常系) — 従来どおり翌日の既定へ
+        wake_dt = datetime.combine(target, default_wake_t, tz) + timedelta(days=1)
     ideal_bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
+    # 夕食の上限に使う「**その朝**の起床」(次に迎える起床ではない)。上書きがあれば尊重する。
+    morning_wake_dt = datetime.combine(target, overrides.get(target) or default_wake_t, tz)
 
     notes: list[str] = []
     # 実睡眠データから「習慣的な就寝」を取り、理想へ一気に飛ばさず realistic に前倒し。
@@ -161,7 +205,7 @@ def compute_tonight_plan(
         )
 
     # 夕食: 就寝3h前 と「起床+13h(遅すぎない上限)」の早い方を食べ終わりに。遅い夕食を回避。
-    healthy_latest = today_wake_dt + timedelta(hours=s.meal_last_h_after_wake)
+    healthy_latest = morning_wake_dt + timedelta(hours=s.meal_last_h_after_wake)
     dinner_end_dt = min(bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min), healthy_latest)
     dinner_start_dt = dinner_end_dt - timedelta(minutes=s.dinner_eat_duration_min)
     dinner_capped_by_clock = healthy_latest < bedtime_dt - timedelta(minutes=s.dinner_to_bed_lead_min)
@@ -195,7 +239,9 @@ def compute_tonight_plan(
     # 科学的に大事な timing (厳選): 朝の光浴(概日リズム最強レバー) / カフェイン最終(就寝6h前) /
     # 照明を落とす(就寝2h前、夜光のメラトニン抑制回避)。
     caffeine_cutoff_dt = bedtime_dt - timedelta(hours=s.caffeine_cutoff_hours_before_bed)
-    dim_light_dt = bedtime_dt - timedelta(minutes=120)
+    # ラグは config を正とする (sleep_drivers の助言文と同じ値を共有し食い違いを作らない)
+    dim_light_dt = bedtime_dt - timedelta(minutes=s.dim_light_lead_min)
+    exercise_cutoff_dt = bedtime_dt - timedelta(minutes=s.exercise_to_bed_lead_min)
     morning_light = {
         "start": wake_dt.strftime("%H:%M"),
         "end": (wake_dt + timedelta(minutes=30)).strftime("%H:%M"),
@@ -220,7 +266,10 @@ def compute_tonight_plan(
         # 科学的に大事な timing (厳選)
         "caffeine_cutoff_time": caffeine_cutoff_dt.strftime("%H:%M"),  # これ以降カフェイン断ち
         "dim_light_time": dim_light_dt.strftime("%H:%M"),  # これ以降 照明↓・ブルーライト減
+        "exercise_cutoff_time": exercise_cutoff_dt.strftime("%H:%M"),  # これ以降 高強度運動を避ける
         "morning_light": morning_light,  # 起床後すぐ屋外光 (概日リズム同調)
+        # 起床時刻がその日だけの上書きか (UI で「既定に戻す」を出す判断に使う)
+        "wake_overridden": wake_overridden,
         "target_sleep_min": target_sleep_min,
         "estimated_sleep_min": sleep_min,
         "compressed": compressed,

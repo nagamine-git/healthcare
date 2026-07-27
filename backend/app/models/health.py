@@ -472,6 +472,24 @@ class SleepInterventionLog(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class SleepPlanOverride(Base):
+    """その夜だけの起床時刻。恒久の既定値 (profile.wake_time) を日単位で上書きする。
+
+    date = **起床する日** (就寝日ではない)。``compute_tonight_plan`` は既に
+    「深夜0時台に呼ばれたら target 自身の朝が起床」という日跨ぎ判定を持っているので、
+    その判定後の起床日時から日付を取って引き当てれば、日跨ぎの扱いが既存ロジックと
+    自動的に一致する。
+
+    日付キーなので過ぎれば自然に効かなくなり、既定値へ戻る (掃除が要らない)。
+    """
+
+    __tablename__ = "sleep_plan_override"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    wake_time: Mapped[str] = mapped_column(String(5))  # "HH:MM"
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class SpeechSession(Base):
     """speech-coach から取り込む日次の発話練習サマリ (JST 日付ごと)。"""
 

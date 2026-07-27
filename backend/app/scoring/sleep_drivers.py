@@ -333,11 +333,16 @@ def _anchors(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     mid = mids[len(mids) // 2]      # 睡眠中点 (JST, 早朝は+24で連続化済)
     dur = durs[len(durs) // 2]      # 睡眠時間 (分)
     bedtime = mid - dur / 120.0     # 就寝 = 中点 - 半分
+    # 締切のラグは config を正とする (今夜の計画 sleep_plan.py と同じ値を使い、
+    # 「助言では3h前と言うのに計画では別の時刻」という食い違いを作らない)。
+    s = get_settings()
+    caffeine_h = s.caffeine_cutoff_hours_before_bed
+    exercise_h = s.exercise_to_bed_lead_min / 60.0
     return {
         "bedtime": _hhmm(bedtime),
-        "caffeine_cutoff": _hhmm(bedtime - 6),   # カフェイン半減期 ~5-6h
-        "exercise_cutoff": _hhmm(bedtime - 3),   # 就寝3h前以降の高強度は妨げる
-        "alcohol_cutoff": _hhmm(bedtime - 3),
+        "caffeine_cutoff": _hhmm(bedtime - caffeine_h),
+        "exercise_cutoff": _hhmm(bedtime - exercise_h),
+        "alcohol_cutoff": _hhmm(bedtime - exercise_h),
         "dur_h": round(dur / 60, 1),
     }
 

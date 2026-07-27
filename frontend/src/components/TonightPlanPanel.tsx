@@ -1,8 +1,74 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "../lib/api";
 import type { SleepWindow, TonightPlan } from "../lib/api";
 
 type Props = {
   plan?: TonightPlan;
 };
+
+/** 「起床する日」= 次に迎える起床の日付 (JST)。plan.sleep_now や深夜帯の判定は
+ *  backend が済ませているので、ここでは wake が今日の朝か翌朝かだけを見る。 */
+function wakeDateISO(plan: TonightPlan): string {
+  const now = new Date();
+  const [h, m] = plan.wake.split(":").map(Number);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+  // 起床時刻がすでに過ぎていれば翌日の朝
+  const d = today > now ? today : new Date(today.getTime() + 24 * 3600_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 起床時刻を「その日だけ」変える。恒久の既定は設定タブの起床時刻。 */
+function WakeEditor({ plan }: { plan: TonightPlan }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(plan.wake);
+  const date = wakeDateISO(plan);
+  const done = () => {
+    // 起床時刻は今夜の計画・呼吸法・通知・いまコレ等が参照するので広めに再取得する
+    for (const k of ["today", "wind-down", "meditation", "next-action", "timeline"]) {
+      qc.invalidateQueries({ queryKey: [k] });
+    }
+    setOpen(false);
+  };
+  const save = useMutation({
+    mutationFn: () => api.sleepPlanOverrideSet({ date, wake_time: value }),
+    onSuccess: done,
+  });
+  const clear = useMutation({
+    mutationFn: () => api.sleepPlanOverrideClear(date),
+    onSuccess: done,
+  });
+
+  if (!open) {
+    return (
+      <button onClick={() => { setValue(plan.wake); setOpen(true); }}
+        className="press mt-2 text-[10px] text-ink-faint underline">
+        {plan.wake_overridden ? "起床時刻を変更中 (タップで編集)" : "この日だけ起床時刻を変える"}
+      </button>
+    );
+  }
+  const busy = save.isPending || clear.isPending;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-void/40 p-2">
+      <span className="text-[10px] text-ink-faint">{date} の起床</span>
+      <input type="time" value={value} onChange={(e) => setValue(e.target.value)}
+        className="rounded bg-hull px-2 py-1 text-[12px] tabular-nums text-ink" />
+      <button onClick={() => save.mutate()} disabled={busy}
+        className="press rounded bg-act-500/20 px-2 py-1 text-[11px] text-act-300 disabled:opacity-50">
+        この日だけ適用
+      </button>
+      {plan.wake_overridden && (
+        <button onClick={() => clear.mutate()} disabled={busy}
+          className="press rounded px-2 py-1 text-[11px] text-ink-dim disabled:opacity-50">
+          既定に戻す
+        </button>
+      )}
+      <button onClick={() => setOpen(false)} className="press px-1 text-[11px] text-ink-faint">閉じる</button>
+    </div>
+  );
+}
 
 function fmtHm(min: number): string {
   const h = Math.floor(min / 60);
@@ -47,8 +113,11 @@ export function TonightPlanPanel({ plan }: Props) {
           hint={sleepNow ? `目安 ${plan.bedtime} 経過` : plan.compressed ? "圧縮中" : "目標"}
           accent={sleepNow ? "rose" : plan.compressed ? "amber" : "emerald"}
         />
-        <Slot label="起床" time={plan.wake} range={plan.windows?.wake} hint={sleepNow ? "今日の朝" : "次の日"} />
+        <Slot label="起床" time={plan.wake} range={plan.windows?.wake}
+          hint={plan.wake_overridden ? "この日だけ変更中" : sleepNow ? "今日の朝" : "次の日"}
+          accent={plan.wake_overridden ? "amber" : undefined} />
       </div>
+      <WakeEditor plan={plan} />
       {/* 科学的に大事な timing (厳選) */}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-dim">
         {plan.morning_light && (
@@ -57,6 +126,10 @@ export function TonightPlanPanel({ plan }: Props) {
         )}
         {plan.caffeine_cutoff_time && (
           <span>☕ カフェイン最終 <b className="tabular-nums text-act-300">{plan.caffeine_cutoff_time}</b>
+            <span className="text-ink-faint"> まで</span></span>
+        )}
+        {plan.exercise_cutoff_time && (
+          <span>🏃 高強度運動 <b className="tabular-nums text-act-300">{plan.exercise_cutoff_time}</b>
             <span className="text-ink-faint"> まで</span></span>
         )}
         {plan.dim_light_time && (

@@ -46,6 +46,7 @@ from app.api import schedule as schedule_api
 from app.api import screentime as screentime_api
 from app.api import sleep_drivers as sleep_drivers_api
 from app.api import sleep_intervention as sleep_intervention_api
+from app.api import sleep_plan_override as sleep_plan_override_api
 from app.api import speech as speech_api
 from app.api import tide as tide_api
 from app.api import timeline as timeline_api
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(identity_api.router)
     app.include_router(wind_down_api.router)
     app.include_router(meditation_api.router)
+    app.include_router(sleep_plan_override_api.router)
     app.include_router(debug.router)
     return app
 

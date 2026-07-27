@@ -76,3 +76,74 @@ def test_sleep_now_false_once_past_wake_time(db_engine):
     plan = compute_tonight_plan(TARGET, now=now)
     assert plan["sleep_now"] is False
     assert plan["wake"] == "06:30"  # 翌日 (target+1) の朝
+
+
+# ----- 日別の起床時刻オーバーライド -----
+
+
+def _put_override(session, d: date, hhmm: str) -> None:
+    from app.models import SleepPlanOverride
+
+    session.add(SleepPlanOverride(date=d, wake_time=hhmm, updated_at=datetime(2026, 7, 20, 12, 0)))
+    session.commit()
+
+
+def test_override_shifts_wake_and_bedtime(session):
+    """その日だけの起床時刻が計画全体を動かす (就寝も締切も追随する)。"""
+    base = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+    # 既定では起床は翌朝 (TARGET+1)
+    _put_override(session, TARGET + timedelta(days=1), "05:00")
+    got = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert base["wake"] != got["wake"]
+    assert got["wake"] == "05:00"
+    assert got["wake_overridden"] is True
+    # 逆算されるものが前倒しになる (就寝・カフェイン締切とも)
+    assert got["ideal_bedtime"] < base["ideal_bedtime"]
+    assert got["caffeine_cutoff_time"] != base["caffeine_cutoff_time"]
+
+
+def test_override_keyed_by_wake_date_across_midnight(session):
+    """深夜0時台に呼ぶと「その朝」が起床日。オーバーライドはその日付で引かれる。
+
+    既存の in_progress_night 判定と引き当てキーが一致していることの回帰テスト。
+    """
+    # TARGET 当日の朝を上書き。深夜 1:00 に呼べば「まだ TARGET の朝を迎えていない」ので効く
+    _put_override(session, TARGET, "05:00")
+    got = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 1, 0, tzinfo=JST))
+    assert got["wake"] == "05:00"
+    assert got["wake_overridden"] is True
+
+
+def test_past_override_is_ignored(session):
+    """起床時刻を過ぎた上書きは無視され、次の起床 (既定) が使われる。"""
+    _put_override(session, TARGET, "05:00")
+    # 09:00 時点では TARGET 05:00 は過ぎている → 翌朝の既定 (06:30) を見る
+    got = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 9, 0, tzinfo=JST))
+    assert got["wake"] == "06:30"
+    assert got["wake_overridden"] is False
+
+
+def test_no_override_keeps_default(session):
+    got = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+    assert got["wake"] == "06:30"
+    assert got["wake_overridden"] is False
+
+
+def test_cutoff_times_are_derived_from_bedtime(session):
+    """追加した逆算項目が bedtime から正しい差分になっていること。"""
+    from app.config import get_settings
+
+    got = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+    s = get_settings()
+
+    def _mins(hhmm: str) -> int:
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+
+    bed = _mins(got["bedtime"])
+    # 日跨ぎを吸収するため mod 1440 で比較する
+    assert (bed - _mins(got["caffeine_cutoff_time"])) % 1440 == int(
+        s.caffeine_cutoff_hours_before_bed * 60)
+    assert (bed - _mins(got["exercise_cutoff_time"])) % 1440 == s.exercise_to_bed_lead_min
+    assert (bed - _mins(got["dim_light_time"])) % 1440 == s.dim_light_lead_min
