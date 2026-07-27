@@ -15,6 +15,7 @@ from app.api import atlas as atlas_api
 from app.api import becoming as becoming_api
 from app.api import body_comp as body_comp_api
 from app.api import body_distribution as body_distribution_api
+from app.api import body_measurement as body_measurement_api
 from app.api import bodyload as bodyload_api
 from app.api import caffeine as caffeine_api
 from app.api import checkin as checkin_api
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(journal_api.router)
     app.include_router(body_distribution_api.router)
     app.include_router(body_comp_api.router)
+    app.include_router(body_measurement_api.router)
     app.include_router(atlas_api.router)
     app.include_router(exercise_api.router)
     app.include_router(consult_api.router)

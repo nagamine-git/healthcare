@@ -832,6 +832,26 @@ class BodyCompositionSample(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class BodyMeasurement(Base):
+    """メジャーによる周径測定 (ウエスト/首/胸/ヒップ)。
+
+    体重・体脂肪率(BIA)だけでは測定誤差が大きい(BIA は ±3-5%、体水分の日内変動に
+    強く影響される)。周径は測定誤差が小さく体水分にも左右されないため、WHtR
+    (ウエスト身長比) や米海軍式体脂肪率 (scoring/body_measurement.py) の入力として
+    独立した2本目の評価軸になる。日付ごとに 1 件 upsert。
+    """
+
+    __tablename__ = "body_measurement"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    waist_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    neck_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chest_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hip_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class AssetHolding(Base):
     """資産バケット(MoneyForward から転記)。目標配分に対する売買リバランスに使う。
 
