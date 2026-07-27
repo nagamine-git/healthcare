@@ -825,6 +825,32 @@ export type SleepDriverState = {
   recommendations?: SleepRecommendation[];
 };
 
+// 昨夜の睡眠評価 (成分ごとの良好/低い判定 + 改善点)。GET /api/sleep/last-night
+export type SleepQualityComponent = {
+  key: "deep" | "rem" | "efficiency" | "awake" | "total";
+  label: string;
+  minutes: number | null;
+  pct: number | null;
+  status: "good" | "low" | "high";
+  reference: string;
+};
+export type SleepQualityImprovement = {
+  text: string;
+  why: string;
+  basis: "personal" | "general";
+  component: string;
+};
+export type LastNight = {
+  date: string;
+  available: boolean;
+  sleep_score?: number | null;
+  total_min?: number;
+  verdict?: "good" | "mixed" | "poor";
+  headline?: string;
+  components?: SleepQualityComponent[];
+  improvements?: SleepQualityImprovement[];
+};
+
 // 種目の詳しいフォームガイド (タップで LLM 生成 → キャッシュ)。
 export type ExerciseGuide = {
   cached: boolean;
@@ -2062,6 +2088,7 @@ export const api = {
   forecast: () => request<ForecastState>("/api/forecast"),
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
+  lastNight: () => request<LastNight>("/api/sleep/last-night"),
   windDown: () => request<WindDown>("/api/wind-down"),
   meditation: () => request<Meditation>("/api/meditation"),
   // その夜だけの起床時刻 (date は起床する日)。恒久の既定は putProfile の wake_time。

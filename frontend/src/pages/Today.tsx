@@ -39,6 +39,7 @@ import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
 import { SleepEffectivenessPanel } from "../components/SleepEffectivenessPanel";
 import { WindDownCard } from "../components/WindDownCard";
+import { LastNightPanel } from "../components/LastNightPanel";
 import { MeditationCard } from "../components/MeditationCard";
 import { SleepInterventionCard } from "../components/SleepInterventionCard";
 import { SleepInterventionHistory } from "../components/SleepInterventionHistory";
@@ -371,6 +372,9 @@ export function TodayPage({ onOpenDebug }: Props) {
       {/* ============ タブ: 睡眠 ============ */}
       {tab === "sleep" && (
       <div className="space-y-3">
+        {/* 昨夜どうだったか (他のカードは全て「今夜どうするか」なのでこれだけ振り返り)。
+            成分ごとの良好/低いを見せ、崩れている成分への改善点を出す (本人データ優先/一般論フォールバック)。 */}
+        <LastNightPanel />
         {/* 就寝前の一手: 状態から「すぐ寝ろ or この呼吸法」を出し分ける (押し付けない)。
             呼吸法 (整える/操作する) と瞑想 (観る/操作しない) は別モデルなのでカードも分ける。 */}
         <WindDownCard />
