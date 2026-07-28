@@ -66,3 +66,36 @@ def test_same_key_different_date_is_separate(app_client, monkeypatch):
 def test_invalid_date_400(app_client):
     r = app_client.post("/api/highlight-reviews", json={"date": "not-a-date", "event_key": "x", "label": "x"})
     assert r.status_code == 400
+
+
+def test_force_regeneration_is_rate_limited(app_client, monkeypatch):
+    """再分析 (force) には日次上限がかかる。初回生成は上限を消費しない。
+
+    force は必ず LLM を1回叩くので、UI のボタンから無制限に叩けると費用が青天井になる。
+    アドバイス再生成と同じ上限値 (llm_max_regenerations_per_day) を機能別枠で使う。
+    """
+    calls = {"n": 0}
+    _mock_llm(monkeypatch, calls)
+    from app.config import get_settings
+    from app.scoring.timewindow import app_today
+
+    limit = get_settings().llm_max_regenerations_per_day
+    day = app_today().isoformat()
+    body = {"date": day, "event_key": "07:00|筋トレ", "label": "筋トレ", "time_jst": "07:00"}
+
+    # 初回生成 (上限は消費しない)
+    assert app_client.post("/api/highlight-reviews", json=body).status_code == 200
+    assert calls["n"] == 1
+
+    # 上限まで再分析できる
+    for _ in range(limit):
+        assert app_client.post("/api/highlight-reviews", json={**body, "force": True}).status_code == 200
+    assert calls["n"] == 1 + limit
+
+    # 超過すると 429 で、LLM は叩かれない
+    over = app_client.post("/api/highlight-reviews", json={**body, "force": True})
+    assert over.status_code == 429
+    assert calls["n"] == 1 + limit
+
+    # 上限に達しても、保存済みの取得 (force なし) は従来どおり通る
+    assert app_client.post("/api/highlight-reviews", json=body).status_code == 200

@@ -2241,6 +2241,8 @@ export const api = {
     label: string;
     time_jst?: string;
     sub?: string;
+    /** true で保存済みを無視して作り直す (再分析)。既定は保存済みをそのまま返す */
+    force?: boolean;
   }) =>
     request<HighlightReviewItem>("/api/highlight-reviews", {
       method: "POST",

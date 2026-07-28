@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Armchair, Brain, ChevronDown, ClipboardCheck, Coffee,
-  Dumbbell, Home, ListChecks, MapPin, Moon, Sparkles, Sunrise,
+  Dumbbell, Home, ListChecks, MapPin, Moon, RefreshCw, Sparkles, Sunrise,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { DayStorySegment, DayTimelineData, HighlightReviewsResp } from "../lib/api";
@@ -179,22 +179,29 @@ export function DayDigest({ segments, t, originJst, nowH }: {
                     <span className="text-[13px] text-ink">{e.text}</span>
                     {e.sub && <span className="ml-1.5 text-[11px] text-ink-faint">{e.sub}</span>}
                   </span>
-                  {!review && (
-                    <button
-                      aria-label={`${e.text} をAI評価`}
-                      onClick={() =>
-                        gen.mutate({ date: dateIso, event_key: key, label: e.text, time_jst: when, sub: e.sub })
-                      }
-                      disabled={gen.isPending}
-                      className="shrink-0 p-1 text-ink-faint transition hover:text-act-300 active:scale-90 disabled:opacity-40"
-                    >
-                      {pendingThis ? (
-                        <span className="text-[10px]">評価中…</span>
-                      ) : (
-                        <Sparkles size={12} />
-                      )}
-                    </button>
-                  )}
+                  {/* 評価済みでもボタンを残す。評価ロジックや取り込むデータ (種目/rep 等) が
+                      増えたとき、保存済みの古い評価がそのまま残り続けてしまうため。
+                      force=true で作り直す (通常のタップは保存済みをそのまま返す)。 */}
+                  <button
+                    aria-label={review ? `${e.text} を再分析` : `${e.text} をAI評価`}
+                    title={review ? "再分析" : "AI評価"}
+                    onClick={() =>
+                      gen.mutate({
+                        date: dateIso, event_key: key, label: e.text,
+                        time_jst: when, sub: e.sub, force: Boolean(review),
+                      })
+                    }
+                    disabled={gen.isPending}
+                    className="shrink-0 p-1 text-ink-faint transition hover:text-act-300 active:scale-90 disabled:opacity-40"
+                  >
+                    {pendingThis ? (
+                      <span className="text-[10px]">評価中…</span>
+                    ) : review ? (
+                      <RefreshCw size={12} />
+                    ) : (
+                      <Sparkles size={12} />
+                    )}
+                  </button>
                 </div>
                 {review && (
                   <p

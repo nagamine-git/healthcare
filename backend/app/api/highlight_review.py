@@ -8,13 +8,37 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from app.config import get_settings
 from app.db import session_scope
-from app.models import HighlightReview
+from app.models import HighlightReview, LlmRegenLog
 from app.scoring.timewindow import app_today
 
 router = APIRouter()
+
+# 「再分析」(既存評価の force 再生成) の日次上限に使う識別子。
+# workout_review と同じ仕組みだが、機能ごとに別枠で数える (LlmRegenLog.feature で分離)。
+_REGEN_FEATURE = "highlight_review"
+
+
+def _check_regen_quota(session) -> None:
+    """再分析の日次上限。超過なら 429。
+
+    force 再生成は必ず LLM を1回叩くので、UI から無制限に叩けると費用が青天井になる。
+    アドバイス再生成 (llm_max_regenerations_per_day) と同じ上限値を流用する。
+    """
+    settings = get_settings()
+    count = session.execute(
+        select(func.count(LlmRegenLog.id)).where(
+            LlmRegenLog.feature == _REGEN_FEATURE, LlmRegenLog.date == app_today()
+        )
+    ).scalar()
+    if count and count >= settings.llm_max_regenerations_per_day:
+        raise HTTPException(
+            status_code=429,
+            detail=f"本日の再分析の上限 ({settings.llm_max_regenerations_per_day}回) に達しました。",
+        )
 
 
 def _to_dict(r: HighlightReview) -> dict[str, Any]:
@@ -63,6 +87,11 @@ async def create_review(body: HighlightReviewIn) -> dict[str, Any]:
         ).scalars().first()
         if existing is not None and not body.force:
             return _to_dict(existing)
+        # 再分析 (既存を作り直す force) は LLM を必ず1回叩くので日次上限をかける。
+        # 初回生成は対象外 (それが無いと評価そのものが得られない)。
+        # workout_review と同じ仕組みだが LlmRegenLog.feature で別枠に数える。
+        if existing is not None:
+            _check_regen_quota(session)
 
     from app.llm.highlight_review import generate_review
 
@@ -80,6 +109,9 @@ async def create_review(body: HighlightReviewIn) -> dict[str, Any]:
         if row is None:
             row = HighlightReview(date=target, event_key=body.event_key, text=got["text"])
             session.add(row)
+        else:
+            # 既存を作り直した = 再分析。上限カウントを消費する (初回生成は数えない)。
+            session.add(LlmRegenLog(feature=_REGEN_FEATURE, date=app_today()))
         row.text = got["text"]
         row.tone = got["tone"]
         row.model = got.get("model")
