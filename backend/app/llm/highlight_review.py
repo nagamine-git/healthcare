@@ -31,6 +31,11 @@ _SYSTEM = """\
 - 睡眠イベント: 睡眠時間が筋合成に足りているか (7h未満は逆風)。就寝時刻の乱れ。
 - 運動イベント: 筋肥大に効く刺激か。増量期の有酸素は心肺維持 (短時間) ならOK、
   長時間ならカロリー赤字リスクを指摘。筋トレ間隔 (days_since_strength) も見る。
+- **``workout_measured.exercises`` があるときは、時間や心拍ではなく種目に踏み込む**:
+  どの種目のセット数・rep・重量・ボリュームが目標に対して足りないかを名指しする。
+  「19分で短い」のような全体時間だけの指摘で終わらせない (種目が分かっているのに
+  表面的な評価をするのは情報の無駄遣い)。無い場合のみ従来どおり全体指標で評価する。
+  腰の既往があるためヒンジ系の高重量は勧めない (安全側に倒す)。
 - 集中/家事イベント: 座位連続や食事タイミングへの影響。NEAT は肯定。
 - 体調記録イベント: 記録習慣は肯定しつつ、数値 (筋肉痛/活力) から回復状態を読み解く。
 - 改善点は**1つだけ**、次に取る行動として具体的に。良ければ素直に褒める。
@@ -129,11 +134,21 @@ def _workout_detail(target: date_type, time_jst: str | None) -> dict[str, Any] |
             ).scalars().first()
             if w is None:
                 return None
-            return {
+            out = {
                 "type": w.type, "duration_min": round((w.duration_s or 0) / 60),
                 "avg_hr": w.avg_hr, "max_hr": w.max_hr, "training_load": w.training_load,
                 "kcal": w.kcal,
             }
+            # 筋トレは種目・rep・重量まで渡す。時間と心拍だけでは
+            # 「19分・平均心拍99bpm」のような表面的な評価しかできず、
+            # 「どの種目のボリュームが足りないか」に踏み込めない。
+            # 抽出/集約は workout_review と**同じ関数を再利用**する (定義を二重に持たない)。
+            from app.llm.workout_review import _extract_exercise_sets, _summarize_exercise_sets
+
+            ex = _summarize_exercise_sets(_extract_exercise_sets(w.raw_json))
+            if ex:
+                out["exercises"] = ex
+            return out
     except Exception:
         return None
 
