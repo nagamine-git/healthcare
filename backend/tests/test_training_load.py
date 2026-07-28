@@ -64,10 +64,16 @@ def test_parse_sets_reads_grams_and_bodyweight():
         {"category": "PUSH_UP", "reps": 12, "maxWeight": 0, "sets": 1},
         {"category": "CORE", "subCategory": "KNEELING_AB_WHEEL", "reps": 30, "maxWeight": 0},
     ]}
-    got = _parse_sets(raw)
-    assert {"label": "ルーマニアンデッドリフト", "weight_kg": 8.0, "reps": 11} in got
-    assert {"label": "腕立て", "weight_kg": 0.0, "reps": 12} in got
-    assert {"label": "アブローラー", "weight_kg": 0.0, "reps": 30} in got
+    # dict 完全一致で見ない (total_reps/sets のような診断フィールドの追加で壊れるため、
+    # 検証したい値だけを取り出して比べる)
+    got = {r["label"]: r for r in _parse_sets(raw)}
+    for label, weight, reps in (
+        ("ルーマニアンデッドリフト", 8.0, 11),
+        ("腕立て", 0.0, 12),
+        ("アブローラー", 0.0, 30),
+    ):
+        assert got[label]["weight_kg"] == weight
+        assert got[label]["reps"] == reps  # sets=1 (or 未指定) なので合計=1セット分
 
 
 def test_bodyweight_progresses_by_reps_not_weight():
@@ -81,3 +87,68 @@ def test_bodyweight_progresses_by_reps_not_weight():
         history=[{"date": date(2026, 7, 6), "weight_kg": 0.0, "reps": 25}], today=TODAY, starting_weight=None
     )
     assert "難" in hard["basis"] or "変" in hard["basis"]
+
+
+# ----- summarizedExerciseSets の reps は「全セット合計」-----
+
+
+def test_parse_sets_divides_total_reps_by_set_count():
+    """Garmin の reps は種目の全セット合計。1セットあたりに割って返すこと。
+
+    回帰テスト: 割らずに閾値 (_TARGET_REPS=10 / _OVERSHOOT_REPS=15 は **1セットあたり**)
+    と比べていたため、「3セットこなす = 合計が閾値を超える」だけで毎回「軽すぎ」と
+    誤判定されていた。実際 12kg×26rep(3セット=約8.7回/セット) が「大幅超過」とされ
+    16kg へ昇量された。腰の既往がある中で過大な重量を処方しかねない。
+    """
+    from app.scoring.training_load import _parse_sets
+
+    raw = {"summarizedExerciseSets": [
+        {"category": "SQUAT", "subCategory": "GOBLET_SQUAT",
+         "reps": 39, "sets": 3, "maxWeight": 8000},
+    ]}
+    (row,) = _parse_sets(raw)
+    assert row["reps"] == 13          # 39 / 3 セット
+    assert row["total_reps"] == 39    # 元の合計も残す
+    assert row["sets"] == 3
+    assert row["weight_kg"] == 8.0    # maxWeight はグラム
+
+
+def test_on_target_volume_does_not_trigger_overshoot_upgrade():
+    """目標どおり (8-10rep×3セット) こなしただけで昇量しないこと。"""
+    from datetime import date, timedelta
+
+    from app.scoring.training_load import _parse_sets, suggest_for_exercise
+
+    raw = {"summarizedExerciseSets": [
+        # 12kg を 3セット合計26回 = 約8.7回/セット。目標 8-10 の範囲内
+        {"category": "ROW", "subCategory": None, "reps": 26, "sets": 3, "maxWeight": 12000},
+    ]}
+    (row,) = _parse_sets(raw)
+    today = date(2026, 7, 28)
+    out = suggest_for_exercise(
+        history=[{"date": today - timedelta(days=2), **row}], today=today,
+        starting_weight=None,
+    )
+    # 12kg 据え置き (16kg へ跳ね上げない)
+    assert out["suggested_weight_kg"] == 12.0
+    assert "大幅超過" not in out["basis"]
+
+
+def test_genuine_overshoot_still_upgrades():
+    """本当に軽すぎる場合 (1セットあたりが閾値超) は従来どおり昇量する。"""
+    from datetime import date, timedelta
+
+    from app.scoring.training_load import _parse_sets, suggest_for_exercise
+
+    raw = {"summarizedExerciseSets": [
+        # 8kg を 3セット合計60回 = 20回/セット。明確に軽すぎ
+        {"category": "CURL", "subCategory": None, "reps": 60, "sets": 3, "maxWeight": 8000},
+    ]}
+    (row,) = _parse_sets(raw)
+    today = date(2026, 7, 28)
+    out = suggest_for_exercise(
+        history=[{"date": today - timedelta(days=2), **row}], today=today,
+        starting_weight=None,
+    )
+    assert out["suggested_weight_kg"] > 8.0
+    assert "大幅超過" in out["basis"]

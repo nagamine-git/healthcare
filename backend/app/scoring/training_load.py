@@ -54,16 +54,31 @@ def _parse_sets(raw: dict[str, Any]) -> list[dict[str, Any]]:
 
     maxWeight は **グラム**単位 (8000=8kg)。0/欠損は自重として weight_kg=0 で残す
     (自重も回数で漸進を追うため、以前のように捨てない)。
+
+    ⚠️ **``reps`` は種目の全セット合計**で、``sets`` にセット数が入っている
+    (実データ: ゴブレットスクワット reps=39 / sets=3 = 1セット13回)。
+    漸進判定の閾値 (_TARGET_REPS / _OVERSHOOT_REPS) は **1セットあたり** の rep なので、
+    ここで割って揃えないと「3セットこなす = 合計が閾値を超える」だけで毎回
+    「軽すぎ」と誤判定され、目標どおりやっているのに昇量し続ける
+    (実際 12kg×26rep(3セット=約8.7回) が "大幅超過" と判定され 16kg へ上げられた)。
     """
     out: list[dict[str, Any]] = []
     for st in raw.get("summarizedExerciseSets") or []:
         label = _label_for(st.get("category"), st.get("subCategory"))
-        reps = int(st.get("reps") or 0)
-        if not label or reps <= 0:
+        total_reps = int(st.get("reps") or 0)
+        if not label or total_reps <= 0:
             continue
+        set_count = int(st.get("sets") or 0) or 1
+        per_set_reps = max(1, round(total_reps / set_count))
         mw = st.get("maxWeight")
         weight_kg = round(float(mw) / 1000.0, 1) if mw else 0.0
-        out.append({"label": label, "weight_kg": weight_kg, "reps": reps})
+        out.append({
+            "label": label,
+            "weight_kg": weight_kg,
+            "reps": per_set_reps,       # 判定に使うのは 1 セットあたり
+            "total_reps": total_reps,   # 表示・デバッグ用に元の合計も残す
+            "sets": set_count,
+        })
     return out
 
 
@@ -125,11 +140,17 @@ def suggest_for_exercise(
         if nw > lw:
             return {
                 "suggested_weight_kg": nw, "suggested_reps": "8-10",
-                "basis": f"{lw:g}kg×{last_reps}rep (目標 {_TARGET_REPS} を大幅超過) — 軽すぎるため即昇量",
+                "basis": (
+                    f"{lw:g}kg×{last_reps}rep/セット (目標 {_TARGET_REPS} を大幅超過) "
+                    "— 軽すぎるため即昇量"
+                ),
             }
         return {
             "suggested_weight_kg": lw, "suggested_reps": f"{last_reps}+",
-            "basis": f"{lw:g}kg×{last_reps}rep だが手持ち最大 — 片手/テンポ/難種目で強度を上げる",
+            "basis": (
+                f"{lw:g}kg×{last_reps}rep/セット だが手持ち最大 "
+                "— 片手/テンポ/難種目で強度を上げる"
+            ),
         }
     # 同重量で目標rep以上を何セッション達成したか
     hits = 0
