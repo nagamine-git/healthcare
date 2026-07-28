@@ -38,6 +38,7 @@ import { ScheduleCard } from "../components/ScheduleCard";
 import { MigraineRiskBanner } from "../components/MigraineRiskBanner";
 import { NextActionCard } from "../components/NextActionCard";
 import { TrainingStatusStrip } from "../components/TrainingStatusStrip";
+import { WorkoutReviewCard } from "../components/WorkoutReviewCard";
 import { SleepEffectivenessPanel } from "../components/SleepEffectivenessPanel";
 import { WindDownCard } from "../components/WindDownCard";
 import { LastNightPanel } from "../components/LastNightPanel";
@@ -425,6 +426,7 @@ export function TodayPage({ onOpenDebug }: Props) {
       {tab === "physique" && (
       <div id="physique-gap-section" className="space-y-3">
         <TrainingStatusStrip />
+        <WorkoutReviewCard />
         <SectionHeader label="理想体型へのギャップ" hint="結局何をすべきか — エネルギー収支から逆算" />
         <PhysiqueGapPlan />
         <BodyMeasurementPanel />
