@@ -17,13 +17,20 @@ def test_first_time_uses_level_scaled_start():
 
 
 def test_progresses_after_two_sessions_at_target_reps():
+    """rep 上限を達成したら**まずセットを増やす** (重量はまだ上げない)。
+
+    仕様変更: 固定式ダンベルは 8→12kg で +50% 跳ぶため、即昇量すると
+    「上がらないか軽すぎるか」の二択になる。3→4 セット (+33%) を挟んで断崖を埋める。
+    重量が上がるのはセットも上限に達してから (test_weight_raised_only_after_set_ceiling)。
+    """
     hist = [
-        {"date": date(2026, 7, 6), "weight_kg": 8.0, "reps": 10},
-        {"date": date(2026, 7, 3), "weight_kg": 8.0, "reps": 10},
+        {"date": date(2026, 7, 6), "weight_kg": 8.0, "reps": 10, "sets": 3},
+        {"date": date(2026, 7, 3), "weight_kg": 8.0, "reps": 10, "sets": 3},
     ]
     s = suggest_for_exercise(history=hist, today=TODAY, starting_weight=None)
-    assert s["suggested_weight_kg"] == 12.0  # 固定式の次の手持ち重量へ昇量 (8→12)
-    assert "昇量" in s["basis"]
+    assert s["suggested_weight_kg"] == 8.0   # 据え置き
+    assert s["suggested_sets"] == 4          # 先にセットで積む
+    assert "セット" in s["basis"]
 
 
 def test_stays_when_reps_not_yet_met():
@@ -152,3 +159,75 @@ def test_genuine_overshoot_still_upgrades():
     )
     assert out["suggested_weight_kg"] > 8.0
     assert "大幅超過" in out["basis"]
+
+
+# ----- 重量の刻みが粗い問題: セット段で断崖を埋める -----
+
+
+def _hist(weight, reps, sets, days_ago, today):
+    from datetime import timedelta
+    return {"date": today - timedelta(days=days_ago), "weight_kg": weight,
+            "reps": reps, "sets": sets}
+
+
+def test_rep_ceiling_adds_a_set_before_raising_weight():
+    """rep 上限に達しても、いきなり 12→16kg (+33%) に跳ばず先にセットを増やす。"""
+    from datetime import date
+
+    from app.scoring.training_load import suggest_for_exercise
+
+    today = date(2026, 7, 28)
+    hist = [_hist(12.0, 10, 3, 2, today), _hist(12.0, 10, 3, 5, today)]
+    out = suggest_for_exercise(history=hist, today=today, starting_weight=None)
+
+    assert out["suggested_weight_kg"] == 12.0   # 据え置き
+    assert out["suggested_sets"] == 4           # 3→4 セット (+33% ボリューム)
+
+
+def test_weight_raised_only_after_set_ceiling():
+    """セットも上限まで積んだら昇量し、セット数は基準に戻す。"""
+    from datetime import date
+
+    from app.scoring.training_load import suggest_for_exercise
+
+    today = date(2026, 7, 28)
+    hist = [_hist(12.0, 10, 4, 2, today), _hist(12.0, 10, 4, 5, today)]
+    out = suggest_for_exercise(history=hist, today=today, starting_weight=None)
+
+    assert out["suggested_weight_kg"] == 16.0
+    assert out["suggested_sets"] == 3            # 増やしたセットは戻す
+    assert "下ろし3秒" in out["basis"]           # 大きい跳びには着地の指示を添える
+
+
+def test_below_rep_target_keeps_weight_and_sets():
+    """rep 上限に届いていなければ従来どおり rep を積む (セットは増やさない)。"""
+    from datetime import date
+
+    from app.scoring.training_load import suggest_for_exercise
+
+    today = date(2026, 7, 28)
+    hist = [_hist(12.0, 9, 3, 2, today)]
+    out = suggest_for_exercise(history=hist, today=today, starting_weight=None)
+
+    assert out["suggested_weight_kg"] == 12.0
+    assert out["suggested_sets"] == 3
+
+
+def test_all_branches_expose_suggested_sets():
+    """どの分岐でも suggested_sets を返す (呼び出し側でキー有無を分岐させない)。"""
+    from datetime import date
+
+    from app.scoring.training_load import suggest_for_exercise
+
+    today = date(2026, 7, 28)
+    cases = [
+        [],                                        # 初回
+        [_hist(0.0, 12, 3, 2, today)],             # 自重
+        [_hist(12.0, 8, 3, 30, today)],            # deload
+        [_hist(8.0, 20, 3, 2, today)],             # 大幅超過
+        [_hist(20.0, 20, 4, 2, today)],            # 手持ち最大
+    ]
+    for hist in cases:
+        out = suggest_for_exercise(history=hist, today=today, starting_weight=None)
+        assert "suggested_sets" in out, out["basis"]
+        assert out["suggested_sets"] >= 1

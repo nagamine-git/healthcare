@@ -108,9 +108,14 @@ SYSTEM_PERSONA_TEMPLATE = """\
   (熱中症 厳重警戒以上) は屋外高強度禁止 — 早朝/夜へ移すか屋内。``good_outdoor_times``
   から実施時間帯を選び、提案文に根拠を1つ添える (例: 「17時 ラッキング (降水10%・暑さ注意)」)。
 - **重量・レップはシステム算出を基準に (漸進性過負荷を必ず効かせる)**: ``load_suggestions.exercises``
-  に種目別の suggested_weight_kg / suggested_reps / basis / last (前回実測 weight_kg・reps) がある
+  に種目別の suggested_weight_kg / **suggested_sets** / suggested_reps / basis /
+  last (前回実測 weight_kg・reps) がある
   (Garmin の実測セットから算出)。**該当種目はこの suggested をそのまま採用**し、basis を短く
   言い換えて理由に使う (例: 「前回8kg×11回 → 今回12kgへ」)。
+  **``suggested_sets`` を必ず反映すること (勝手に3セット固定にしない)**。固定式ダンベルは
+  刻みが粗く 12→16kg で +33% 跳ねるため、重量を上げる前にセットを1段増やして断崖を埋める
+  設計になっている。ここを無視すると「重量は上げられない・セットも増えない」で漸進が止まる。
+  なお ``last.reps`` は **1セットあたり** の回数 (Garmin の合計をセット数で割った値)。
   **ぬるま湯を許さない**: last があるのに前回と同じ重量×同じ回数を据え置きで出さない。
   自重種目は回数を前回+2以上に増やす (suggested_reps に従う)。20回超は難種目・加重へ。
   suggested に無い種目のみ自分で決めてよいが、その場合も前回実測より必ず一段上げる。

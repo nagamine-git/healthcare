@@ -17,10 +17,26 @@ from typing import Any
 AVAILABLE_DUMBBELLS = [2.0, 4.0, 8.0, 12.0, 16.0, 20.0]
 LEVEL_FACTOR = {"beginner": 1.0, "intermediate": 1.25, "advanced": 1.5}
 _TARGET_REPS = 10        # double progression の上限 rep
-_PROGRESS_SESSIONS = 2   # 同重量でこれだけ達成したら昇量
+_PROGRESS_SESSIONS = 2   # 同重量でこれだけ達成したら次段へ
 _OVERSHOOT_REPS = 15     # 目標を大幅超過 (=軽すぎ)。1セッションでも即昇量する閾値
 _DELOAD_DAYS = 7
 _BW_HARD_REPS = 20       # 自重でこれ超えたら難種目へ移行
+
+# --- セット数による中間ステップ (重量の飛びを埋める) ---
+# 固定式ダンベルは刻みが粗く、8→12kg で +50%、12→16kg で +33% 跳ねる。
+# 標準的な漸進は 1 段あたり 2.5-5% なので **6-13 倍も飛ぶ**。結果「上がらないか軽すぎるか」
+# の二択になり、ちょうど良い負荷が存在しない。
+#
+# そこで重量を上げる前に **セット数を 1 増やす** 段を挟む。3→4 セットはボリューム +33% で、
+# ちょうど 12→16kg の飛び (+33%) と同じ桁の負荷増になり、断崖を埋められる。
+# セット数は Garmin の summarizedExerciseSets.sets で**実績を機械的に検証できる**唯一の
+# 中間変数でもある (テンポやポーズは処方できても実施を確認できない)。
+# 加えてこのユーザーは週あたりのセット数が筋肥大の目安 (10+/部位) を大きく下回っており、
+# セット追加は刻み問題とボリューム不足を同時に解消する。
+_BASE_SETS = 3
+_MAX_SETS = 4            # ここまで積んだら重量を上げる (際限なく伸ばさない)
+# 昇量幅がこの割合を超えるときは、着地を柔らげる指示 (エキセントリック強調) を添える
+_BIG_JUMP_RATIO = 0.25
 
 # Garmin の種目 enum (category/subCategory) → 日本語ラベル。LLM 処方と突き合わせる。
 _EXERCISE_LABELS = {
@@ -111,7 +127,8 @@ def suggest_for_exercise(
     if not history:
         base = (starting_weight or AVAILABLE_DUMBBELLS[1]) * LEVEL_FACTOR.get(level, 1.0)
         w = max((c for c in AVAILABLE_DUMBBELLS if c <= base), default=AVAILABLE_DUMBBELLS[0])
-        return {"suggested_weight_kg": w, "suggested_reps": "8-10", "basis": "初回 (レベル基準)"}
+        return {"suggested_weight_kg": w, "suggested_sets": _BASE_SETS,
+                "suggested_reps": "8-10", "basis": "初回 (レベル基準)"}
     last = history[0]
     lw = float(last["weight_kg"])
     days_gap = (today - last["date"]).days
@@ -120,16 +137,17 @@ def suggest_for_exercise(
         lr = int(last.get("reps") or 0)
         if lr >= _BW_HARD_REPS:
             return {
-                "suggested_weight_kg": 0.0, "suggested_reps": f"{lr}+",
+                "suggested_weight_kg": 0.0, "suggested_sets": _BASE_SETS, "suggested_reps": f"{lr}+",
                 "basis": f"自重{lr}回 — 難種目/加重へ変更 (片脚・デクライン・リュック加重)",
             }
         return {
-            "suggested_weight_kg": 0.0, "suggested_reps": f"{lr + 2}以上",
+            "suggested_weight_kg": 0.0, "suggested_sets": _BASE_SETS, "suggested_reps": f"{lr + 2}以上",
             "basis": f"前回{lr}回 → +2回で漸進 (自重は回数を伸ばす)",
         }
     if days_gap > _DELOAD_DAYS:
         return {
-            "suggested_weight_kg": _prev_weight(lw), "suggested_reps": "10-12",
+            "suggested_weight_kg": _prev_weight(lw), "suggested_sets": _BASE_SETS,
+            "suggested_reps": "10-12",
             "basis": f"{days_gap}日空き — deload (-1段階) で再開",
         }
     # 大幅超過 (目標の 1.5 倍以上 = 明確に軽すぎ): 1 セッションでも即昇量する。
@@ -139,14 +157,14 @@ def suggest_for_exercise(
         nw = _next_weight(lw)
         if nw > lw:
             return {
-                "suggested_weight_kg": nw, "suggested_reps": "8-10",
+                "suggested_weight_kg": nw, "suggested_sets": _BASE_SETS, "suggested_reps": "8-10",
                 "basis": (
                     f"{lw:g}kg×{last_reps}rep/セット (目標 {_TARGET_REPS} を大幅超過) "
                     "— 軽すぎるため即昇量"
                 ),
             }
         return {
-            "suggested_weight_kg": lw, "suggested_reps": f"{last_reps}+",
+            "suggested_weight_kg": lw, "suggested_sets": _BASE_SETS, "suggested_reps": f"{last_reps}+",
             "basis": (
                 f"{lw:g}kg×{last_reps}rep/セット だが手持ち最大 "
                 "— 片手/テンポ/難種目で強度を上げる"
@@ -159,15 +177,49 @@ def suggest_for_exercise(
             hits += 1
         else:
             break
+
+    last_sets = int(last.get("sets") or _BASE_SETS)
     if hits >= _PROGRESS_SESSIONS:
+        # rep 上限に達した。**いきなり重量を上げず、まずセットを 1 段増やす**
+        # (12→16kg は +33% の断崖。3→4 セットの +33% を挟んで着地を作る)。
+        if last_sets < _MAX_SETS:
+            return {
+                "suggested_weight_kg": lw,
+                "suggested_sets": last_sets + 1,
+                "suggested_reps": f"{_TARGET_REPS}目標",
+                "basis": (
+                    f"{lw:g}kg×{_TARGET_REPS}rep を {hits}回達成 — 重量の刻みが粗い"
+                    f"({lw:g}→{_next_weight(lw):g}kg)ため、まず {last_sets}→{last_sets + 1}"
+                    "セットでボリュームを積む"
+                ),
+            }
+        # セットも上限。ここで初めて昇量し、セット数は基準に戻す
         nw = _next_weight(lw)
         if nw > lw:
+            jump = (nw - lw) / lw
+            note = ""
+            if jump > _BIG_JUMP_RATIO:
+                # 刻みが粗く着地が硬いので、下ろしを効かせて rep が落ちても質を保つ
+                note = f" (+{jump * 100:.0f}%と大きいので下ろし3秒で効かせる)"
             return {
-                "suggested_weight_kg": nw, "suggested_reps": "6-8",
-                "basis": f"{lw:g}kg×{_TARGET_REPS}rep を {hits}回達成 — 昇量",
+                "suggested_weight_kg": nw,
+                "suggested_sets": _BASE_SETS,
+                "suggested_reps": "6-8",
+                "basis": (
+                    f"{lw:g}kg×{_TARGET_REPS}rep×{_MAX_SETS}セットまで到達 — 昇量{note}"
+                ),
             }
+        # 手持ち最大: 重量では伸ばせないのでセット/テンポで積む
+        return {
+            "suggested_weight_kg": lw,
+            "suggested_sets": last_sets,
+            "suggested_reps": f"{_TARGET_REPS}+",
+            "basis": f"{lw:g}kg は手持ち最大 — テンポ(下ろし3秒)・ポーズ・片手で強度を上げる",
+        }
     return {
-        "suggested_weight_kg": lw, "suggested_reps": f"{_TARGET_REPS}目標",
+        "suggested_weight_kg": lw,
+        "suggested_sets": last_sets,
+        "suggested_reps": f"{_TARGET_REPS}目標",
         "basis": "同重量で rep を積む (double progression)",
     }
 
