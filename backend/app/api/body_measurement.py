@@ -16,8 +16,10 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import BodyMeasurement
+from app.models.health import BodyCompositionSample
 from app.scoring.body_measurement import bia_navy_discrepancy, navy_body_fat_pct, whtr, whtr_status
 from app.scoring.body_trend import smoothed_body
+from app.scoring.physique_gap import assess_physique_gap
 from app.scoring.profile import resolve_profile
 from app.scoring.timewindow import app_today
 
@@ -37,6 +39,20 @@ def _row_dict(r: BodyMeasurement) -> dict[str, Any]:
     }
 
 
+def _latest_body_composition() -> BodyCompositionSample | None:
+    """骨格筋率・内臓脂肪レベルの最新スクショ取込値 (手動記録、無くてもよい)。"""
+    with session_scope() as session:
+        return (
+            session.execute(
+                select(BodyCompositionSample)
+                .order_by(BodyCompositionSample.date.desc(), BodyCompositionSample.id.desc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
+
+
 def _evaluate(row: BodyMeasurement | None) -> dict[str, Any]:
     """最新測定 1 件から WHtR・米海軍式体脂肪率・BIA との比較をまとめる。"""
     prof = resolve_profile()
@@ -44,19 +60,48 @@ def _evaluate(row: BodyMeasurement | None) -> dict[str, Any]:
     neck_cm = row.neck_cm if row else None
 
     ratio = whtr(waist_cm, prof.height_cm)
+    status = whtr_status(ratio)
     navy_pct = navy_body_fat_pct(waist_cm, neck_cm, prof.height_cm, prof.sex)
 
     bia_est = smoothed_body()  # 測定ノイズを除いた BIA 体脂肪率トレンド
     discrepancy = bia_navy_discrepancy(bia_est.body_fat_pct, navy_pct)
 
+    # ⚠️ 生の float をそのまま返さない。BIA は元々 ±3-5pt の誤差があり、
+    # 17.68893693789233% のような桁は**精度の錯覚**でしかない (実際に UI で桁溢れして
+    # 隣の数値と重なる表示崩れも起きた)。表示と同じ 0.1pt 単位に丸めて返す。
+    bia_pct = (
+        round(bia_est.body_fat_pct, 1) if bia_est.body_fat_pct is not None else None
+    )
+
+    body_comp = _latest_body_composition()
+
+    # 目標とのギャップ評価 (体重ギャップの正体が脂肪不足か筋量不足かを言い切る)。
+    # 体重・体脂肪率(BIA)が取れていないと LBM に分解できないため縮退で available=False。
+    gap = assess_physique_gap(
+        weight_kg=bia_est.weight_kg,
+        body_fat_pct=bia_est.body_fat_pct,
+        target_weight_kg=prof.target_weight_kg,
+        target_body_fat_pct=prof.target_body_fat_pct,
+        body_fat_tolerance_pct=prof.body_fat_tolerance_pct,
+        height_cm=prof.height_cm,
+        sex=prof.sex,
+        body_fat_pct_secondary=navy_pct,
+        waist_cm=waist_cm,
+        whtr_ratio=ratio,
+        whtr_status_value=status,
+        skeletal_muscle_pct=body_comp.skeletal_muscle_pct if body_comp else None,
+        visceral_fat_level=body_comp.visceral_fat_level if body_comp else None,
+    )
+
     return {
         "whtr": ratio,
-        "whtr_status": whtr_status(ratio),
+        "whtr_status": status,
         "navy_body_fat_pct": navy_pct,
-        "bia_body_fat_pct": bia_est.body_fat_pct,
+        "bia_body_fat_pct": bia_pct,
         "discrepancy": discrepancy,
         "height_cm": prof.height_cm,
         "sex": prof.sex,
+        "gap": gap,
     }
 
 

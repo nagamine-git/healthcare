@@ -17,6 +17,12 @@ const WHTR_LABEL: Record<string, { text: string; tone: "prog" | "info" | "risk" 
   high: { text: "高め", tone: "risk" },
 };
 
+/** 符号付きの差分表記 (+1.2 / -3.4 / ±0)。目標とのギャップ表示用。 */
+function fmtSigned(v: number): string {
+  if (v === 0) return "±0";
+  return v > 0 ? `+${v}` : `${v}`;
+}
+
 /**
  * 周径測定 (ウエスト/首/胸/ヒップ) パネル。
  *
@@ -42,6 +48,8 @@ export function BodyMeasurementPanel() {
   const latest = q.data?.latest ?? null;
   const whtrInfo = q.data?.whtr_status ? WHTR_LABEL[q.data.whtr_status] : null;
   const discrepancy = q.data?.discrepancy ?? null;
+  const gap = q.data?.gap ?? null;
+  const whtrBorderline = gap?.available ? gap.secondary.whtr?.borderline ?? false : false;
 
   const startEdit = () => {
     setDraft({
@@ -84,13 +92,19 @@ export function BodyMeasurementPanel() {
           <div className="mt-3 border-t border-hairline pt-2">
             <div className="flex items-center justify-between">
               <span className="telemetry-label">WHtR (ウエスト身長比)</span>
-              {whtrInfo && <Pill tone={whtrInfo.tone}>{whtrInfo.text}</Pill>}
+              {whtrBorderline ? (
+                <Pill tone="info">境界線上 (0.5に近い)</Pill>
+              ) : (
+                whtrInfo && <Pill tone={whtrInfo.tone}>{whtrInfo.text}</Pill>
+              )}
             </div>
             <div className="mt-1 telemetry-num text-lg font-semibold text-ink">
               {q.data?.whtr != null ? q.data.whtr.toFixed(2) : "—"}
             </div>
             <p className="mt-0.5 text-[10px] text-ink-faint">
-              目安は 0.5 未満(ウエストは身長の半分未満)。BMI より内臓脂肪リスクを反映しやすい指標。
+              {whtrBorderline
+                ? "閾値 0.5 のすぐ近く。「良好」と言い切れる差ではなく、メジャーの当て方で数mm変われば逆側に転ぶ範囲。経過観察の対象。"
+                : "目安は 0.5 未満(ウエストは身長の半分未満)。BMI より内臓脂肪リスクを反映しやすい指標。"}
             </p>
           </div>
 
@@ -121,6 +135,78 @@ export function BodyMeasurementPanel() {
               海軍式は体水分の影響を受けないため、日内変動しやすい BIA の裏付けになる(Hodgdon &amp;
               Beckett 1984)。女性の推定式は別途 hip 周径が必要なため未対応。
             </p>
+          </div>
+
+          {/* 目標とのギャップ: 「良好」で終わらせず、目標との距離をはっきり示す。
+              煽らない — 事実と目安を淡々と (体型は最優先事項ではない)。 */}
+          <div className="mt-3 border-t border-hairline pt-2">
+            <span className="telemetry-label">目標とのギャップ</span>
+            {gap?.available ? (
+              <>
+                <div className="mt-1.5 rounded-lg bg-hull/40 p-2.5">
+                  <div className="text-sm font-medium text-ink">{gap.verdict.label}</div>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-ink-dim">{gap.verdict.explanation}</p>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <Stat
+                    size="sm"
+                    label="体重"
+                    value={gap.weight.now_kg}
+                    unit="kg"
+                    delta={`目標${gap.weight.target_kg} (${fmtSigned(gap.weight.gap_kg)}kg)`}
+                    tone={gap.weight.near_target ? "prog" : "neutral"}
+                  />
+                  <Stat
+                    size="sm"
+                    label="除脂肪体重"
+                    value={gap.lbm.now_kg}
+                    unit="kg"
+                    delta={`目標${gap.lbm.target_kg} (${fmtSigned(gap.lbm.gap_kg)}kg)`}
+                    tone={gap.lbm.meaningful ? (gap.lbm.gap_kg < 0 ? "act" : "info") : "prog"}
+                  />
+                  <Stat
+                    size="sm"
+                    label="体脂肪量"
+                    value={gap.lbm.fat_mass_now_kg}
+                    unit="kg"
+                    delta={`目標${gap.lbm.fat_mass_target_kg} (${fmtSigned(gap.lbm.fat_mass_gap_kg)}kg)`}
+                    tone="neutral"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-ink-faint">
+                  除脂肪体重(≒筋量)が本質の指標 — 体重の過不足だけでは脂肪不足か筋量不足かが分からない。
+                </p>
+
+                {gap.timeframe && (
+                  <div className="mt-2 rounded-lg bg-void/30 px-2.5 py-2">
+                    <div className="text-xs text-ink-dim">
+                      期間の <b className="text-ink">{gap.timeframe.label}</b>
+                    </div>
+                    <p className="mt-0.5 text-[10px] leading-tight text-ink-faint">{gap.timeframe.basis}</p>
+                  </div>
+                )}
+
+                {(gap.secondary.skeletal_muscle || gap.secondary.visceral_fat) && (
+                  <ul className="mt-2 space-y-1">
+                    {gap.secondary.skeletal_muscle && (
+                      <li className="text-[10px] leading-tight text-ink-faint">
+                        · {gap.secondary.skeletal_muscle.note}
+                      </li>
+                    )}
+                    {gap.secondary.visceral_fat && (
+                      <li className="text-[10px] leading-tight text-ink-faint">
+                        · {gap.secondary.visceral_fat.note}
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-ink-dim">
+                {gap && !gap.available ? gap.reason : "体重・体脂肪率の記録が必要です"}
+              </p>
+            )}
           </div>
         </>
       ) : (

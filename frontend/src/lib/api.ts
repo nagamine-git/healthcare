@@ -937,6 +937,22 @@ export type Vo2maxEstimate = {
   speed_source: string | null;
   note: string;
 };
+// 種目ごとの構造化評価 (筋トレで Garmin exerciseSets が取れた場合のみ)。
+// set_count/rep_range/volume_kg/prev_volume_kg 等の数字はサーバー側で決定論的に計算し、
+// comment/tone だけ LLM が埋める (ハルシネーション防止)。
+export type WorkoutExerciseReview = {
+  category: string | null;
+  name: string | null;
+  name_ja: string;
+  set_count: number;
+  rep_range: [number, number] | null;
+  volume_kg: number | null;
+  prev_volume_kg: number | null;
+  volume_delta_kg: number | null;
+  volume_delta_pct: number | null;
+  comment: string;
+  tone: "good" | "caution" | "info";
+};
 export type WorkoutReviewItem = {
   workout_id: string;
   date: string;
@@ -946,6 +962,7 @@ export type WorkoutReviewItem = {
   duration_min: number | null;
   review_text: string | null;
   review_tone: "good" | "caution" | "info" | null;
+  review_exercises: WorkoutExerciseReview[] | null;
   reviewed_at: string | null;
   est_vo2max: Vo2maxEstimate | null;
 };
@@ -1793,6 +1810,43 @@ export type BodyMeasurementDiscrepancy = {
   diff_pt: number;
   status: "close" | "large";
 };
+/** 目標とのギャップ評価。体重ギャップの正体が脂肪不足か筋量不足かを言い切る。 */
+export type PhysiqueGap =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      weight: { now_kg: number; target_kg: number; gap_kg: number; gap_pct: number; near_target: boolean };
+      body_fat: {
+        now_pct: number;
+        secondary_pct: number | null;
+        target_pct: number;
+        tolerance_pct: number;
+        gap_pt: number;
+        near_target: boolean;
+        secondary_near_target: boolean | null;
+        confirmed_near_target: boolean;
+      };
+      lbm: {
+        now_kg: number;
+        target_kg: number;
+        gap_kg: number;
+        gap_pct: number;
+        meaningful: boolean;
+        fat_mass_now_kg: number;
+        fat_mass_target_kg: number;
+        fat_mass_gap_kg: number;
+      };
+      verdict: { code: "cut" | "recomp" | "gain_lean" | "maintain" | "fine_tune"; label: string; explanation: string };
+      timeframe:
+        | { kind: "lean_gain"; years_low: number; years_high: number; label: string; basis: string }
+        | { kind: "fat_loss"; weeks_low: number; weeks_high: number; label: string; basis: string }
+        | null;
+      secondary: {
+        whtr: { ratio: number; status: string; borderline: boolean; note: string } | null;
+        skeletal_muscle: { pct: number; band: string; reference_low: number; reference_high: number; note: string } | null;
+        visceral_fat: { level: number; status: "standard" | "elevated"; note: string } | null;
+      };
+    };
 export type BodyMeasurementResponse = {
   latest: BodyMeasurementSample | null;
   whtr: number | null;
@@ -1802,6 +1856,7 @@ export type BodyMeasurementResponse = {
   discrepancy: BodyMeasurementDiscrepancy | null;
   height_cm: number;
   sex: string;
+  gap: PhysiqueGap;
 };
 export type BookTaste = {
   total: number;
@@ -2193,10 +2248,13 @@ export const api = {
     }),
   workoutReviews: (days = 2) =>
     request<WorkoutReviewsResp>(`/api/workout-reviews?days=${days}`),
-  workoutReviewCreate: (workoutId: string) =>
-    request<WorkoutReviewItem>(`/api/workout-reviews/${encodeURIComponent(workoutId)}`, {
-      method: "POST",
-    }),
+  // force=true は「再分析」(保存済み評価の明示的な上書き)。サーバー側に日次上限あり
+  // (429 が返る、Settings.llm_max_regenerations_per_day と同じ発想の別枠カウント)。
+  workoutReviewCreate: (workoutId: string, force = false) =>
+    request<WorkoutReviewItem>(
+      `/api/workout-reviews/${encodeURIComponent(workoutId)}${force ? "?force=1" : ""}`,
+      { method: "POST" },
+    ),
   predict: (metric: string, opts?: { days_back?: number; days_ahead?: number }) =>
     request<PredictSeries>(
       `/api/predict/${metric}?days_back=${opts?.days_back ?? 28}&days_ahead=${opts?.days_ahead ?? 7}`,
