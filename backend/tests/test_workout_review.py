@@ -316,3 +316,38 @@ def test_regenerate_rate_limit(app_client, session, monkeypatch):
     items = app_client.get("/api/workout-reviews").json()["items"]
     item = next(i for i in items if i["workout_id"] == "w-cap")
     assert item["review_text"] == "評価4"
+
+
+def test_time_based_exercise_keeps_duration():
+    """プランク等の等尺種目は rep/重量でなく保持時間で評価できる形にする。
+
+    回帰テスト: 集約時に duration_s を捨てていたため、Garmin が「0:48 / 1回 / 体重」と
+    記録しているプランクが「1rep」としか見えず、AI が保持時間の落ち込みを評価できなかった。
+    """
+    from app.llm.workout_review import _summarize_exercise_sets
+
+    sets = [
+        {"category": "PLANK", "name": None, "reps": 1, "weight_kg": None, "duration_s": 47.9},
+        {"category": "PLANK", "name": None, "reps": 1, "weight_kg": None, "duration_s": 26.2},
+        {"category": "PLANK", "name": None, "reps": 1, "weight_kg": None, "duration_s": 16.8},
+    ]
+    (ex,) = _summarize_exercise_sets(sets)
+    assert ex["time_based"] is True
+    assert ex["volume_kg"] is None            # 加重が無いので重量ボリュームは出さない
+    assert ex["hold_range_s"] == [16.8, 47.9]  # 保持時間で評価できる
+    assert ex["total_duration_s"] == 90.9
+    assert all(s["duration_s"] is not None for s in ex["set_details"])
+
+
+def test_weighted_exercise_is_not_time_based():
+    """加重種目は従来どおりボリュームで評価する (時間種目扱いにしない)。"""
+    from app.llm.workout_review import _summarize_exercise_sets
+
+    sets = [
+        {"category": "SQUAT", "name": "GOBLET_SQUAT", "reps": 14, "weight_kg": 8.0, "duration_s": 38.8},
+        {"category": "SQUAT", "name": "GOBLET_SQUAT", "reps": 15, "weight_kg": 8.0, "duration_s": 33.9},
+    ]
+    (ex,) = _summarize_exercise_sets(sets)
+    assert not ex.get("time_based")
+    assert ex["volume_kg"] == 232.0
+    assert ex["total_duration_s"] == 72.7  # 時間も併せて持つ (捨てない)

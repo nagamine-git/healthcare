@@ -47,6 +47,10 @@ _SYSTEM = """\
 - set_count・rep_range・volume_kg・prev_volume_kg (前回同種目) は既に数値が渡っているので、
   それを踏まえた一言のみを書く (数字を書き直す必要はないが、増減の傾向には触れてよい)。
 - rep_range が目的とズレていないか触れる (目安: 筋肥大 6-12 rep、筋力寄り 1-5 rep)。
+- **``time_based: true`` の種目 (プランク等の等尺) は rep でも重量でも測れない。**
+  ``hold_range_s`` / ``total_duration_s`` の**保持時間**で評価すること
+  ("1rep しかない" のような的外れな指摘をしない)。セット毎に保持時間が大きく落ちて
+  いれば体幹の疲労として触れる。
 - set_details (セット順の reps/weight_kg) で終盤の落ち込みが大きい場合は疲労のサインとして触れる。
 - user_injury_notes にある既往 (腰への高負荷ヒンジ系の重量上限など) に抵触する種目・重量が
   あれば、その種目のコメントで最優先・安全側に指摘する。医療的な診断/治療の助言はしない
@@ -206,14 +210,29 @@ def _summarize_exercise_sets(sets: list[dict[str, Any]]) -> list[dict[str, Any]]
         if key not in groups:
             groups[key] = []
             order.append(key)
-        groups[key].append({"reps": s.get("reps"), "weight_kg": s.get("weight_kg")})
+        # duration_s も保持する。**プランク等の等尺種目は rep ではなく保持時間が刺激**で、
+        # Garmin も「0:48 / 1回 / 体重」のように時間で記録している。これを捨てると
+        # 「プランク 1rep」としか見えず、AI が保持時間の伸び縮みを評価できない。
+        groups[key].append({
+            "reps": s.get("reps"),
+            "weight_kg": s.get("weight_kg"),
+            "duration_s": s.get("duration_s"),
+        })
 
     out: list[dict[str, Any]] = []
     for key in order:
         items = groups[key]
         reps = [it["reps"] for it in items if it["reps"] is not None]
         volume = sum((it["reps"] or 0) * (it["weight_kg"] or 0) for it in items)
-        out.append({
+        durations = [it["duration_s"] for it in items if it["duration_s"] is not None]
+        # 時間ベースの種目か: 加重が無く rep も実質1 (= 回数でなく保持時間で測る種目)。
+        # プランク/デッドバグ/ホールド系がこれに当たる。
+        time_based = (
+            not volume
+            and bool(durations)
+            and all((it["reps"] or 1) <= 1 for it in items)
+        )
+        row = {
             "category": key[0],
             "name": key[1],
             "name_ja": _ja_label(key[0], key[1]),
@@ -221,7 +240,14 @@ def _summarize_exercise_sets(sets: list[dict[str, Any]]) -> list[dict[str, Any]]
             "set_details": items,
             "rep_range": [min(reps), max(reps)] if reps else None,
             "volume_kg": round(volume, 1) if volume else None,
-        })
+        }
+        if durations:
+            row["total_duration_s"] = round(sum(durations), 1)
+        if time_based:
+            # 等尺種目はこちらが「ボリューム」に相当する指標なので明示する
+            row["time_based"] = True
+            row["hold_range_s"] = [round(min(durations), 1), round(max(durations), 1)]
+        out.append(row)
     return out
 
 
