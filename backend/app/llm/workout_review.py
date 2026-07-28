@@ -1,11 +1,16 @@
-"""ワークアウトの AI 一言評価 (タップ時のみ生成、WorkoutReview に永続化)。
+"""ワークアウトの AI 評価 (タップ時のみ生成、WorkoutReview に永続化)。
 
 コンテキスト: 当該ワークアウトの実測 (HR/TE/HRゾーン/距離/BB増減) + 同種目の直近比較 +
 今夜の就寝計画 + 前回筋トレからの日数。筋トレ系で Garmin exerciseSets (種目/rep/重量) が
 取れていれば、種目ごとのボリューム・直近比較も渡す (garmin_sync が Workout.raw_json に
 ``exercise_sets`` として保存する。無ければ従来どおりの全体指標評価にフォールバックする)。
-tool_use で {text ≤160字, tone} を強制する。GPS 欠測 (距離が歩数と乖離) 等のデータ品質
-問題にも言及させる。
+
+出力は tool_use で **総合 (overall) + 種目ごと (exercises)** の構造を強制する。
+種目ごとのボリューム/rep レンジ/前回比などの「数字」は LLM に語らせず本サーバー側で
+決定論的に計算し (`_summarize_exercise_sets` / `_attach_prev_volume`)、LLM には各種目の
+短評テキストだけを埋めさせて `_merge_exercise_review` で突き合わせる。数字のハルシネーション
+を防ぎ、種目が増減してもズレない (category+name で突き合わせるため順序非依存)。
+GPS 欠測 (距離が歩数と乖離) 等のデータ品質問題にも言及させる。
 """
 
 from __future__ import annotations
@@ -25,42 +30,138 @@ logger = get_logger(__name__)
 
 _SYSTEM = """\
 あなたは利用者専属のトレーニングコーチです。1件のワークアウト実績を、本人の直近データと
-比較して**1〜2文 (最大160字)** で評価します。
+比較して評価します。出力は「総合 (overall)」1つと、種目データがあれば「種目ごと (exercises)」
+の短評をそれぞれ返してください。
 
-# 方針
-- 具体数字で1点だけ刺す (良かった点 or 注意点)。総花的な感想は書かない。
-- workout.exercises (種目ごとのセット明細) がある場合は **必ず種目単位で** 評価する
-  (category/name を名指しする):
-  - ボリューム (volume_kg = 重量×rep×セット合計) を recent_exercise_sessions の同種目直近実績と
-    比べ、増減を数字で示す。
-  - rep_range が目的とズレていないか触れる (目安: 筋肥大 6-12 rep、筋力寄り 1-5 rep)。
-  - set_details (セット順の reps/weight_kg) で終盤の落ち込みが大きい場合は疲労のサインとして触れる。
-    左右差の情報があればそれも見る。
-  - user_injury_notes にある既往 (腰への高負荷ヒンジ系の重量上限など) に抵触する種目・重量が
-    あれば、それを最優先で安全側に指摘する。医療的な診断/治療の助言はしない
-    (トレーニング強度・フォームの注意喚起に留める)。
-  - exercises が無い/空の場合は、種目データが無いのに種目名を捏造せず、
-    従来どおり duration/HR/TE 等の全体指標で評価する。
-- 比較対象: 同種目の直近実績 (recent_same_type)。改善/悪化があれば数字で。
+# 総合 (overall, 最大200字)
+- セッション全体のボリューム・所要時間・強度・部位バランスを俯瞰し、次回への一手を1つ添える。
 - 就寝への影響: 終了時刻が就寝計画の3時間以内なら必ず指摘 (深睡眠が削れる)。
 - データ品質: distance_m が歩数から見て明らかに小さい (GPS 未捕捉) 等があれば指摘し、
   次回の対策を1つ添える (VO2Max 等の推定が欠測する実害も)。
+- workout.exercises が無い/空の場合はこれまでどおり duration/HR/TE 等の全体指標だけで評価する
+  (種目データが無いのに種目名を捏造しない)。
+
+# 種目ごと (exercises, 各最大140字。workout.exercises が空なら空配列でよい)
+- workout.exercises の **各要素と同じ category / name をそのまま返す** こと
+  (突き合わせに使うので改変しない。要素数もできる限り一致させる)。
+- set_count・rep_range・volume_kg・prev_volume_kg (前回同種目) は既に数値が渡っているので、
+  それを踏まえた一言のみを書く (数字を書き直す必要はないが、増減の傾向には触れてよい)。
+- rep_range が目的とズレていないか触れる (目安: 筋肥大 6-12 rep、筋力寄り 1-5 rep)。
+- set_details (セット順の reps/weight_kg) で終盤の落ち込みが大きい場合は疲労のサインとして触れる。
+- user_injury_notes にある既往 (腰への高負荷ヒンジ系の重量上限など) に抵触する種目・重量が
+  あれば、その種目のコメントで最優先・安全側に指摘する。医療的な診断/治療の助言はしない
+  (トレーニング強度・フォームの注意喚起に留める)。
+
+# 共通
+- 具体数字で1点だけ刺す (良かった点 or 注意点)。総花的な感想は書かない。
 - tone: 良い内容=good / 注意・警告=caution / 中立=info。
 - 日本語。断定しすぎない。絵文字は使わない。
 """
 
 _TOOL: dict[str, Any] = {
     "name": "submit_review",
-    "description": "ワークアウトの一言評価を返す。",
+    "description": "ワークアウトの評価 (総合 + 種目ごと) を返す。",
     "input_schema": {
         "type": "object",
         "properties": {
-            "text": {"type": "string", "description": "評価 (最大160字, 1〜2文)"},
-            "tone": {"type": "string", "enum": ["good", "caution", "info"]},
+            "overall": {
+                "type": "object",
+                "description": "セッション全体の評価",
+                "properties": {
+                    "text": {"type": "string", "description": "総合評価 (最大200字)"},
+                    "tone": {"type": "string", "enum": ["good", "caution", "info"]},
+                },
+                "required": ["text", "tone"],
+            },
+            "exercises": {
+                "type": "array",
+                "description": (
+                    "workout.exercises がある場合のみ、各要素と同じ category/name で短評を返す。"
+                    "無い/空の場合は空配列。"
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string", "description": "入力と同じ category"},
+                        "name": {
+                            "type": "string",
+                            "description": "入力と同じ name (無ければ空文字)",
+                        },
+                        "comment": {"type": "string", "description": "この種目の短評 (最大140字)"},
+                        "tone": {"type": "string", "enum": ["good", "caution", "info"]},
+                    },
+                    "required": ["category", "name", "comment", "tone"],
+                },
+            },
         },
-        "required": ["text", "tone"],
+        "required": ["overall", "exercises"],
     },
 }
+
+# Garmin exerciseSets の name (詳細種目) → 日本語表示名。実データ (garmin_sync 保存分) と
+# 過去のワークアウトログに出現するものを優先して収録。未収録の name は category のラベルに
+# フォールバックする。
+_NAME_JA: dict[str, str] = {
+    "GOBLET_SQUAT": "ゴブレットスクワット",
+    "ALTERNATING_DUMBBELL_LUNGE": "オルタネイティングダンベルランジ",
+    "DUMBBELL_LUNGE": "ダンベルランジ",
+    "WALKING_LUNGE": "ウォーキングランジ",
+    "BULGARIAN_SPLIT_SQUAT": "ブルガリアンスクワット",
+    "BARBELL_BENCH_PRESS": "バーベルベンチプレス",
+    "DUMBBELL_BENCH_PRESS": "ダンベルベンチプレス",
+    "BENT_OVER_ROW": "ベントオーバーロー",
+    "ONE_ARM_ROW": "ワンアームロー",
+    "SEATED_ROW": "シーテッドロー",
+    "BICEPS_CURL": "バイセップスカール",
+    "HAMMER_CURL": "ハンマーカール",
+    "STANDING_CALF_RAISE": "スタンディングカーフレイズ",
+    "SINGLE_LEG_DEADLIFT": "片脚デッドリフト",
+    "ROMANIAN_DEADLIFT": "ルーマニアンデッドリフト",
+}
+
+# category (種目大分類) → 日本語ラベル。name が未収録/null (Garmin が詳細検出できなかった
+# 場合。実データで CALF_RAISE/PLANK は name=null になる) のフォールバック先。
+_CATEGORY_JA: dict[str, str] = {
+    "SQUAT": "スクワット系",
+    "LUNGE": "ランジ系",
+    "CALF_RAISE": "カーフレイズ",
+    "PLANK": "プランク",
+    "ROW": "ロー (背中)",
+    "CURL": "カール (上腕二頭筋)",
+    "BENCH_PRESS": "ベンチプレス",
+    "DEADLIFT": "デッドリフト",
+    "HYPEREXTENSION": "バックエクステンション",
+    "LEG_RAISE": "レッグレイズ",
+    "SHOULDER_PRESS": "ショルダープレス",
+    "LATERAL_RAISE": "サイドレイズ",
+    "TRICEPS_EXTENSION": "トライセップスエクステンション",
+    "SHRUG": "シュラッグ",
+    "SIT_UP": "シットアップ",
+    "CRUNCH": "クランチ",
+    "PUSH_UP": "腕立て伏せ",
+    "PULL_UP": "懸垂",
+    "FLYE": "フライ",
+    "CORE": "体幹",
+    "HIP_RAISE": "ヒップレイズ",
+    "HIP_SWING": "ヒップスイング",
+    "LEG_CURL": "レッグカール",
+    "LEG_EXTENSION": "レッグエクステンション",
+    "TOTAL_BODY": "全身複合",
+    "WARM_UP": "ウォームアップ",
+}
+
+
+def _ja_label(category: str | None, name: str | None) -> str:
+    """Garmin の category/name (UPPER_SNAKE) を日本語表示名にする。
+
+    name の方が具体的なので優先。name が無い/未収録なら category のラベル、
+    どちらも無ければ生の文字列 (未知の新カテゴリでも空白で落ちないように)。
+    """
+    if name and name in _NAME_JA:
+        return _NAME_JA[name]
+    if category and category in _CATEGORY_JA:
+        return _CATEGORY_JA[category]
+    return name or category or "種目不明"
 
 
 def _pick_raw(raw: dict | None) -> dict[str, Any]:
@@ -115,12 +216,45 @@ def _summarize_exercise_sets(sets: list[dict[str, Any]]) -> list[dict[str, Any]]
         out.append({
             "category": key[0],
             "name": key[1],
+            "name_ja": _ja_label(key[0], key[1]),
             "set_count": len(items),
             "set_details": items,
             "rep_range": [min(reps), max(reps)] if reps else None,
             "volume_kg": round(volume, 1) if volume else None,
         })
     return out
+
+
+def _attach_prev_volume(
+    exercises: list[dict[str, Any]], recent_sessions: list[dict[str, Any]]
+) -> None:
+    """直近セッション (新しい順) から同種目 (category+name) の直近ボリュームを探し、
+    prev_volume_kg / volume_delta_kg / volume_delta_pct を付与する (in-place)。
+
+    数字はサーバー側で決定論的に計算する (LLM に前回比を計算させない/ハルシネーション防止)。
+    """
+    for ex in exercises:
+        key = (ex.get("category"), ex.get("name"))
+        prev_volume: float | None = None
+        for sess in recent_sessions:
+            match = next(
+                (e for e in sess["exercises"] if (e.get("category"), e.get("name")) == key),
+                None,
+            )
+            if match is not None and match.get("volume_kg") is not None:
+                prev_volume = match["volume_kg"]
+                break
+        ex["prev_volume_kg"] = prev_volume
+        if prev_volume is not None and ex.get("volume_kg") is not None:
+            ex["volume_delta_kg"] = round(ex["volume_kg"] - prev_volume, 1)
+            ex["volume_delta_pct"] = (
+                round((ex["volume_kg"] - prev_volume) / prev_volume * 100, 1)
+                if prev_volume
+                else None
+            )
+        else:
+            ex["volume_delta_kg"] = None
+            ex["volume_delta_pct"] = None
 
 
 def _gather_context(workout_id: str) -> dict[str, Any] | None:
@@ -162,7 +296,8 @@ def _gather_context(workout_id: str) -> dict[str, Any] | None:
         # (種目データが無いのに LLM に種目名を捏造させない)。
         exercise_sets = _extract_exercise_sets(w.raw_json)
         if exercise_sets:
-            ctx["workout"]["exercises"] = _summarize_exercise_sets(exercise_sets)
+            exercises = _summarize_exercise_sets(exercise_sets)
+            ctx["workout"]["exercises"] = exercises
             ctx["user_injury_notes"] = get_settings().user_injury_notes
             recent_exercise_sessions = []
             for x in same:
@@ -173,6 +308,8 @@ def _gather_context(workout_id: str) -> dict[str, Any] | None:
                     "date": (x.start + timedelta(hours=9)).date().isoformat(),
                     "exercises": _summarize_exercise_sets(x_sets),
                 })
+            # 前回同種目比較 (LLM に数字を作らせず決定論的に計算)
+            _attach_prev_volume(exercises, recent_exercise_sessions)
             if recent_exercise_sessions:
                 ctx["recent_exercise_sessions"] = recent_exercise_sessions
     try:
@@ -193,8 +330,44 @@ def _gather_context(workout_id: str) -> dict[str, Any] | None:
     return ctx
 
 
+def _merge_exercise_review(
+    computed: list[dict[str, Any]], llm_exercises: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """サーバー側で計算した種目別スタッツ (computed: category/name/set_count/rep_range/
+    volume_kg/prev_volume_kg 等) と LLM の短評 (llm_exercises: category/name/comment/tone)
+    を category+name で突き合わせる。突き合わせは key ベースなので LLM 側が順序を変えても
+    (要素を1つ落としても) 壊れない。一致しない種目には汎用フォールバック文を入れる
+    (種目データはあるのに評価が空欄になるのを避ける)。
+    """
+    llm_map: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for e in llm_exercises:
+        key = (e.get("category") or None, e.get("name") or None)
+        llm_map[key] = e
+
+    out: list[dict[str, Any]] = []
+    for ex in computed:
+        key = (ex.get("category"), ex.get("name"))
+        m = llm_map.get(key)
+        item = dict(ex)
+        comment = str((m or {}).get("comment") or "").strip()
+        if comment:
+            item["comment"] = comment[:200]
+            tone = (m or {}).get("tone")
+            item["tone"] = tone if tone in ("good", "caution", "info") else "info"
+        else:
+            vol = ex.get("volume_kg")
+            item["comment"] = f"{ex.get('set_count', 0)}セット・ボリューム{vol if vol is not None else '—'}kg。"
+            item["tone"] = "info"
+        out.append(item)
+    return out
+
+
 async def generate_review(workout_id: str) -> dict[str, Any] | None:
-    """LLM で評価を生成。api_key 無し/失敗/対象なしは None。"""
+    """LLM で評価を生成 (総合 + 種目ごと)。api_key 無し/失敗/対象なしは None。
+
+    戻り値: {"text": 総合評価, "tone": 総合トーン, "model": ..., "exercises": [...] | None}
+    exercises は種目データが無いワークアウト (ラン等) では None。
+    """
     settings = get_settings()
     if not settings.anthropic_api_key:
         return None
@@ -209,7 +382,8 @@ async def generate_review(workout_id: str) -> dict[str, Any] | None:
         client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         resp = await client.messages.create(
             model=settings.llm_model,
-            max_tokens=400,
+            # 種目ごとの短評を複数返しうるので、単一テキストの頃 (400) より余裕を持たせる。
+            max_tokens=1500,
             system=_SYSTEM,
             messages=[{
                 "role": "user",
@@ -222,11 +396,21 @@ async def generate_review(workout_id: str) -> dict[str, Any] | None:
     except Exception as exc:
         logger.warning("workout_review_failed", error=str(exc))
         return None
+
+    computed_exercises = ctx.get("workout", {}).get("exercises") or []
+
     for block in resp.content:
-        if getattr(block, "type", None) == "tool_use":
-            inp = dict(block.input or {})
-            text = str(inp.get("text") or "").strip()[:400]
-            tone = inp.get("tone") if inp.get("tone") in ("good", "caution", "info") else "info"
-            if text:
-                return {"text": text, "tone": tone, "model": settings.llm_model}
+        if getattr(block, "type", None) != "tool_use":
+            continue
+        inp = dict(block.input or {})
+        overall = inp.get("overall") if isinstance(inp.get("overall"), dict) else {}
+        text = str(overall.get("text") or "").strip()[:400]
+        if not text:
+            continue
+        tone = overall.get("tone") if overall.get("tone") in ("good", "caution", "info") else "info"
+        llm_exercises = inp.get("exercises") if isinstance(inp.get("exercises"), list) else []
+        exercises = (
+            _merge_exercise_review(computed_exercises, llm_exercises) if computed_exercises else None
+        )
+        return {"text": text, "tone": tone, "model": settings.llm_model, "exercises": exercises}
     return None

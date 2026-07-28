@@ -76,3 +76,24 @@ def test_bia_navy_discrepancy_missing_is_none():
 
     assert bia_navy_discrepancy(None, 17.9) is None
     assert bia_navy_discrepancy(20.0, None) is None
+
+
+# ----- 表示用の丸め -----
+
+
+def test_discrepancy_values_are_rounded():
+    """BIA/海軍式の値を生の float のまま持ち回らない。
+
+    回帰テスト: `17.68893693789233%` のような桁がそのまま API から返り、
+    UI で桁溢れして隣の数値と重なる表示崩れが起きた。BIA は元々 ±3-5pt の誤差が
+    ある推定値なので、この桁数は**精度の錯覚**でもある。
+    """
+    from app.scoring.body_measurement import bia_navy_discrepancy
+
+    d = bia_navy_discrepancy(17.68893693789233, 19.43219)
+    assert d is not None
+    # 0.1pt 単位に丸まっていること (小数第2位以下を持たない)
+    for key in ("bia_pct", "navy_pct", "diff_pt"):
+        assert round(d[key], 1) == d[key], f"{key} が丸められていない: {d[key]}"
+    assert d["bia_pct"] == 17.7
+    assert d["navy_pct"] == 19.4

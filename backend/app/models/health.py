@@ -184,6 +184,27 @@ class WorkoutReview(Base):
     tone: Mapped[str] = mapped_column(String(10), default="info")
     model: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # 種目ごとの構造化評価 (筋トレで exercise_sets が取れた場合のみ)。
+    # [{category, name, name_ja, set_count, rep_range, volume_kg, prev_volume_kg,
+    #   volume_delta_kg, volume_delta_pct, comment, tone}, ...]
+    # text/tone は「総合」評価のまま (種目データが無い運動は従来どおりこれだけで完結する)。
+    exercises_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
+class LlmRegenLog(Base):
+    """LLM「再分析/再生成」(force) のレート制限ログ。機能ごとに1日の呼び出し回数を数える。
+
+    アドバイス再生成 (llm/client.py) は LlmComment の行数で日次カウントしているが、
+    ワークアウト評価のように「1行に対して何度でも上書きしうる」機能は同じやり方が
+    使えない (行が1件に潰れて履歴が残らない) ため、イベントログとして別テーブルに残す。
+    """
+
+    __tablename__ = "llm_regen_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    feature: Mapped[str] = mapped_column(String(32), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class WeightSample(Base):

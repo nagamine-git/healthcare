@@ -144,3 +144,175 @@ def test_gather_context_falls_back_when_no_exercise_sets(app_client, session):
     assert "exercises" not in ctx["workout"]
     assert "recent_exercise_sessions" not in ctx
     assert "user_injury_notes" not in ctx
+
+
+def test_gather_context_attaches_prev_volume_for_same_exercise(app_client, session):
+    """前回同種目 (category+name) のボリュームが prev_volume_kg / delta として付く
+    (LLM に前回比の数字を作らせず、サーバー側で決定論的に計算する)。"""
+    from app.llm.workout_review import _gather_context
+
+    prev_sets = {
+        "sets": [
+            {"category": "ROW", "name": None, "reps": 10, "weight_kg": 10.0},
+            {"category": "ROW", "name": None, "reps": 10, "weight_kg": 10.0},
+        ]
+    }
+    _add_strength_workout(
+        session, "w-prev2", datetime.utcnow() - timedelta(days=2), exercise_sets=prev_sets
+    )
+    _add_strength_workout(
+        session, "w-today2", datetime.utcnow() - timedelta(hours=1), exercise_sets=SAMPLE_SETS
+    )
+
+    ctx = _gather_context("w-today2")
+    row = next(e for e in ctx["workout"]["exercises"] if e["category"] == "ROW")
+    # 前回 ROW ボリューム = 10*10*2 = 200、今回 = 12*8*2 = 192 (SAMPLE_SETS)
+    assert row["prev_volume_kg"] == 200.0
+    assert row["volume_delta_kg"] == round(192.0 - 200.0, 1)
+    assert row["volume_delta_pct"] is not None
+
+    curl = next(e for e in ctx["workout"]["exercises"] if e["category"] == "CURL")
+    # 前回セッションに CURL が無いので prev_volume_kg は None
+    assert curl["prev_volume_kg"] is None
+    assert curl["volume_delta_kg"] is None
+
+
+# --- 種目名の日本語化 -------------------------------------------------------
+
+
+def test_ja_label_prefers_name_then_category_then_fallback():
+    from app.llm.workout_review import _ja_label
+
+    assert _ja_label("SQUAT", "GOBLET_SQUAT") == "ゴブレットスクワット"
+    # name が無い (Garmin が詳細検出できない) 場合は category のラベルにフォールバック
+    assert _ja_label("CALF_RAISE", None) == "カーフレイズ"
+    assert _ja_label("PLANK", None) == "プランク"
+    # どちらも未収録なら生の文字列を出す (空白で落とさない)
+    assert _ja_label("SOME_NEW_CATEGORY", None) == "SOME_NEW_CATEGORY"
+    assert _ja_label(None, None) == "種目不明"
+
+
+# --- LLM の種目別短評とサーバー計算スタッツのマージ --------------------------
+
+
+def test_merge_exercise_review_matches_by_category_and_name_and_falls_back():
+    from app.llm.workout_review import _merge_exercise_review
+
+    computed = [
+        {"category": "SQUAT", "name": "GOBLET_SQUAT", "set_count": 3, "volume_kg": 312.0},
+        {"category": "PLANK", "name": None, "set_count": 3, "volume_kg": None},
+    ]
+    llm_exercises = [
+        # 順序が computed と違っても category+name で正しく突き合う
+        {"category": "PLANK", "name": "", "comment": "終盤で保持時間が落ちている。", "tone": "caution"},
+        {"category": "SQUAT", "name": "GOBLET_SQUAT", "comment": "前回よりボリューム増加。", "tone": "good"},
+    ]
+    merged = _merge_exercise_review(computed, llm_exercises)
+    squat = next(e for e in merged if e["category"] == "SQUAT")
+    assert squat["comment"] == "前回よりボリューム増加。"
+    assert squat["tone"] == "good"
+    plank = next(e for e in merged if e["category"] == "PLANK")
+    assert plank["comment"] == "終盤で保持時間が落ちている。"
+
+    # LLM が返さなかった種目にはフォールバック文が入る (空欄にしない)
+    merged2 = _merge_exercise_review(computed, [])
+    assert all(e["comment"] for e in merged2)
+    assert all(e["tone"] == "info" for e in merged2)
+
+
+# --- API: 構造化評価の永続化・再分析のレート制限 -----------------------------
+
+
+def test_create_review_persists_structured_exercises(app_client, session, monkeypatch):
+    """LLM が返す overall/exercises 構造が WorkoutReview.exercises_json に保存され、
+    一覧 API (review_exercises) からも取れる。"""
+    _add_strength_workout(
+        session, "w-struct", datetime.utcnow() - timedelta(hours=1), exercise_sets=SAMPLE_SETS
+    )
+
+    async def fake_generate(workout_id):
+        return {
+            "text": "全体的にボリュームは前回並み。ROW はやや疲労が見える。",
+            "tone": "info",
+            "model": "test",
+            "exercises": [
+                {
+                    "category": "ROW", "name": None, "name_ja": "ロー (背中)", "set_count": 2,
+                    "rep_range": [8, 8], "volume_kg": 192.0, "prev_volume_kg": None,
+                    "volume_delta_kg": None, "volume_delta_pct": None,
+                    "comment": "終盤フォームが崩れがち。", "tone": "caution",
+                },
+                {
+                    "category": "CURL", "name": None, "name_ja": "カール (上腕二頭筋)", "set_count": 1,
+                    "rep_range": [6, 6], "volume_kg": 48.0, "prev_volume_kg": None,
+                    "volume_delta_kg": None, "volume_delta_pct": None,
+                    "comment": "軽負荷で丁寧にこなせている。", "tone": "good",
+                },
+            ],
+        }
+
+    import app.llm.workout_review as wr
+
+    monkeypatch.setattr(wr, "generate_review", fake_generate)
+
+    r = app_client.post("/api/workout-reviews/w-struct")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["review_exercises"] is not None
+    assert len(body["review_exercises"]) == 2
+    assert body["review_exercises"][0]["name_ja"] == "ロー (背中)"
+
+    items = app_client.get("/api/workout-reviews").json()["items"]
+    item = next(i for i in items if i["workout_id"] == "w-struct")
+    assert item["review_exercises"][1]["comment"] == "軽負荷で丁寧にこなせている。"
+
+
+def test_non_strength_review_has_no_exercises(app_client, session, monkeypatch):
+    """種目データが無い運動 (ラン等) は review_exercises が None のまま (従来どおり総合のみ)。"""
+    _add_workout(session, wid="w-run")
+
+    async def fake_generate(workout_id):
+        return {"text": "ペースは安定。", "tone": "good", "model": "test", "exercises": None}
+
+    import app.llm.workout_review as wr
+
+    monkeypatch.setattr(wr, "generate_review", fake_generate)
+
+    r = app_client.post("/api/workout-reviews/w-run")
+    assert r.status_code == 200
+    assert r.json()["review_exercises"] is None
+
+
+def test_regenerate_rate_limit(app_client, session, monkeypatch):
+    """「再分析」(force かつ既存あり) は日次上限 (既定 Settings.llm_max_regenerations_per_day=3)
+    を超えると 429 で LLM を呼ばない。初回生成はカウント対象外。"""
+    _add_workout(session, wid="w-cap")
+    calls = {"n": 0}
+
+    async def fake_generate(workout_id):
+        calls["n"] += 1
+        return {"text": f"評価{calls['n']}", "tone": "info", "model": "test", "exercises": None}
+
+    import app.llm.workout_review as wr
+
+    monkeypatch.setattr(wr, "generate_review", fake_generate)
+
+    # 初回生成 (force なし) はカウント対象外
+    r0 = app_client.post("/api/workout-reviews/w-cap")
+    assert r0.status_code == 200 and calls["n"] == 1
+
+    # 既定の上限まで force 再生成できる
+    for _ in range(3):
+        r = app_client.post("/api/workout-reviews/w-cap?force=1")
+        assert r.status_code == 200
+    assert calls["n"] == 4
+
+    # 上限超過は 429、LLM も呼ばれない
+    r_over = app_client.post("/api/workout-reviews/w-cap?force=1")
+    assert r_over.status_code == 429
+    assert calls["n"] == 4
+
+    # 直前の評価はそのまま残っている (壊れていない)
+    items = app_client.get("/api/workout-reviews").json()["items"]
+    item = next(i for i in items if i["workout_id"] == "w-cap")
+    assert item["review_text"] == "評価4"

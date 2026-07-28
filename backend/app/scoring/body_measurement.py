@@ -120,8 +120,10 @@ def bia_navy_discrepancy(bia_body_fat_pct: float | None, navy_pct: float | None)
         return None
     diff = round(bia_body_fat_pct - navy_pct, 1)
     return {
-        "bia_pct": bia_body_fat_pct,
-        "navy_pct": navy_pct,
+        # BIA は ±3-5pt の誤差がある推定値。生の float をそのまま持ち回ると
+        # 「17.68893693789233%」のような精度の錯覚を招く (実際に表示崩れも起きた)。
+        "bia_pct": round(bia_body_fat_pct, 1),
+        "navy_pct": round(navy_pct, 1),
         "diff_pt": diff,
         "status": "large" if abs(diff) >= NAVY_BIA_DISCREPANCY_PT else "close",
     }
