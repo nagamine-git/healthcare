@@ -39,10 +39,15 @@ def _row_dict(r: BodyMeasurement) -> dict[str, Any]:
     }
 
 
-def _latest_body_composition() -> BodyCompositionSample | None:
-    """骨格筋率・内臓脂肪レベルの最新スクショ取込値 (手動記録、無くてもよい)。"""
+def _latest_body_composition() -> dict[str, float | None]:
+    """骨格筋率・内臓脂肪レベルの最新スクショ取込値 (手動記録、無くてもよい)。
+
+    ⚠️ **ORM オブジェクトを session_scope の外へ返さない。** 抜けた時点で detach され、
+    呼び出し側が属性に触れた瞬間 DetachedInstanceError で 500 になる
+    (`/api/sleep/last-night` で同じ罠を踏んだ)。必要な値だけ素の dict にして返す。
+    """
     with session_scope() as session:
-        return (
+        row = (
             session.execute(
                 select(BodyCompositionSample)
                 .order_by(BodyCompositionSample.date.desc(), BodyCompositionSample.id.desc())
@@ -51,6 +56,12 @@ def _latest_body_composition() -> BodyCompositionSample | None:
             .scalars()
             .first()
         )
+        if row is None:
+            return {"skeletal_muscle_pct": None, "visceral_fat_level": None}
+        return {
+            "skeletal_muscle_pct": row.skeletal_muscle_pct,
+            "visceral_fat_level": row.visceral_fat_level,
+        }
 
 
 def _evaluate(row: BodyMeasurement | None) -> dict[str, Any]:
@@ -89,8 +100,8 @@ def _evaluate(row: BodyMeasurement | None) -> dict[str, Any]:
         waist_cm=waist_cm,
         whtr_ratio=ratio,
         whtr_status_value=status,
-        skeletal_muscle_pct=body_comp.skeletal_muscle_pct if body_comp else None,
-        visceral_fat_level=body_comp.visceral_fat_level if body_comp else None,
+        skeletal_muscle_pct=body_comp["skeletal_muscle_pct"],
+        visceral_fat_level=body_comp["visceral_fat_level"],
     )
 
     return {
