@@ -83,8 +83,10 @@ _DRIVERS: list[tuple[str, str]] = [
     ("caffeine_pm", "午後以降のカフェイン(食事性)"),
     ("medication", "頭痛薬の使用"),
     ("alcohol_eve", "夜の飲酒"),
-    ("exercise", "運動量(負荷)"),
-    ("steps", "日中の活動量"),
+    # ⚠️ ラベルは**実体そのもの**を書く。「活動量」「運動量」は紛らわしく、
+    # どちらが歩数でどちらがワークアウト負荷か利用者が判別できなかった。
+    ("exercise", "ワークアウト負荷"),   # Workout.training_load (強度×時間)
+    ("steps", "日中の歩数"),            # DailySummary.steps (日常の NEAT 寄りの動き)
     ("stress", "ストレス(主観)"),
     ("duration", "睡眠時間"),
     ("morning_light", "朝の光(推定・実測lux不可)"),
@@ -338,12 +340,17 @@ def _anchors(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     s = get_settings()
     caffeine_h = s.caffeine_cutoff_hours_before_bed
     exercise_h = s.exercise_to_bed_lead_min / 60.0
+    # 歩数の中央値 = 検定で「多い/少ない」を分けている実際の境界。
+    # 「こまめに歩く」だけでは何歩を目指せばよいか分からないので、助言に埋める。
+    step_vals = sorted(r["steps"] for r in rows if r.get("steps") is not None)
+    steps_median = step_vals[len(step_vals) // 2] if step_vals else None
     return {
         "bedtime": _hhmm(bedtime),
         "caffeine_cutoff": _hhmm(bedtime - caffeine_h),
         "exercise_cutoff": _hhmm(bedtime - exercise_h),
         "alcohol_cutoff": _hhmm(bedtime - exercise_h),
         "dur_h": round(dur / 60, 1),
+        "steps_median": int(steps_median) if steps_median is not None else None,
     }
 
 
@@ -361,13 +368,23 @@ def _action_text(driver: str, direction: str, a: dict[str, Any] | None) -> str |
             return f"{a['alcohol_cutoff']} 以降の飲酒を控える（就寝3h前まで）" if a else "就寝前の飲酒を控える"
         if driver == "stress":
             return "就寝1時間前から画面を切り、4-7-8呼吸 or 入浴で落ち着く"
-        if driver == "steps":
+        if driver == "exercise":
+            # 「悪化」= 負荷が高い日ほど悪い → 就寝前の高強度を避ける
             return f"{a['exercise_cutoff']} 以降の高強度運動を避ける（就寝3h前まで）" if a else "就寝3時間前以降の高強度運動を避ける"
+        if driver == "steps":
+            # ⚠️ steps は**歩数**。以前ここに exercise 用の「高強度運動を避ける」文言が
+            # 入っており、歩数の話が運動強度の話にすり替わっていた。
+            # 歩数が多い日ほど悪い、という向きは考えにくいが、出た場合は
+            # 「歩数そのもの」ではなく時間帯の問題として扱う。
+            return "夜遅くの活動を減らし、歩くのは日中に寄せる"
     else:  # 続ける
         if driver == "exercise":
             return f"運動は日中〜{a['exercise_cutoff']} までに済ませる（運動した日ほど深睡眠/翌朝が良い）" if a else "運動は日中〜夕方に済ませる"
         if driver == "steps":
-            return "日中こまめに動く（活動量が多い日ほど良い）"
+            # 何歩を目指すのかを出す (検定の分割点 = 中央値がそのまま目標になる)
+            if a and a.get("steps_median"):
+                return f"日中こまめに歩く（1日 {a['steps_median']:,} 歩超を目安に）"
+            return "日中こまめに歩く（歩数が多い日ほど深く眠れている）"
         if driver == "duration":
             return f"睡眠時間は {a['dur_h']} 時間前後を確保する" if a else "睡眠時間をしっかり確保する"
         if driver == "caffeine_pm":

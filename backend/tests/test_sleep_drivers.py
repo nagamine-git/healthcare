@@ -148,3 +148,43 @@ def test_duration_excluded_from_restlessness(db_engine):
         None,
     )
     assert dur_vs_bb is not None, out["next_day"]
+
+
+# ----- ラベルと助言文が実体と一致していること -----
+
+
+def test_driver_labels_name_the_actual_metric():
+    """「活動量」「運動量」のような曖昧な語を使わない。
+
+    どちらが歩数でどちらがワークアウト負荷か利用者が判別できなかったため、
+    ラベルは実体そのもの (歩数 / ワークアウト負荷) を書く。
+    """
+    from app.scoring.sleep_drivers import _DRIVERS
+
+    labels = dict(_DRIVERS)
+    assert labels["steps"] == "日中の歩数"
+    assert labels["exercise"] == "ワークアウト負荷"
+
+
+def test_steps_advice_is_about_steps_not_intensity():
+    """歩数ドライバーの助言が「高強度運動を避ける」にすり替わらないこと。
+
+    回帰テスト: steps (歩数) の悪化側に exercise 用の文言が入っており、
+    歩数の話が運動強度の話になっていた。
+    """
+    from app.scoring.sleep_drivers import _action_text
+
+    anchors = {"bedtime": "00:55", "exercise_cutoff": "21:55",
+               "caffeine_cutoff": "18:55", "alcohol_cutoff": "21:55",
+               "dur_h": 7.0, "steps_median": 4592}
+
+    good = _action_text("steps", "改善", anchors)
+    assert "歩" in good
+    assert "4,592" in good          # 目標が具体的な歩数で出る
+    assert "高強度" not in good
+
+    bad = _action_text("steps", "悪化", anchors)
+    assert "高強度運動を避ける" not in bad   # exercise 用の文言を使い回さない
+
+    # exercise 側は従来どおり強度の話
+    assert "高強度" in _action_text("exercise", "悪化", anchors)
