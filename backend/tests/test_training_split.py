@@ -40,15 +40,28 @@ def test_today_picks_strength_when_strength_deficit_larger():
 
 
 def test_today_picks_cardio_when_cardio_deficit_larger():
-    # 筋トレ3/3・有酸素0/3 → 有酸素不足が大 → cardio ローテ先頭 (kata)
+    # 筋トレ3/3・有酸素0/3 → 有酸素不足が大 → cardio ローテ先頭 (swing)
     t = compute_today_training(strength_7d=3, cardio_7d=0, strength_total=3, day_ordinal=0)
-    assert t["modality"] == "kata"
+    assert t["modality"] == "swing"
     assert "素振り" in t["detail"]
 
 
-def test_cardio_rotation_kata_hiit_z2():
+def test_swing_slot_groups_equivalent_indoor_options():
+    """シャドー・木刀切り返し・跳躍素振りは**同じ枠**に入れる。
+
+    どれも室内・静音・準備ゼロの全身リズム運動で刺激としては同カテゴリ。
+    以前はシャドーが z2 側、木刀が kata 側に分断され、跳躍素振りはどこにも
+    入っていなかったため、同じ性質のものが別モダリティ扱いになっていた。
+    """
+    t = compute_today_training(strength_7d=3, cardio_7d=0, strength_total=3, day_ordinal=0)
+    detail = t["detail"]
+    for kw in ("シャドーボクシング", "蹲踞", "股割り", "跳躍素振り"):
+        assert kw in detail, f"{kw} が swing 枠に入っていない"
+
+
+def test_cardio_rotation_swing_hiit_z2():
     assert compute_today_training(strength_7d=3, cardio_7d=0, strength_total=0,
-                                  day_ordinal=0)["modality"] == "kata"
+                                  day_ordinal=0)["modality"] == "swing"
     assert compute_today_training(strength_7d=3, cardio_7d=1, strength_total=0,
                                   day_ordinal=0)["modality"] == "hiit"
     assert compute_today_training(strength_7d=3, cardio_7d=2, strength_total=0,
