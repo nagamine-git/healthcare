@@ -825,6 +825,57 @@ export type SleepDriverState = {
   recommendations?: SleepRecommendation[];
 };
 
+// 時間あたりの回復効率。GET /api/sleep/efficiency
+// 「質が高くて短時間で回復する睡眠」を狙うための分析。時間ではなく効率・深睡眠を
+// 上げる方向の材料だけを返す (睡眠時間を削る方向の助言はしない設計)。
+export type SleepEfficiencyEntry = {
+  duration_h: number;
+  bb_per_hour: number;
+  morning_bb: number;
+  efficiency: number | null;
+  deep_min: number | null;
+};
+export type SleepEfficiencyPerHour = {
+  n: number;
+  top: SleepEfficiencyEntry[];
+  bottom: SleepEfficiencyEntry[];
+  top_avg_efficiency: number | null;
+  bottom_avg_efficiency: number | null;
+  top_avg_deep_min: number | null;
+  bottom_avg_deep_min: number | null;
+};
+export type SleepEfficiencyBin = {
+  label: string;
+  lower_h: number | null;
+  upper_h: number | null;
+  n: number;
+  reliable: boolean;
+  avg_bb: number | null;
+  avg_energy: number | null;
+};
+export type SleepEfficiencySaturationPeak = {
+  peak_bin: string;
+  hours: number;
+  avg_bb: number;
+  observed_within_range: boolean;
+};
+export type SleepEfficiencyCorrelation = { r: number | null; n: number };
+export type SleepEfficiencyState = {
+  n_nights: number;
+  per_hour: SleepEfficiencyPerHour;
+  saturation: {
+    bins: SleepEfficiencyBin[];
+    peak: SleepEfficiencySaturationPeak | null;
+  };
+  correlations: {
+    duration: SleepEfficiencyCorrelation;
+    efficiency: SleepEfficiencyCorrelation;
+    deep_min: SleepEfficiencyCorrelation;
+  };
+  drivers: SleepDriverFactor[];
+  caveat: string[];
+};
+
 // 昨夜の睡眠評価 (成分ごとの良好/低い判定 + 改善点)。GET /api/sleep/last-night
 export type SleepQualityComponent = {
   key: "deep" | "rem" | "efficiency" | "awake" | "total";
@@ -2193,6 +2244,7 @@ export const api = {
   forecast: () => request<ForecastState>("/api/forecast"),
   habitPace: () => request<HabitPaceState>("/api/habit-pace"),
   sleepDrivers: () => request<SleepDriverState>("/api/sleep/drivers"),
+  sleepEfficiency: () => request<SleepEfficiencyState>("/api/sleep/efficiency"),
   lastNight: () => request<LastNight>("/api/sleep/last-night"),
   windDown: () => request<WindDown>("/api/wind-down"),
   meditation: () => request<Meditation>("/api/meditation"),
