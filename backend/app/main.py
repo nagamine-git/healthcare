@@ -46,6 +46,7 @@ from app.api import push as push_api
 from app.api import schedule as schedule_api
 from app.api import screentime as screentime_api
 from app.api import sleep_drivers as sleep_drivers_api
+from app.api import sleep_efficiency as sleep_efficiency_api
 from app.api import sleep_intervention as sleep_intervention_api
 from app.api import sleep_plan_override as sleep_plan_override_api
 from app.api import sleep_quality as sleep_quality_api
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(tide_api.router)
     app.include_router(bodyload_api.router)
     app.include_router(sleep_drivers_api.router)
+    app.include_router(sleep_efficiency_api.router)
     app.include_router(sleep_intervention_api.router)
     app.include_router(sleep_quality_api.router)
     app.include_router(next_action_api.router)
