@@ -151,3 +151,22 @@ def test_caveat_never_reads_as_sleep_less():
     assert "長期" in caveat_text
     assert "自動で引き下げ" in caveat_text or "自動で下げ" in caveat_text
     assert "データ不足" in caveat_text or "薄く表示" in caveat_text
+
+
+def test_caveats_cover_reverse_causation_and_short_sleep():
+    """安全性の但し書きが消えていないこと (これが無いと有害な誤読を招く)。
+
+    - 「時間を伸ばしても伸びない」を「短く寝る方が良い」と読ませない
+    - 「長く寝た夜ほど BB が低い」を「長く寝ると悪い」と読ませない
+      (逆因果: 不調な日ほど長く寝る、が同じデータを説明する)
+    """
+    from app.scoring.sleep_efficiency import CAVEATS
+
+    blob = "".join(CAVEATS)
+    # 短期指標であること
+    assert "短期" in blob or "翌日の準備状態" in blob
+    # 短時間睡眠の是認をしていないこと
+    assert "短く寝る方が良い" in blob and "別" in blob
+    # 逆因果に触れていること
+    assert "逆" in blob
+    assert "体調が悪い日ほど長く眠る" in blob or "回復が必要な日だったから長く寝た" in blob
