@@ -76,7 +76,12 @@ class Settings(BaseSettings):
     finance_net_worth_median_jpy: float = 1_000_000    # 30代の金融資産中央値の目安(推定)
     finance_net_worth_target_jpy: float = 10_000_000   # 純資産マイルストーン「1000万」(目標)
     finance_savings_rate_median_pct: float = 20.0      # 家計貯蓄率の目安(推定)
-    finance_savings_rate_target_pct: float = 25.0      # 良好な貯蓄率(目標)
+    # 良好な貯蓄率(目標)。**衝動買い保留の閾値 (_dynamic_impulse_hold) の分母にも使う。**
+    # ⚠️ 本人の実際の家計設計は貯蓄1割だが、ここは**意図的に厳しめの25%**にしている。
+    # 閾値の目的は「使ってよい上限」ではなく「立ち止まる線」なので、実態どおり10%にすると
+    # 閾値が上がって衝動買いの警告がほぼ出なくなり、機能が死ぬ。
+    # 実態に合わせて下げないこと (下げるなら閾値の目的自体を再設計する)。
+    finance_savings_rate_target_pct: float = 25.0
     # 法人版 √(総資産×純資産) のマイルストーン (個人の1000万よりずっと小さい事業規模を想定)
     finance_corporate_wealth_index_target_jpy: float = 5_000_000
     # 法人の財務健全度スコアを構成する 3 指標の目標。

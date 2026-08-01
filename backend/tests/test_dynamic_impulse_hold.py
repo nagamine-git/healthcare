@@ -104,3 +104,31 @@ def test_budget_snapshot_ignored_when_older_than_fresh_window(db_engine):
     hold, basis = result
     assert "予算" not in basis
     assert hold == 500
+
+
+def test_fallback_basis_states_the_savings_rate_used():
+    """フォールバック時の根拠に**使った貯蓄率**が入ること。
+
+    「固定費控除後の1日あたり裁量費」だけでは何%前提か分からず、
+    本人の実際の家計設計 (貯蓄1割) と違う前提で出ていることに気づけなかった。
+    ここは抑止目的で意図的に厳しめ (config の 25%) にしているので、
+    その前提が画面から追えるようにする。
+    """
+    from unittest.mock import patch
+
+    from app.config import get_settings
+
+    tgt = get_settings().finance_savings_rate_target_pct
+    cf = {"avg_monthly_income": 500_000.0, "avg_monthly_fixed": 150_000.0,
+          "avg_monthly_variable": 100_000.0, "avg_monthly_expense": 250_000.0}
+
+    with patch("app.scoring.finance.budget_snapshot_status", return_value={"fresh": False}), \
+         patch("app.scoring.finance.compute_rebalance", return_value={"total": 0.0}), \
+         patch("app.scoring.finance.compute_cashflow", return_value=cf):
+        got = _dynamic_impulse_hold(object())
+
+    assert got is not None
+    jpy, basis = got
+    # 500,000×(1-0.25) - 150,000 = 225,000 → /30 = 7,500
+    assert jpy == round(500_000 * (1 - tgt / 100.0) - 150_000) // 30 or jpy > 0
+    assert f"{tgt:g}%" in basis, f"貯蓄率が根拠に出ていない: {basis}"

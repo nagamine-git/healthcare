@@ -173,7 +173,14 @@ def _dynamic_impulse_hold(session: Any) -> tuple[int, str] | None:
     if inc and inc > 0 and tgt is not None:
         discretionary = inc * (1 - tgt / 100.0) - fixed
         if discretionary > 0:
-            return max(500, round(discretionary / 30.0)), "固定費控除後の1日あたり裁量費(貯蓄目標ベース)"
+            # 根拠に**使った貯蓄率を明記**する。これが無いと「なぜこの金額なのか」が
+            # 追えず、実際の家計設計 (貯蓄1割) と違う前提で出ていることにも気づけない。
+            # ここは意図的に実態より厳しめ: 衝動買いの抑止が目的なので、
+            # 「使ってよい上限」ではなく「立ち止まる線」として保守側に置く。
+            return (
+                max(500, round(discretionary / 30.0)),
+                f"固定費控除後の1日あたり裁量費 (貯蓄{tgt:g}%を先取りした前提・抑止目的で厳しめ)",
+            )
     var = cf.get("avg_monthly_variable")
     if var and var > 0:
         return max(500, round(var / 30.0)), "実際の変動費÷30 (1日あたり)"
