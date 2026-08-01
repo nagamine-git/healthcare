@@ -79,3 +79,48 @@ def test_updated_at_not_required(app_client):
     """seed に updated_at を持たない SleepSession でも動く (モデル差異の保険)。"""
     _seed_sleep(sleep_score=None)
     assert app_client.get("/api/sleep/last-night").status_code == 200
+
+
+def test_wake_stages_none_when_raw_json_missing(app_client):
+    """raw_json が無い (=Apple Health 由来など) 夜は wake_stages が None になり 500 にしない。"""
+    _seed_sleep(raw_json=None)
+    resp = app_client.get("/api/sleep/last-night")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["wake_stages"] is None
+
+
+def test_wake_stages_detects_actual_wake(app_client):
+    """sleepMovement から体動起床を検出できれば、目覚め/起床の両方を JST HH:MM で返す。"""
+    from datetime import UTC, datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from app.scoring.timewindow import app_today
+
+    jst = ZoneInfo("Asia/Tokyo")
+    target = app_today()
+    sleep_end_jst = datetime.combine(target, datetime.min.time(), jst).replace(hour=7, minute=0)
+    actual_wake_jst = sleep_end_jst + timedelta(minutes=20)
+    epoch_ms = int(sleep_end_jst.astimezone(UTC).timestamp() * 1000)
+
+    def entry(dt, level):
+        s = dt.astimezone(UTC).replace(tzinfo=None)
+        e = s + timedelta(minutes=1)
+        return {
+            "startGMT": s.strftime("%Y-%m-%dT%H:%M:%S.0"),
+            "endGMT": e.strftime("%Y-%m-%dT%H:%M:%S.0"),
+            "activityLevel": level,
+        }
+
+    movement = [entry(sleep_end_jst + timedelta(minutes=i), 2.0) for i in range(20)]
+    movement += [entry(actual_wake_jst + timedelta(minutes=i), 6.0) for i in range(3)]
+
+    _seed_sleep(raw_json={
+        "dailySleepDTO": {"sleepEndTimestampGMT": epoch_ms},
+        "sleepMovement": movement,
+    })
+    resp = app_client.get("/api/sleep/last-night")
+    assert resp.status_code == 200, resp.text
+    ws = resp.json()["wake_stages"]
+    assert ws["sleep_end_hhmm"] == "07:00"
+    assert ws["actual_wake_hhmm"] == "07:20"
+    assert ws["lingering_min"] == 20

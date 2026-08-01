@@ -891,6 +891,13 @@ export type SleepQualityImprovement = {
   basis: "personal" | "general";
   component: string;
 };
+// 「目覚め (睡眠終了)」と「起床 (体動確認)」の2段階。体動から起床を検出できない
+// 夜は actual_wake_hhmm/lingering_min が null (フロントは睡眠終了のみの1行表示に戻す)。
+export type WakeStages = {
+  sleep_end_hhmm: string;
+  actual_wake_hhmm: string | null;
+  lingering_min: number | null;
+};
 export type LastNight = {
   date: string;
   available: boolean;
@@ -900,6 +907,7 @@ export type LastNight = {
   headline?: string;
   components?: SleepQualityComponent[];
   improvements?: SleepQualityImprovement[];
+  wake_stages?: WakeStages | null;
 };
 
 // 種目の詳しいフォームガイド (タップで LLM 生成 → キャッシュ)。

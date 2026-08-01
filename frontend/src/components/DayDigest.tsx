@@ -57,6 +57,10 @@ export function DayDigest({ segments, t, originJst, nowH }: {
   const qc = useQueryClient();
   // 保存済みの AI 評価 (目標体型軸)。date|HH:MM|ラベル で突き合わせる
   const reviewsQ = useQuery({ queryKey: ["highlight-reviews"], queryFn: api.highlightReviews });
+  // 「目覚め (睡眠終了)」「起床 (体動確認)」の2段階。LastNightPanel と同じ queryKey で
+  // キャッシュを共有する (同一画面で二重フェッチしない)。
+  const lastNightQ = useQuery({ queryKey: ["last-night"], queryFn: api.lastNight, staleTime: 60_000 });
+  const wakeStages = lastNightQ.data?.available ? lastNightQ.data.wake_stages ?? null : null;
   const reviewMap = new Map(
     (reviewsQ.data?.items ?? []).map((r) => [`${r.date}|${r.event_key}`, r]),
   );
@@ -87,11 +91,30 @@ export function DayDigest({ segments, t, originJst, nowH }: {
     // start_h が窓の左端 (=0) に張り付くのは窓開始前から寝ていたケース → 時刻不明なので出さない
     if (sleep.start_h > 0.05 && past(sleep.start_h))
       entries.push({ h: sleep.start_h, icon: Moon, color: "text-indigo-300", text: "就寝" });
-    if (sleep.end_h < 24 && past(sleep.end_h))
-      entries.push({
-        h: sleep.end_h, icon: Sunrise, color: "text-amber-200",
-        text: "起きた", sub: `睡眠 ${(sleep.end_h - sleep.start_h).toFixed(1)}h`,
-      });
+    if (sleep.end_h < 24 && past(sleep.end_h)) {
+      const sleepH = (sleep.end_h - sleep.start_h).toFixed(1);
+      // 体動から起床を検出できた夜だけ「目覚め (睡眠終了)」と「起床 (動き出し)」を
+      // 分けて出す。lingering_min <= 0 (検出が睡眠終了以前など) は差に意味が無いので
+      // 従来どおり1行にフォールバックする。
+      if (wakeStages?.actual_wake_hhmm != null && (wakeStages.lingering_min ?? 0) > 0) {
+        entries.push({
+          h: sleep.end_h, icon: Moon, color: "text-amber-200/70",
+          text: `目覚め ${wakeStages.sleep_end_hhmm} (睡眠終了)`, sub: `睡眠 ${sleepH}h`,
+        });
+        const wakeH = sleep.end_h + wakeStages.lingering_min! / 60;
+        if (wakeH < 24 && past(wakeH))
+          entries.push({
+            h: wakeH, icon: Sunrise, color: "text-amber-200",
+            text: `起床 ${wakeStages.actual_wake_hhmm} (動き出し)`,
+            sub: `布団の中 ${wakeStages.lingering_min}分`,
+          });
+      } else {
+        entries.push({
+          h: sleep.end_h, icon: Sunrise, color: "text-amber-200",
+          text: "起きた", sub: `睡眠 ${sleepH}h`,
+        });
+      }
+    }
   }
 
   // カフェイン

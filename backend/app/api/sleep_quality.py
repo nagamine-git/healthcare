@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
@@ -18,8 +20,33 @@ from app.scoring import sleep_drivers
 from app.scoring.profile import resolve_profile
 from app.scoring.sleep_quality import evaluate_last_night
 from app.scoring.timewindow import app_today
+from app.scoring.wake_detect import wake_stages_from_raw
 
 router = APIRouter()
+
+_JST = ZoneInfo("Asia/Tokyo")
+
+
+def _wake_stages_payload(raw_json: dict[str, Any] | None) -> dict[str, Any] | None:
+    """「目覚め (睡眠終了)」「起床 (体動確認)」を JST HH:MM で返す。
+
+    体動から起床を検出できない夜は ``actual_wake_hhmm``/``lingering_min`` が
+    None になる (呼び出し側=フロントで睡眠終了のみの1行表示にフォールバックする)。
+    睡眠終了時刻自体が不明 (raw_json 無し等) なら None を返す。
+    """
+    stages = wake_stages_from_raw(raw_json)
+    if stages is None:
+        return None
+    sleep_end_jst = stages["sleep_end_utc"].replace(tzinfo=UTC).astimezone(_JST)
+    actual_wake_utc = stages["actual_wake_utc"]
+    actual_wake_jst = (
+        actual_wake_utc.replace(tzinfo=UTC).astimezone(_JST) if actual_wake_utc is not None else None
+    )
+    return {
+        "sleep_end_hhmm": sleep_end_jst.strftime("%H:%M"),
+        "actual_wake_hhmm": actual_wake_jst.strftime("%H:%M") if actual_wake_jst else None,
+        "lingering_min": stages["lingering_min"],
+    }
 
 
 @router.get("/api/sleep/last-night")
@@ -39,6 +66,9 @@ async def get_last_night() -> dict[str, Any]:
             "awake_min": sleep.awake_min,
             "sleep_score": sleep.sleep_score,
         }
+        # raw_json は素の dict なので detach 後に触っても問題ないが、念のため
+        # セッション内で取り出しておく (上の vals と同じ作法)。
+        wake_stages = _wake_stages_payload(sleep.raw_json) if sleep is not None else None
 
     if vals is None or vals["total_min"] is None:
         return {"date": target.isoformat(), "available": False}
@@ -57,4 +87,9 @@ async def get_last_night() -> dict[str, Any]:
     if result is None:
         return {"date": target.isoformat(), "available": False}
 
-    return {"date": target.isoformat(), "available": True, **result}
+    return {
+        "date": target.isoformat(),
+        "available": True,
+        "wake_stages": wake_stages,
+        **result,
+    }
