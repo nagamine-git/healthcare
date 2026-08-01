@@ -116,6 +116,68 @@ def test_apple_daylight_takes_priority_over_steps(session):
     assert out["score"] >= 75  # 20 分 ≈ 78
 
 
+def test_uses_actual_wake_when_detectable(session):
+    """SleepSession.raw_json から体動起床を検出できれば、それを窓の起点にする
+    (config の wake_hhmm=06:30 ではなく実起床の 07:10 を使う)。"""
+    from app.models import MetricSample, SleepSession
+
+    target = date(2026, 5, 23)
+    jst = ZoneInfo("Asia/Tokyo")
+    sleep_end_jst = datetime.combine(target, datetime.min.time(), jst).replace(hour=7, minute=0)
+    actual_wake_jst = sleep_end_jst + timedelta(minutes=10)  # 布団 10分
+
+    epoch_ms = int(sleep_end_jst.astimezone(UTC).timestamp() * 1000)
+
+    def entry(dt, level):
+        s = dt.astimezone(UTC).replace(tzinfo=None)
+        e = s + timedelta(minutes=1)
+        return {
+            "startGMT": s.strftime("%Y-%m-%dT%H:%M:%S.0"),
+            "endGMT": e.strftime("%Y-%m-%dT%H:%M:%S.0"),
+            "activityLevel": level,
+        }
+
+    movement = [entry(sleep_end_jst + timedelta(minutes=i), 2.0) for i in range(10)]
+    movement += [entry(actual_wake_jst + timedelta(minutes=i), 6.0) for i in range(3)]
+
+    session.add(SleepSession(
+        date=target, source="garmin", total_min=420,
+        raw_json={
+            "dailySleepDTO": {"sleepEndTimestampGMT": epoch_ms},
+            "sleepMovement": movement,
+        },
+    ))
+    # 実起床 (07:10) から window_hours=3h の窓の中に歩数を置く。
+    # config 起床 (06:30) の窓なら拾えない時刻。
+    session.add(
+        MetricSample(
+            source="garmin",
+            metric_key="steps",
+            ts=(actual_wake_jst + timedelta(minutes=5)).astimezone(UTC).replace(tzinfo=None),
+            value=3000.0,
+        )
+    )
+    session.flush()
+
+    out = compute_morning_light_score(session, target, wake_hhmm="06:30")
+    assert out["wake_source"] == "actual_wake"
+    assert out["window_start_jst"] == actual_wake_jst.strftime("%H:%M")
+    assert out["steps_in_window"] == 3000
+
+
+def test_falls_back_to_wake_hhmm_when_no_movement_data(session):
+    """sleepMovement が無い/検出不能な夜は wake_hhmm (目標起床時刻) にフォールバック。"""
+    from app.models import SleepSession
+
+    target = date(2026, 5, 23)
+    session.add(SleepSession(date=target, source="garmin", total_min=420, raw_json=None))
+    session.flush()
+
+    out = compute_morning_light_score(session, target, wake_hhmm="06:30")
+    assert out["wake_source"] == "target_wake_time"
+    assert out["window_start_jst"] == "06:30"
+
+
 def test_daylight_in_seconds_unit_converted(session):
     from app.models import MetricSample
 

@@ -6,6 +6,15 @@
 - 日中の覚醒度・気分・夜の睡眠の質を底上げ (Hattar lab 2019)
 - 視床下部 SCN を介して PFC への投射経路を活性化、認知パフォーマンス向上
 
+# 起床時刻の決め方 (窓の起点)
+光の phase-reset 効果は「起床 (=CBTmin 直後)」のタイミングに依存するため、窓の
+起点は極力実際の起床に近い時刻を使いたい。優先順位:
+1. **体動基準の実起床** (``scoring/wake_detect.py``): 対象日の ``SleepSession.raw_json``
+   から検出できればこれを使う。Garmin の睡眠終了時刻は「布団でグダグダしている時間」
+   を含んでしまい、そのぶん窓がズレるため (実データで中央値 +20分)。
+2. 検出できない夜は ``wake_hhmm`` (呼び出し側が渡す目標/プロフィール起床時刻) に
+   フォールバックする (捏造しない)。
+
 # Proxy の計算
 直接的な lux センサーが無いため、以下を組み合わせて 0-100 スコア化:
 
@@ -30,7 +39,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import MetricSample
+from app.models import MetricSample, SleepSession
+from app.scoring.wake_detect import wake_stages_from_raw
 
 
 def compute_morning_light_score(
@@ -55,14 +65,28 @@ def compute_morning_light_score(
             "source": "apple_daylight" | "steps_proxy" | None,
             "window_start_jst": "HH:MM",
             "window_end_jst": "HH:MM",
+            "wake_source": "actual_wake" | "target_wake_time",
             "rationale": str,
         }
     """
     tz = ZoneInfo(tz_name)
-    h, _, m = wake_hhmm.partition(":")
-    wake_dt_jst = datetime.combine(target, datetime.min.time(), tz).replace(
-        hour=int(h), minute=int(m)
-    )
+
+    # --- 0. 窓の起点となる起床時刻を決める (体動基準を優先、無ければ目標起床時刻) ---
+    wake_source = "target_wake_time"
+    wake_dt_jst: datetime | None = None
+    sleep_raw = session.execute(
+        select(SleepSession.raw_json).where(SleepSession.date == target)
+    ).scalar_one_or_none()
+    if sleep_raw:
+        stages = wake_stages_from_raw(sleep_raw)
+        if stages is not None and stages["actual_wake_utc"] is not None:
+            wake_dt_jst = stages["actual_wake_utc"].replace(tzinfo=UTC).astimezone(tz)
+            wake_source = "actual_wake"
+    if wake_dt_jst is None:
+        h, _, m = wake_hhmm.partition(":")
+        wake_dt_jst = datetime.combine(target, datetime.min.time(), tz).replace(
+            hour=int(h), minute=int(m)
+        )
     window_end_jst = wake_dt_jst + timedelta(hours=window_hours)
     start_utc = wake_dt_jst.astimezone(UTC).replace(tzinfo=None)
     end_utc = window_end_jst.astimezone(UTC).replace(tzinfo=None)
@@ -143,6 +167,7 @@ def compute_morning_light_score(
         "source": source,
         "window_start_jst": wake_dt_jst.strftime("%H:%M"),
         "window_end_jst": window_end_jst.strftime("%H:%M"),
+        "wake_source": wake_source,
         "rationale": rationale,
     }
 
