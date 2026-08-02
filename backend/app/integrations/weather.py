@@ -81,6 +81,8 @@ def _fetch_open_meteo(lat: float, lon: float) -> dict[str, Any] | None:
 
 
 def _fetch_open_meteo_uncached(lat: float, lon: float) -> dict[str, Any] | None:
+    # キャッシュキーと同じ丸めを使う (キーは当たるのに別地点を取りに行く、を防ぐ)
+    lat, lon = _round_coords(lat, lon)
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
@@ -127,7 +129,22 @@ def get_pressure_hourly(
     return out
 
 
+# 座標をキャッシュキーに使う前に丸める桁数。
+# ⚠️ 小数4桁 (約11m) で分けていたため、スマホの GPS がほんの数 m 揺れるだけで
+# **毎リクエストがキャッシュミス**になり、`/api/today?lat=..&lon=..` が実際に
+# open-meteo を叩いて 0.1s → 2.9s になっていた (しかもこれは全画面を止める
+# gating リクエスト)。天気・気圧の数値モデルの格子は数 km なので 11m の区別には
+# そもそも意味が無い。2桁 (約1.1km) に丸めれば同じ場所なら必ずキャッシュに当たる。
+_COORD_PRECISION = 2
+
+
+def _round_coords(lat: float, lon: float) -> tuple[float, float]:
+    """GPS の揺れでキャッシュが外れないよう座標を丸める (取得にもこの値を使う)。"""
+    return round(lat, _COORD_PRECISION), round(lon, _COORD_PRECISION)
+
+
 def _cache_key(lat: float, lon: float) -> str:
+    lat, lon = _round_coords(lat, lon)
     return f"{lat:.4f}_{lon:.4f}"
 
 
@@ -322,6 +339,7 @@ class AirQualitySnapshot:
 
 
 def _fetch_air_quality(lat: float, lon: float) -> dict[str, Any] | None:
+    lat, lon = _round_coords(lat, lon)  # 同上 (GPS の揺れでキャッシュを外さない)
     url = "https://air-quality-api.open-meteo.com/v1/air-quality"
     params = {
         "latitude": lat,
