@@ -481,6 +481,29 @@ class MentalScreening(Base):
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class MorningProtocolLog(Base):
+    """朝の起床プロトコル (低血圧向けの起き上がり手順) の実施ログ。
+
+    date = 起床日 (SleepSession.date と一致)。値は True=やった / False=やらなかった /
+    None=未記録。効果分析は「やった朝 vs やらなかった朝」を並べ替え検定で比較するため、
+    未記録(None) と「やらなかった(False)」を明確に区別する。
+
+    ⚠️ ``ease`` (起きやすさ 1-5) は**やった朝もやらなかった朝も記録する**こと。
+    片方しか記録しないと比較群が作れない。
+    """
+
+    __tablename__ = "morning_protocol_log"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    done: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # 起きやすさの自己評価 1(とてもつらい)-5(すっと起きられた)。
+    # ⚠️ 非盲検なので期待バイアスがかかる。客観指標 (起床時BB) と必ず併記して読むこと。
+    ease: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    water_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class SleepInterventionLog(Base):
     """就寝前の介入 (耳栓/アイマスク/鼻ストリップ/口テープ) の夜次ログ。
 

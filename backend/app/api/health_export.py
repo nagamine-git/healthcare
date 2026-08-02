@@ -33,8 +33,15 @@ def _recompute_today_after_ingest() -> None:
     """取り込んだ新データを即スコアに反映 (レスポンス後にバックグラウンド実行)。"""
     from app.scoring.recompute import ensure_today_fresh
 
-    # ingest 直後は必ず反映したいのでスロットルを 0 にして強制再計算。
-    ensure_today_fresh(min_interval_s=0)
+    # ⚠️ かつてここは `min_interval_s=0` でスロットルを**無効化**していた。
+    # Health Auto Export は HealthKit の変化のたびに送ってくるため、取り込み1回ごとに
+    # その日のスコアを**丸ごと再計算**することになり、本番では取り込みが 2790 回・
+    # 最大 89.6 秒という遅延記録が残っていた (アプリ自身の /api/admin/perf より)。
+    # その再計算が CPU と DB 書き込みを占有し、`/api/today` の最大 139 秒に繋がっていた。
+    #
+    # 既定のスロットル (120秒) を使う。スコアは「その日の総合点」であって秒単位の
+    # 鮮度は要らないので、最悪 2 分遅れて反映されても実用上まったく問題にならない。
+    ensure_today_fresh()
 
 
 @router.post("/ingest/health-auto-export", status_code=status.HTTP_202_ACCEPTED)
