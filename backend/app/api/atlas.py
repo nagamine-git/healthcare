@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/api/atlas")
-async def get_atlas() -> dict[str, Any]:
+def get_atlas() -> dict[str, Any]:
     # 開いた瞬間にほぼリアルタイムな総合点を見せる (直近120秒以内なら省略)。
     from app.scoring.recompute import ensure_today_fresh
 
@@ -29,7 +29,7 @@ class AtlasWeightIn(BaseModel):
 
 
 @router.put("/api/atlas/weight")
-async def set_atlas_weight(body: AtlasWeightIn) -> dict[str, Any]:
+def set_atlas_weight(body: AtlasWeightIn) -> dict[str, Any]:
     """任意ノード(末端まで)の優先の重みを設定。domain_weight テーブルを汎用 key→重み として使う。"""
     from app.models import DomainWeight
 

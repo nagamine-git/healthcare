@@ -33,6 +33,8 @@ logger = get_logger(__name__)
 _CACHE_TTL_S = 60 * 60  # 1h
 _cache: dict[str, Any] = {}
 _air_cache: dict[str, Any] = {}
+# 生レスポンスのキャッシュ (取得階層)。呼び出し側がどの入口から来ても効く。
+_raw_cache: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,28 @@ class PressureSnapshot:
 
 
 def _fetch_open_meteo(lat: float, lon: float) -> dict[str, Any] | None:
+    """毎時気圧の生レスポンス。**この階層でキャッシュする**。
+
+    ⚠️ かつてキャッシュは ``get_weather_snapshot`` の中だけにあり、
+    ``get_pressure_hourly`` はここを直接呼んでいたため、``/api/forecast`` と
+    ``/api/timeline`` が**毎リクエスト実際に open-meteo へ HTTP している**状態だった
+    (実測 各1.2-1.3s = 両エンドポイントの所要時間のほぼ全部)。取得階層でキャッシュ
+    しておけば呼び出し側がどこから来ても取りこぼさない。
+    データは毎時更新なので TTL 1h で十分 (元の設計値と同じ)。
+    """
+    key = f"raw_{_cache_key(lat, lon)}"
+    cached = _raw_cache.get(key)
+    if cached and cached["expires"] > time.time():
+        return cached["value"]
+
+    data = _fetch_open_meteo_uncached(lat, lon)
+    # 失敗 (None) はキャッシュしない。次のリクエストで再試行させる。
+    if data is not None:
+        _raw_cache[key] = {"expires": time.time() + _CACHE_TTL_S, "value": data}
+    return data
+
+
+def _fetch_open_meteo_uncached(lat: float, lon: float) -> dict[str, Any] | None:
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,

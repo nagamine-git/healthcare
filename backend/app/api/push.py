@@ -53,7 +53,7 @@ def _now() -> datetime:
 
 
 @router.get("/config")
-async def push_config() -> dict[str, Any]:
+def push_config() -> dict[str, Any]:
     """フロントが購読開始に必要な情報を返す。"""
     s = get_settings()
     return {
@@ -63,7 +63,7 @@ async def push_config() -> dict[str, Any]:
 
 
 @router.post("/subscribe")
-async def subscribe(
+def subscribe(
     body: SubscriptionIn,
     user_agent: str | None = Header(default=None),
 ) -> dict[str, Any]:
@@ -80,14 +80,14 @@ async def subscribe(
 
 
 @router.post("/unsubscribe")
-async def unsubscribe(body: UnsubscribeIn) -> dict[str, Any]:
+def unsubscribe(body: UnsubscribeIn) -> dict[str, Any]:
     with session_scope() as session:
         removed = delete_subscription(session, body.endpoint)
     return {"status": "ok", "removed": removed}
 
 
 @router.post("/test")
-async def test_push(body: TestIn | None = None) -> dict[str, Any]:
+def test_push(body: TestIn | None = None) -> dict[str, Any]:
     """登録済みの購読 (または指定 endpoint) にテスト通知を送る。"""
     if not is_configured():
         return {"status": "disabled"}

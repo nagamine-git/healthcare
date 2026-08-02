@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -64,6 +65,36 @@ from app.scheduler import setup_scheduler, shutdown_scheduler
 logger = get_logger(__name__)
 
 
+async def _warm_analysis_cache() -> None:
+    """n-of-1 分析 (置換検定) をバックグラウンドで先に計算しておく。
+
+    ``migraine_stats.permutation_test`` は純粋・決定的なのでメモ化してあるが、
+    キャッシュはプロセス内にしか無く**デプロイで再起動するたび空になる**。
+    その状態で最初に ``/api/next-action`` を叩いた人が 3.3s 待たされる
+    (実測: 56 検定 × 5000 反復)。起動直後に一度走らせておけば、利用者が
+    最初に開いた時点でキャッシュが埋まっている。
+
+    ⚠️ ここは**あくまで先読み**。失敗しても本体は各リクエストで計算できるので、
+    例外は握りつぶしてログだけ残す (起動を壊さないことを最優先)。
+    """
+    import anyio
+
+    def _run() -> None:
+        from app.scoring import sleep_drivers
+        from app.scoring.timewindow import app_today
+
+        today = app_today()
+        sleep_drivers.analyze(today)
+
+    try:
+        await anyio.to_thread.run_sync(_run)
+        logger.info("analysis_cache_warmed")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # 先読みの失敗で起動を壊さない
+        logger.warning("analysis_cache_warm_failed", error=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -73,7 +104,10 @@ async def lifespan(app: FastAPI):
     if settings.scheduler_enabled:
         setup_scheduler()
     logger.info("startup_complete", db=str(settings.resolved_db_path()))
+    warm_task = asyncio.create_task(_warm_analysis_cache()) if settings.scheduler_enabled else None
     yield
+    if warm_task is not None:
+        warm_task.cancel()
     if settings.scheduler_enabled:
         shutdown_scheduler()
 

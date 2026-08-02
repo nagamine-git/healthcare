@@ -36,7 +36,7 @@ def _to_iso(dt: datetime | None) -> str | None:
 
 
 @router.get("/api/debug/sources")
-async def debug_sources(
+def debug_sources(
     days: int = Query(default=14, ge=1, le=365),
     metric_limit: int = Query(default=10, ge=1, le=200),
 ) -> dict[str, Any]:

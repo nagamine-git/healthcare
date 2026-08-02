@@ -52,7 +52,7 @@ def _today_payload(row: GardenDaily | None) -> dict:
 
 
 @router.get("/api/garden")
-async def get_garden() -> dict:
+def get_garden() -> dict:
     settings = get_settings()
     today = app_today()
     start = today - timedelta(days=_GRID_DAYS)
@@ -127,7 +127,7 @@ async def get_garden() -> dict:
 
 
 @router.post("/api/garden/log")
-async def add_garden_log(body: GardenLogIn) -> dict:
+def add_garden_log(body: GardenLogIn) -> dict:
     if body.ts_iso:
         ts = datetime.fromisoformat(body.ts_iso)
         if ts.tzinfo is not None:
@@ -147,7 +147,7 @@ async def add_garden_log(body: GardenLogIn) -> dict:
 
 
 @router.delete("/api/garden/log/{log_id}")
-async def delete_garden_log(log_id: int) -> dict:
+def delete_garden_log(log_id: int) -> dict:
     with session_scope() as session:
         row = session.get(GoodActionLog, log_id)
         if row is None:
@@ -162,14 +162,14 @@ async def delete_garden_log(log_id: int) -> dict:
 
 
 @router.post("/api/garden/sync")
-async def garden_sync() -> dict:
+def garden_sync() -> dict:
     """GitHub を即時同期し、過去1年分の草を再計算する(「今すぐ同期」ボタン)。"""
     with session_scope() as session:
         return sync_and_backfill(session)
 
 
 @router.post("/api/garden/config")
-async def set_garden_config(body: GardenConfigIn) -> dict:
+def set_garden_config(body: GardenConfigIn) -> dict:
     with session_scope() as session:
         cfg = session.get(GardenConfig, 1)
         if cfg is None:

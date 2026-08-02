@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/api/weather")
-async def get_weather() -> dict[str, Any]:
+def get_weather() -> dict[str, Any]:
     """今日の天気サマリ + 時間別(今日明日)+ 週間(7日)を返す。取得失敗時は available=False。"""
     data = get_weather_forecast()
     if data is None:

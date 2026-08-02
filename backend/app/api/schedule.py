@@ -23,7 +23,7 @@ def _now_tz() -> datetime:
 
 
 @router.get("/api/schedule/today")
-async def schedule_today() -> dict[str, Any]:
+def schedule_today() -> dict[str, Any]:
     """今日 (JST) の予定一覧。未連携時は configured=false・events=[] を返す。"""
     from app.integrations.gcal import list_events_for_date, load_credentials
 

@@ -59,7 +59,7 @@ def _apple_hrv_reference(session: Any, d: date) -> float | None:
 
 
 @router.get("/api/today")
-async def today(
+def today(
     lat: float | None = Query(default=None, description="気圧取得用の緯度 (省略時 config)"),
     lon: float | None = Query(default=None, description="気圧取得用の経度"),
 ) -> dict[str, Any]:
@@ -694,7 +694,7 @@ def _build_caffeine(
 
 
 @router.get("/api/timeseries")
-async def timeseries(
+def timeseries(
     metric: str = Query(...),
     days: int = Query(default=28, ge=1, le=365),
 ) -> dict[str, Any]:
@@ -735,7 +735,7 @@ async def timeseries(
 
 
 @router.get("/api/trends")
-async def trends(
+def trends(
     granularity: str = Query(default="daily"),
     days: int = Query(default=28, ge=7, le=365),
 ) -> dict[str, Any]:

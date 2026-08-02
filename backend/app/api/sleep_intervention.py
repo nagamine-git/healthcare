@@ -127,7 +127,7 @@ async def get_intervention(days: int = 30) -> dict[str, Any]:
 
 
 @router.get("/api/sleep-intervention/history")
-async def get_history(days: int = 14) -> dict[str, Any]:
+def get_history(days: int = 14) -> dict[str, Any]:
     """過去の記録用: 睡眠データがある夜を新しい順に、介入の記録状態つきで返す。
 
     今夜の pending 日はカードが扱うので除外 (date < target)。分析に使える夜だけ出す。
@@ -165,6 +165,6 @@ async def get_history(days: int = 14) -> dict[str, Any]:
 
 
 @router.get("/api/sleep/interventions")
-async def get_intervention_analysis() -> dict[str, Any]:
+def get_intervention_analysis() -> dict[str, Any]:
     """各介入が睡眠の質を有意に改善するかの n-of-1 分析。"""
     return sleep_interventions.analyze()

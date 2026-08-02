@@ -84,12 +84,12 @@ def _state(target: date) -> dict[str, Any]:
 
 
 @router.get("/api/life")
-async def get_life() -> dict[str, Any]:
+def get_life() -> dict[str, Any]:
     return _state(_today())
 
 
 @router.get("/api/life/tree")
-async def get_life_tree() -> dict[str, Any]:
+def get_life_tree() -> dict[str, Any]:
     """4層モデル(目的→目標→ドメイン木)の集約。"""
     from app.scoring.life.tree import compute_life_tree
 
@@ -104,7 +104,7 @@ class GoalIn(BaseModel):
 
 
 @router.put("/api/life/goal")
-async def put_goal(body: GoalIn) -> dict[str, Any]:
+def put_goal(body: GoalIn) -> dict[str, Any]:
     """active な目標を更新(無ければ作成)。重点ウェイトを駆動する。"""
     from app.models.health import Goal
     from app.scoring.life.tree import compute_life_tree
@@ -128,7 +128,7 @@ class WeightsIn(BaseModel):
 
 
 @router.put("/api/life/weights")
-async def put_weights(body: WeightsIn) -> dict[str, Any]:
+def put_weights(body: WeightsIn) -> dict[str, Any]:
     valid = {k for k, _, _ in dom.LIFE_DOMAINS}
     clean = {k: max(0.0, float(v)) for k, v in body.weights.items() if k in valid}
     _save_weights(clean)
@@ -136,7 +136,7 @@ async def put_weights(body: WeightsIn) -> dict[str, Any]:
 
 
 @router.post("/api/life/preset/{name}")
-async def apply_preset(name: str) -> dict[str, Any]:
+def apply_preset(name: str) -> dict[str, Any]:
     preset = dom.DOMAIN_WEIGHT_PRESETS.get(name)
     if preset is None:
         raise HTTPException(status_code=404, detail="unknown preset")

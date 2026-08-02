@@ -50,7 +50,7 @@ def _wake_stages_payload(raw_json: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 @router.get("/api/sleep/last-night")
-async def get_last_night() -> dict[str, Any]:
+def get_last_night() -> dict[str, Any]:
     """昨夜 (SleepSession.date = 起床日 = 今日) の評価。データが無ければ available:false。"""
     target = app_today()
     # ⚠️ ORM オブジェクトを with の外へ持ち出さない。session_scope を抜けると

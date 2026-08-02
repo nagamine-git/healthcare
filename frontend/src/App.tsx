@@ -1,14 +1,24 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { TodayPage } from "./pages/Today";
-import { DebugPage } from "./pages/Debug";
-import { CompassPage, type CompassSegment } from "./pages/Compass";
-import { CheckupPage } from "./pages/Checkup";
-import { JournalPage } from "./pages/Journal";
-import { FinancePage } from "./pages/Finance";
-import { ConsultPage } from "./pages/Consult";
+import type { CompassSegment } from "./pages/Compass";
 import { BottomNav } from "./components/ui/BottomNav";
 import { QuickLogSheet } from "./components/QuickLogSheet";
 import { useTheme } from "./lib/theme";
+
+/**
+ * Today 以外のページは遅延ロードする。
+ *
+ * 全ページを静的 import していた頃は初回に 1.3MB (gz 346KB) の単一バンドルを
+ * 落としており、開いてすらいない資産・相談・羅針盤・点検・日記・デバッグの
+ * コードまで待たされていた。ハッシュで切り替わるだけなので、実際に遷移した
+ * ときに取りに行けば十分。
+ */
+const DebugPage = lazy(() => import("./pages/Debug").then((m) => ({ default: m.DebugPage })));
+const CompassPage = lazy(() => import("./pages/Compass").then((m) => ({ default: m.CompassPage })));
+const CheckupPage = lazy(() => import("./pages/Checkup").then((m) => ({ default: m.CheckupPage })));
+const JournalPage = lazy(() => import("./pages/Journal").then((m) => ({ default: m.JournalPage })));
+const FinancePage = lazy(() => import("./pages/Finance").then((m) => ({ default: m.FinancePage })));
+const ConsultPage = lazy(() => import("./pages/Consult").then((m) => ({ default: m.ConsultPage })));
 
 type View = "home" | "debug" | "compass" | "checkup" | "journal" | "finance" | "consult";
 
@@ -75,6 +85,7 @@ export default function App() {
       {/* スクロール時にコンテンツが iOS ステータスバーの文字と重ならないよう、
           safe-area 上端を背景色で覆う固定スクリム */}
       <div aria-hidden className="status-bar-scrim" />
+      <Suspense fallback={<div className="p-6 text-sm text-ink-faint">読み込み中…</div>}>
       {view === "debug" ? (
         <DebugPage onBack={() => (window.location.hash = "")} />
       ) : view === "compass" ? (
@@ -90,6 +101,7 @@ export default function App() {
       ) : (
         <TodayPage onOpenDebug={() => (window.location.hash = "#debug")} />
       )}
+      </Suspense>
       {/* 全画面に常設のナビ(各ページが .pb-nav で下余白を確保) */}
       <BottomNav current={view} onQuickLog={() => setQuickLogOpen(true)} />
       <QuickLogSheet open={quickLogOpen} onClose={() => setQuickLogOpen(false)} />

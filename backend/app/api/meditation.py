@@ -48,7 +48,7 @@ def _latest_stress(session: Session, target, max_age_days: int) -> int | None:
 
 
 @router.get("/api/meditation")
-async def get_meditation() -> dict[str, Any]:
+def get_meditation() -> dict[str, Any]:
     settings = get_settings()
     tz = ZoneInfo(settings.app_tz)
     now = datetime.now(tz)

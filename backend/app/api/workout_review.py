@@ -89,7 +89,7 @@ def _check_regen_rate_limit(session: Any) -> None:
 
 
 @router.get("/api/workout-reviews")
-async def list_reviews(days: int = 2) -> dict[str, Any]:
+def list_reviews(days: int = 2) -> dict[str, Any]:
     """直近のワークアウト一覧 (保存済みの一言評価つき、新しい順)。"""
     since = datetime.utcnow() - timedelta(days=days)
     with session_scope() as session:

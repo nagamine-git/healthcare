@@ -746,7 +746,7 @@ def _daily_summary_fallback(
 
 
 @router.get("/api/timeline")
-async def day_timeline(
+def day_timeline(
     date: str | None = Query(default=None),
     window: str = Query(default="day"),
 ) -> dict[str, Any]:
@@ -818,7 +818,7 @@ async def day_timeline(
 
 
 @router.get("/api/day-story")
-async def day_story(
+def day_story(
     date: str | None = Query(default=None),
     window: str = Query(default="day"),
 ) -> dict[str, Any]:

@@ -12,6 +12,6 @@ router = APIRouter()
 
 
 @router.get("/api/sleep/drivers")
-async def get_sleep_drivers() -> dict[str, Any]:
+def get_sleep_drivers() -> dict[str, Any]:
     """何が睡眠の質・翌日パフォーマンスを上げ下げするかの統計分析。"""
     return sleep_drivers.analyze()

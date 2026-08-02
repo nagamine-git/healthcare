@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.post("/admin/recompute")
-async def recompute(target: date_type | None = None) -> dict[str, Any]:
+def recompute(target: date_type | None = None) -> dict[str, Any]:
     from app.scoring.recompute import recompute_for_date
 
     d = target or app_today()
@@ -71,7 +71,7 @@ async def llm_regenerate(target: date_type | None = None) -> dict[str, Any]:
 
 
 @router.get("/admin/gcal/status")
-async def gcal_status() -> dict[str, Any]:
+def gcal_status() -> dict[str, Any]:
     from app.integrations.gcal import client_secret_path, has_token, load_credentials
 
     cs_exists = client_secret_path().exists()
@@ -86,7 +86,7 @@ async def gcal_status() -> dict[str, Any]:
 
 
 @router.post("/admin/gcal/schedule")
-async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
+def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -136,14 +136,14 @@ async def gcal_schedule(target: date_type | None = None) -> dict[str, Any]:
 
 
 @router.get("/admin/freee/status")
-async def freee_status() -> dict[str, Any]:
+def freee_status() -> dict[str, Any]:
     from app.integrations.freee_client import has_token
 
     return {"configured": has_token()}
 
 
 @router.get("/admin/freee/oauth/start")
-async def freee_oauth_start() -> RedirectResponse:
+def freee_oauth_start() -> RedirectResponse:
     from app.integrations.freee_client import authorize_url, generate_state
 
     state = generate_state()
@@ -151,7 +151,7 @@ async def freee_oauth_start() -> RedirectResponse:
 
 
 @router.get("/admin/freee/oauth/callback")
-async def freee_oauth_callback(code: str, state: str) -> RedirectResponse:
+def freee_oauth_callback(code: str, state: str) -> RedirectResponse:
     from app.ingest.freee_sync import sync_corporate_finance
     from app.integrations.freee_client import exchange_code, verify_state
 
@@ -176,7 +176,7 @@ async def freee_oauth_callback(code: str, state: str) -> RedirectResponse:
 
 
 @router.post("/admin/freee/sync")
-async def freee_sync() -> dict[str, Any]:
+def freee_sync() -> dict[str, Any]:
     from app.ingest.freee_sync import sync_corporate_finance
 
     result = sync_corporate_finance()

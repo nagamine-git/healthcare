@@ -104,7 +104,7 @@ class AlcoholIntakeOut(BaseModel):
 
 
 @router.post("/api/alcohol", response_model=AlcoholIntakeOut)
-async def add_alcohol_intake(body: AlcoholIntakeIn) -> AlcoholIntakeOut:
+def add_alcohol_intake(body: AlcoholIntakeIn) -> AlcoholIntakeOut:
     settings = get_settings()
     if body.source not in PRESET_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"unknown source: {body.source}")
@@ -151,7 +151,7 @@ async def add_alcohol_intake(body: AlcoholIntakeIn) -> AlcoholIntakeOut:
 
 
 @router.get("/api/alcohol")
-async def list_alcohol_intakes(hours: int = 168) -> dict[str, Any]:
+def list_alcohol_intakes(hours: int = 168) -> dict[str, Any]:
     """直近 hours 時間の摂取記録 (デフォルト 7d)。"""
     settings = get_settings()
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
@@ -174,7 +174,7 @@ async def list_alcohol_intakes(hours: int = 168) -> dict[str, Any]:
 
 
 @router.delete("/api/alcohol/{intake_id}")
-async def delete_alcohol_intake(intake_id: int) -> dict[str, Any]:
+def delete_alcohol_intake(intake_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(AlcoholIntake, intake_id)
         if row is None:
@@ -184,7 +184,7 @@ async def delete_alcohol_intake(intake_id: int) -> dict[str, Any]:
 
 
 @router.get("/api/alcohol/presets")
-async def alcohol_presets() -> dict[str, Any]:
+def alcohol_presets() -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k, info in PRESET_DEFAULTS.items():
         out[k] = {

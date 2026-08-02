@@ -16,17 +16,17 @@ router = APIRouter()
 
 
 @router.get("/api/bodyload")
-async def get_bodyload() -> dict[str, Any]:
+def get_bodyload() -> dict[str, Any]:
     return bodyload.state()
 
 
 @router.get("/api/bodymap")
-async def get_bodymap() -> dict[str, Any]:
+def get_bodymap() -> dict[str, Any]:
     """部位別の筋負荷マップ + 統合ステータス (HP ゲージ)。"""
     return bodymap.state()
 
 
 @router.get("/api/training-status")
-async def get_training_status() -> dict[str, Any]:
+def get_training_status() -> dict[str, Any]:
     """トレーニング状況を これまで→今→これから で1本化して返す。"""
     return training_status.state()

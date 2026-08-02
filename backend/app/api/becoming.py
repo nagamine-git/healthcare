@@ -21,7 +21,7 @@ def _kinds_for_dimension(dim_id: str | None) -> list[str]:
 
 
 @router.get("/api/becoming")
-async def get_becoming() -> dict:
+def get_becoming() -> dict:
     with session_scope() as session:
         report = build_becoming_report(session)
     # ボトルネック次元に名前を付与
@@ -73,7 +73,7 @@ async def post_one_move() -> dict:
 
 
 @router.post("/api/becoming/backfill")
-async def post_backfill() -> dict:
+def post_backfill() -> dict:
     with session_scope() as session:
         filled = backfill_snapshots(session, days=120)
     return {"filled": filled}

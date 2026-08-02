@@ -12,6 +12,6 @@ router = APIRouter()
 
 
 @router.get("/api/next-action")
-async def get_next_action() -> dict[str, Any]:
+def get_next_action() -> dict[str, Any]:
     """全ドメイン横断の候補から、いまの最優先アクション + 次点を返す。"""
     return compute_next_action()

@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 @router.get("/api/journal/calendar")
-async def journal_calendar() -> dict[str, Any]:
+def journal_calendar() -> dict[str, Any]:
     """今日(JST)の予定を時刻つきで返す。認証なし/未連携なら空。"""
     from app.integrations.gcal import list_events_for_date
 
@@ -101,7 +101,7 @@ class ExtractCommitIn(BaseModel):
 
 
 @router.post("/api/journal/extract/commit")
-async def extract_commit(body: ExtractCommitIn) -> dict[str, Any]:
+def extract_commit(body: ExtractCommitIn) -> dict[str, Any]:
     """確認済みの行動をその日付にバックフィル(冪等)。"""
     d = date_type.fromisoformat(body.date) if body.date else app_today()
     allowed = {c["kind"] for c in get_settings().garden_catalog}
@@ -178,13 +178,13 @@ def _entries(session) -> list[dict[str, Any]]:
 
 
 @router.get("/api/journal/entries")
-async def get_entries() -> dict[str, Any]:
+def get_entries() -> dict[str, Any]:
     with session_scope() as session:
         return {"entries": _entries(session)}
 
 
 @router.put("/api/journal/entry")
-async def put_entry(body: EntryIn) -> dict[str, Any]:
+def put_entry(body: EntryIn) -> dict[str, Any]:
     """日付ごとに1件 upsert(確認・修正後のテキストを保存)。
 
     日付は明示指定 > 本文の日付ヘッダ(書かれた日)> 今日。翌朝に前日の紙を撮って
@@ -211,7 +211,7 @@ async def put_entry(body: EntryIn) -> dict[str, Any]:
 
 
 @router.delete("/api/journal/entry/{entry_date}")
-async def delete_entry(entry_date: str) -> dict[str, Any]:
+def delete_entry(entry_date: str) -> dict[str, Any]:
     with session_scope() as session:
         d = date_type.fromisoformat(entry_date)
         row = session.get(JournalEntry, d)

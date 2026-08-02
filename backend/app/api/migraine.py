@@ -41,7 +41,7 @@ class MigraineEpisodeOut(BaseModel):
 
 
 @router.post("/api/migraine/start", response_model=MigraineEpisodeOut)
-async def start_migraine(body: MigraineStartIn) -> MigraineEpisodeOut:
+def start_migraine(body: MigraineStartIn) -> MigraineEpisodeOut:
     """新規エピソードを開始する。既に active なエピソードがある場合は 409。"""
     settings = get_settings()
     ts_utc = _resolve_ts(body.ts_iso)
@@ -66,7 +66,7 @@ async def start_migraine(body: MigraineStartIn) -> MigraineEpisodeOut:
 
 
 @router.post("/api/migraine/end", response_model=MigraineEpisodeOut)
-async def end_migraine(body: MigraineEndIn) -> MigraineEpisodeOut:
+def end_migraine(body: MigraineEndIn) -> MigraineEpisodeOut:
     """active エピソードを終了する。"""
     settings = get_settings()
     ts_utc = _resolve_ts(body.ts_iso)
@@ -89,7 +89,7 @@ async def end_migraine(body: MigraineEndIn) -> MigraineEpisodeOut:
 
 
 @router.get("/api/migraine")
-async def list_migraine(days: int = 30) -> dict[str, Any]:
+def list_migraine(days: int = 30) -> dict[str, Any]:
     """直近 N 日のエピソード履歴と、現在の active を返す。"""
     settings = get_settings()
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
@@ -109,7 +109,7 @@ async def list_migraine(days: int = 30) -> dict[str, Any]:
 
 
 @router.get("/api/migraine/triggers")
-async def migraine_triggers() -> dict[str, Any]:
+def migraine_triggers() -> dict[str, Any]:
     """頭痛の発症時刻プロファイルと、統計的に有意なトリガー要因を返す。
 
     サンプルが少ない間は status=accumulating で判定保留。
@@ -143,7 +143,7 @@ class MigrainePatch(BaseModel):
 
 
 @router.patch("/api/migraine/{episode_id}", response_model=MigraineEpisodeOut)
-async def patch_migraine(
+def patch_migraine(
     episode_id: int, body: MigrainePatch
 ) -> MigraineEpisodeOut:
     settings = get_settings()
@@ -177,7 +177,7 @@ async def patch_migraine(
 
 
 @router.delete("/api/migraine/{episode_id}")
-async def delete_migraine(episode_id: int) -> dict[str, Any]:
+def delete_migraine(episode_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(MigraineEpisode, episode_id)
         if row is None:

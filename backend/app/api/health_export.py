@@ -38,7 +38,7 @@ def _recompute_today_after_ingest() -> None:
 
 
 @router.post("/ingest/health-auto-export", status_code=status.HTTP_202_ACCEPTED)
-async def ingest_health_auto_export(
+def ingest_health_auto_export(
     payload: dict[str, Any], background: BackgroundTasks, _: None = Depends(_verify_token)
 ) -> dict[str, Any]:
     parsed = parse_payload(payload)

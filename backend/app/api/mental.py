@@ -81,7 +81,7 @@ class ScreenIn(BaseModel):
 
 
 @router.post("/api/mental/screen")
-async def post_screen(body: ScreenIn) -> dict[str, Any]:
+def post_screen(body: ScreenIn) -> dict[str, Any]:
     target = date_type.fromisoformat(body.date) if body.date else _today()
     r = score_screening(body.phq2_1, body.phq2_2, body.gad2_1, body.gad2_2)
     with session_scope() as session:
@@ -95,6 +95,6 @@ async def post_screen(body: ScreenIn) -> dict[str, Any]:
 
 
 @router.get("/api/mental")
-async def get_mental() -> dict[str, Any]:
+def get_mental() -> dict[str, Any]:
     with session_scope() as session:
         return _status(session, _today())

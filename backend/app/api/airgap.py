@@ -45,7 +45,7 @@ class AirgapReportIn(BaseModel):
 
 
 @router.post("/ingest/airgap", status_code=status.HTTP_202_ACCEPTED)
-async def ingest_airgap(
+def ingest_airgap(
     body: AirgapReportIn, _: None = Depends(_verify_token)
 ) -> dict[str, Any]:
     day = date_type.fromisoformat(body.date)

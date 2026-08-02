@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/api/airgap/insight")
-async def get_airgap_insight() -> dict[str, Any]:
+def get_airgap_insight() -> dict[str, Any]:
     with session_scope() as session:
         rows = gather_airgap_sleep_rows(session, app_today())
     return compute_airgap_sleep_insight(rows)

@@ -46,7 +46,7 @@ def _payload(session) -> dict[str, Any]:
 
 
 @router.get("/api/body-composition")
-async def get_body_composition() -> dict[str, Any]:
+def get_body_composition() -> dict[str, Any]:
     with session_scope() as session:
         return _payload(session)
 
@@ -74,7 +74,7 @@ class BodyCompIn(BaseModel):
 
 
 @router.put("/api/body-composition")
-async def put_body_composition(body: BodyCompIn) -> dict[str, Any]:
+def put_body_composition(body: BodyCompIn) -> dict[str, Any]:
     """確認済みの値を日付ごとに upsert。全項目 None なら 422。"""
     if all(
         v is None
@@ -101,7 +101,7 @@ async def put_body_composition(body: BodyCompIn) -> dict[str, Any]:
 
 
 @router.delete("/api/body-composition/{sample_id}")
-async def delete_body_composition(sample_id: int) -> dict[str, Any]:
+def delete_body_composition(sample_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(BodyCompositionSample, sample_id)
         if row is None:

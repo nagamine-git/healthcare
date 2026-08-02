@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/api/imputation")
-async def get_imputation(date: str | None = None) -> dict[str, Any]:
+def get_imputation(date: str | None = None) -> dict[str, Any]:
     target = date_from(date)
     return {
         "date": target.isoformat(),
@@ -26,19 +26,19 @@ async def get_imputation(date: str | None = None) -> dict[str, Any]:
 
 
 @router.get("/api/forecast")
-async def get_forecast() -> dict[str, Any]:
+def get_forecast() -> dict[str, Any]:
     """未来予測 (片頭痛リスク / エネルギー推移 / 明日の指標)。"""
     return forecast_mod.forecast()
 
 
 @router.get("/api/habit-pace")
-async def get_habit_pace() -> dict[str, Any]:
+def get_habit_pace() -> dict[str, Any]:
     """習慣ペース予測 (いつもの今頃 vs 今日。遅れていれば促す)。"""
     return habit_pace_mod.state()
 
 
 @router.get("/api/predict/{metric}")
-async def get_predict(
+def get_predict(
     metric: str, days_back: int = 14, days_ahead: int = 7,
     date_from: str | None = None, date_to: str | None = None,
 ) -> dict[str, Any]:

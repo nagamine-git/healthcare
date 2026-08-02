@@ -51,7 +51,7 @@ def _to_dict(r: HighlightReview) -> dict[str, Any]:
 
 
 @router.get("/api/highlight-reviews")
-async def list_reviews(days: int = 3) -> dict[str, Any]:
+def list_reviews(days: int = 3) -> dict[str, Any]:
     """直近 N 日の保存済みイベント評価 (クライアントは date+event_key で突き合わせる)。"""
     since = app_today() - timedelta(days=days)
     with session_scope() as session:

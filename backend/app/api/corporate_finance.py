@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/api/corporate-finance")
-async def get_corporate_finance() -> dict[str, Any]:
+def get_corporate_finance() -> dict[str, Any]:
     from app.integrations.freee_client import has_token
     from app.scoring.corporate_finance import compute_corporate_finance
 

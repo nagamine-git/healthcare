@@ -31,7 +31,7 @@ router = APIRouter()
 
 
 @router.get("/api/finance")
-async def get_finance() -> dict[str, Any]:
+def get_finance() -> dict[str, Any]:
     with session_scope() as session:
         return compute_finance(session)
 
@@ -54,13 +54,13 @@ class LifeProfileIn(BaseModel):
 
 
 @router.get("/api/finance/profile")
-async def get_profile() -> dict[str, Any]:
+def get_profile() -> dict[str, Any]:
     with session_scope() as session:
         return life_profile_to_dict(get_life_profile(session))
 
 
 @router.put("/api/finance/profile")
-async def put_profile(body: LifeProfileIn) -> dict[str, Any]:
+def put_profile(body: LifeProfileIn) -> dict[str, Any]:
     from datetime import datetime
 
     with session_scope() as session:
@@ -85,7 +85,7 @@ class AssetIn(BaseModel):
 
 
 @router.post("/api/finance/asset")
-async def put_asset(body: AssetIn) -> dict[str, Any]:
+def put_asset(body: AssetIn) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(AssetHolding, body.id) if body.id else None
         if row is None:
@@ -102,7 +102,7 @@ async def put_asset(body: AssetIn) -> dict[str, Any]:
 
 
 @router.delete("/api/finance/asset/{asset_id}")
-async def delete_asset(asset_id: int) -> dict[str, Any]:
+def delete_asset(asset_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(AssetHolding, asset_id)
         if row is None:
@@ -128,7 +128,7 @@ class RoiIn(BaseModel):
 
 
 @router.post("/api/finance/roi")
-async def put_roi(body: RoiIn) -> dict[str, Any]:
+def put_roi(body: RoiIn) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(RoiCandidate, body.id) if body.id else None
         if row is None:
@@ -142,7 +142,7 @@ async def put_roi(body: RoiIn) -> dict[str, Any]:
 
 
 @router.delete("/api/finance/roi/{roi_id}")
-async def delete_roi(roi_id: int) -> dict[str, Any]:
+def delete_roi(roi_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(RoiCandidate, roi_id)
         if row is None:
@@ -229,7 +229,7 @@ class ConfigIn(BaseModel):
 
 
 @router.put("/api/finance/config")
-async def put_config(body: ConfigIn) -> dict[str, Any]:
+def put_config(body: ConfigIn) -> dict[str, Any]:
     with session_scope() as session:
         st = get_state(session)
         if body.reserve_jpy is not None:
@@ -254,7 +254,7 @@ class AutoAllocIn(BaseModel):
 
 
 @router.post("/api/finance/auto-allocate")
-async def auto_allocate_endpoint(body: AutoAllocIn) -> dict[str, Any]:
+def auto_allocate_endpoint(body: AutoAllocIn) -> dict[str, Any]:
     """リスク許容度に基づき、全資産の目標ウェイトをリスク階層の再帰分割で自動設定。"""
     from app.scoring.finance import auto_allocate
 
@@ -480,7 +480,7 @@ async def import_screenshots(body: ScreenshotsIn) -> dict[str, Any]:
 
 
 @router.post("/api/finance/import-cashflow")
-async def import_cashflow(body: CashflowImportIn) -> dict[str, Any]:
+def import_cashflow(body: CashflowImportIn) -> dict[str, Any]:
     """入出金 CSV を取り込み(ID で重複排除)、月支出から防衛資金を自動設定。"""
     rows = _parse_cashflow_csv(body.csv)
     if not rows:

@@ -78,7 +78,7 @@ def _catalog() -> list[dict[str, Any]]:
 # 集約 read
 # ---------------------------------------------------------------------------
 @router.get("/api/identity")
-async def get_identity() -> dict[str, Any]:
+def get_identity() -> dict[str, Any]:
     with session_scope() as session:
         report = store.build_gap_report(session)
         recommendations = store.recommend_media(session)
@@ -168,7 +168,7 @@ class SjtCommitIn(BaseModel):
 
 
 @router.post("/api/identity/sjt/commit")
-async def sjt_commit(body: SjtCommitIn) -> dict[str, Any]:
+def sjt_commit(body: SjtCommitIn) -> dict[str, Any]:
     """SJT 本測の結果を保存し、現在地を再計算する。"""
     with session_scope() as session:
         session.add(
@@ -213,7 +213,7 @@ class ImdbImportIn(BaseModel):
 
 
 @router.post("/api/identity/imdb-import")
-async def imdb_import(body: ImdbImportIn) -> dict[str, Any]:
+def imdb_import(body: ImdbImportIn) -> dict[str, Any]:
     """IMDb の ratings.csv / watchlist.csv を取り込む。"""
     from app.ingest.imdb_import import import_media, parse_imdb_csv
 
@@ -228,7 +228,7 @@ class BooksImportIn(BaseModel):
 
 
 @router.post("/api/identity/books/import")
-async def books_import(body: BooksImportIn) -> dict[str, Any]:
+def books_import(body: BooksImportIn) -> dict[str, Any]:
     """Book Tracker の CSV を蔵書として取り込む(読書傾向・レコメンド改善に使う)。
 
     読了日(finish_dates)は読書アクションのバックフィル候補として返す(記録は確認後)。
@@ -290,7 +290,7 @@ class BooksBackfillIn(BaseModel):
 
 
 @router.post("/api/identity/books/backfill-reading")
-async def books_backfill_reading(body: BooksBackfillIn) -> dict[str, Any]:
+def books_backfill_reading(body: BooksBackfillIn) -> dict[str, Any]:
     """読了日を「その日に読書した」として庭に記録(冪等、確認後に呼ぶ)。"""
     logged: list[str] = []
     with session_scope() as session:
@@ -465,7 +465,7 @@ class IntentionIn(BaseModel):
 
 
 @router.post("/api/identity/media/{media_item_id}/intention")
-async def save_intention(media_item_id: int, body: IntentionIn) -> dict[str, Any]:
+def save_intention(media_item_id: int, body: IntentionIn) -> dict[str, Any]:
     """実行意図を確定し、作品を seen にする。"""
     with session_scope() as session:
         item = session.get(MediaItem, media_item_id)
@@ -493,7 +493,7 @@ class IntentionFeedbackIn(BaseModel):
 
 
 @router.post("/api/identity/media/{media_item_id}/intention/feedback")
-async def intention_feedback(media_item_id: int, body: IntentionFeedbackIn) -> dict[str, Any]:
+def intention_feedback(media_item_id: int, body: IntentionFeedbackIn) -> dict[str, Any]:
     """実行意図の完遂・有用度を記録する (outcome ループ)。"""
     with session_scope() as session:
         log = session.get(MediaLog, media_item_id)
@@ -515,7 +515,7 @@ class ArchetypeIn(BaseModel):
 
 
 @router.post("/api/identity/archetype")
-async def update_archetype(body: ArchetypeIn) -> dict[str, Any]:
+def update_archetype(body: ArchetypeIn) -> dict[str, Any]:
     """理想プロファイルを差し替える (型の差し替え可能性を担保)。"""
     from app.models.health import IdentityArchetype
 

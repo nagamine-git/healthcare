@@ -27,7 +27,7 @@ def _list() -> list[dict[str, Any]]:
 
 
 @router.get("/api/equipment")
-async def get_equipment() -> dict[str, Any]:
+def get_equipment() -> dict[str, Any]:
     resolve_equipment()  # 空ならシード
     return {"items": _list()}
 
@@ -40,7 +40,7 @@ class EquipmentIn(BaseModel):
 
 
 @router.post("/api/equipment")
-async def upsert_equipment(body: EquipmentIn) -> dict[str, Any]:
+def upsert_equipment(body: EquipmentIn) -> dict[str, Any]:
     with session_scope() as s:
         row = s.get(EquipmentItem, body.id) if body.id else None
         if row is None:
@@ -54,7 +54,7 @@ async def upsert_equipment(body: EquipmentIn) -> dict[str, Any]:
 
 
 @router.delete("/api/equipment/{item_id}")
-async def delete_equipment(item_id: int) -> dict[str, Any]:
+def delete_equipment(item_id: int) -> dict[str, Any]:
     with session_scope() as s:
         row = s.get(EquipmentItem, item_id)
         if row is None:

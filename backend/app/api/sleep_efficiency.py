@@ -23,7 +23,7 @@ router = APIRouter()
 
 
 @router.get("/api/sleep/efficiency")
-async def get_sleep_efficiency() -> dict[str, Any]:
+def get_sleep_efficiency() -> dict[str, Any]:
     """睡眠時間ではなく効率・深睡眠が翌日の回復を左右することを示す分析。"""
     target = app_today()
     rows = sleep_drivers._collect(target)

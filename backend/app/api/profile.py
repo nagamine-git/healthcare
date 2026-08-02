@@ -34,7 +34,7 @@ def _profile_dict() -> dict[str, Any]:
 
 
 @router.get("/api/profile")
-async def get_profile() -> dict[str, Any]:
+def get_profile() -> dict[str, Any]:
     return _profile_dict()
 
 
@@ -94,12 +94,12 @@ def _settings_dict() -> dict[str, Any]:
 
 
 @router.get("/api/settings")
-async def get_settings_profile() -> dict[str, Any]:
+def get_settings_profile() -> dict[str, Any]:
     return _settings_dict()
 
 
 @router.get("/api/physique-plan")
-async def get_physique_plan() -> dict[str, Any]:
+def get_physique_plan() -> dict[str, Any]:
     """理想体型と現在地のギャップを埋める実践プラン (エネルギー収支ベース)。"""
     from app.scoring.physique_plan import recomposition_plan
     from app.scoring.timewindow import app_today
@@ -154,7 +154,7 @@ _SETTINGS_FIELDS = (
 
 
 @router.put("/api/settings")
-async def put_settings_profile(body: SettingsIn) -> dict[str, Any]:
+def put_settings_profile(body: SettingsIn) -> dict[str, Any]:
     # model_fields_set でクライアントが「実際に送ったキー」だけを反映する
     # (送られていないフィールドは触らない / 明示 None は NULL 化)
     sent = body.model_fields_set
@@ -191,7 +191,7 @@ class ProfileIn(BaseModel):
 
 
 @router.put("/api/profile")
-async def put_profile(body: ProfileIn) -> dict[str, Any]:
+def put_profile(body: ProfileIn) -> dict[str, Any]:
     # 有効身長 (未指定なら現在の resolve 値) で BMI を評価
     height = body.height_cm if body.height_cm is not None else resolve_profile().height_cm
     bmi = body.target_weight_kg / (height / 100.0) ** 2

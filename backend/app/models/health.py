@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -22,7 +23,15 @@ class MetricSample(Base):
     """Long-format time-series for fine-grained metrics."""
 
     __tablename__ = "metric_sample"
-    __table_args__ = (UniqueConstraint("source", "metric_key", "ts", name="uq_metric_sample"),)
+    __table_args__ = (
+        UniqueConstraint("source", "metric_key", "ts", name="uq_metric_sample"),
+        # ⚠️ ほぼ全てのクエリが `metric_key = ? AND ts >= ?` の形。単独 index だけだと
+        # SQLite は metric_key 側しか使えず、件数の多いキー (basal_energy_burned で
+        # 15万行) を全部読んでから ts で絞る羽目になる。この複合 index で
+        # 「SEARCH USING INDEX (metric_key=? AND ts>?)」になり ORDER BY の
+        # TEMP B-TREE も消える (実測 1.9ms)。
+        Index("ix_metric_sample_key_ts", "metric_key", "ts"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(String(32), index=True)  # garmin | hae

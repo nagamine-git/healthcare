@@ -42,7 +42,7 @@ def _to_dict(r: SpeechSession) -> dict[str, Any]:
 
 
 @router.post("/api/speech/ingest")
-async def ingest_speech(body: SpeechIngestIn) -> dict[str, Any]:
+def ingest_speech(body: SpeechIngestIn) -> dict[str, Any]:
     """speech-coach の日次サマリを upsert する。"""
     d = date_type.fromisoformat(body.date)
     with session_scope() as session:
@@ -61,7 +61,7 @@ async def ingest_speech(body: SpeechIngestIn) -> dict[str, Any]:
 
 
 @router.get("/api/speech")
-async def list_speech(days: int = 28) -> dict[str, Any]:
+def list_speech(days: int = 28) -> dict[str, Any]:
     end = app_today()
     start = end - timedelta(days=days)
     with session_scope() as session:

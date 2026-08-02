@@ -61,9 +61,28 @@ _GMT_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 
 
 def _parse_gmt(value: Any) -> datetime | None:
-    """``"2026-07-31T14:47:00.0"`` (UTC naive) を ``datetime`` に変換。"""
+    """``"2026-07-31T14:47:00.0"`` (UTC naive) を ``datetime`` に変換。
+
+    ⚠️ ``datetime.strptime`` は遅い。1夜あたり 543 件 × 分析対象の全夜ぶん呼ばれるため
+    (プロファイル実測: 1リクエストで 34,610 回 = 0.45s)、固定長フォーマットを
+    決め打ちで切り出す高速路を通す。想定外の形なら strptime に落として同じ結果を返す。
+    """
     if not isinstance(value, str):
         return None
+    # "YYYY-MM-DDTHH:MM:SS" までは固定長。区切り位置を確認してから数値化する。
+    if len(value) >= 19 and value[4] == "-" and value[7] == "-" and value[10] == "T" \
+            and value[13] == ":" and value[16] == ":":
+        try:
+            micro = 0
+            if len(value) > 20 and value[19] == ".":
+                # ".0" のような可変長の小数部を μs に正規化する (右0詰め6桁)
+                micro = int(value[20:26].ljust(6, "0"))
+            return datetime(
+                int(value[0:4]), int(value[5:7]), int(value[8:10]),
+                int(value[11:13]), int(value[14:16]), int(value[17:19]), micro,
+            )
+        except ValueError:
+            return None
     try:
         return datetime.strptime(value, _GMT_FORMAT)
     except ValueError:
@@ -86,12 +105,21 @@ def detect_actual_wake(
 
     window_start = sleep_end_utc - timedelta(minutes=WINDOW_BEFORE_MIN)
     window_end = sleep_end_utc + timedelta(minutes=WINDOW_AFTER_MIN)
+    # 窓に入るのは 1 夜 543 件のうちごく一部。``startGMT`` は固定長 ISO 形式なので
+    # **辞書順 = 時系列順**であり、パースする前に文字列比較で窓外を落とせる
+    # (境界の扱いは下のパース後の比較と一致する: 小数部が付くぶん長い文字列は
+    #  同じ秒の "…:SS" より大きいので、`< 開始` / `>= 終了` の判定がずれない)。
+    ws = window_start.strftime("%Y-%m-%dT%H:%M:%S")
+    we = window_end.strftime("%Y-%m-%dT%H:%M:%S")
 
     samples: list[tuple[datetime, datetime, float]] = []
     for entry in sleep_movement:
         if not isinstance(entry, dict):
             continue
-        start = _parse_gmt(entry.get("startGMT"))
+        raw_start = entry.get("startGMT")
+        if not isinstance(raw_start, str) or raw_start < ws or raw_start >= we:
+            continue
+        start = _parse_gmt(raw_start)
         if start is None or start < window_start or start >= window_end:
             continue
         level_raw = entry.get("activityLevel")

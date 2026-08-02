@@ -41,7 +41,7 @@ def _latest_payload(session) -> dict[str, Any]:
 
 
 @router.get("/api/checkup")
-async def get_checkup() -> dict[str, Any]:
+def get_checkup() -> dict[str, Any]:
     with session_scope() as session:
         return _latest_payload(session)
 
@@ -90,7 +90,7 @@ async def post_checkup(body: CheckupIn) -> dict[str, Any]:
 
 
 @router.delete("/api/checkup/{checkup_id}")
-async def delete_checkup(checkup_id: int) -> dict[str, Any]:
+def delete_checkup(checkup_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(HealthCheckup, checkup_id)
         if row is None:

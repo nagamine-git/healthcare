@@ -67,7 +67,7 @@ def _estimate_sleep_debt_min(session: Session, target, *, window_days: int, slee
 
 
 @router.get("/api/wind-down")
-async def get_wind_down() -> dict[str, Any]:
+def get_wind_down() -> dict[str, Any]:
     from app.api.caffeine import current_residual_mg
     from app.scoring.profile import resolve_profile
 

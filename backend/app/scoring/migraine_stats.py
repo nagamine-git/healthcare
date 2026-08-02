@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import lru_cache
 from itertools import combinations
 
 from app.scoring.circadian import circular_mean_hour, circular_sd_hours
@@ -71,9 +72,35 @@ def permutation_test(
 
     小サンプルでは全 |case| 通りの組合せを厳密列挙 (決定的・正確 p)。
     大きい場合は index ベースの決定的サンプリングにフォールバック。
+
+    ⚠️ この関数は**純粋かつ決定的**である (乱数を使わず、全列挙か固定シードの
+    LCG のみ)。同じ入力なら必ず同じ (p, diff) を返すので結果をメモ化してよい。
+    1リクエストで 50-56 回呼ばれ、1回あたり 5000 反復 × O(n) で ~50ms かかる
+    (プロファイル実測: /api/next-action の 4.5s のうち 3.1s がここ)。
+    さらに next-action / sleep-drivers / forecast は同じ検定を重複して実行するため、
+    メモ化の効果が大きい。**決定的でなくなる変更を入れるならキャッシュも外すこと。**
     """
     if not case or not control:
         return None, None
+    return _permutation_test_cached(tuple(case), tuple(control), iterations)
+
+
+@lru_cache(maxsize=4096)
+def _permutation_test_cached(
+    case: tuple[float, ...],
+    control: tuple[float, ...],
+    iterations: int,
+) -> tuple[float | None, float | None]:
+    """``permutation_test`` の実体。list は hashable でないので tuple で受ける。"""
+    case_l, control_l = list(case), list(control)
+    return _permutation_test_impl(case_l, control_l, iterations)
+
+
+def _permutation_test_impl(
+    case: list[float],
+    control: list[float],
+    iterations: int,
+) -> tuple[float | None, float | None]:
     pooled = case + control
     n = len(pooled)
     k = len(case)

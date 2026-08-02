@@ -33,7 +33,7 @@ def _local_date(ts: datetime | None) -> date_type | None:
 
 
 @router.get("/api/physique/distribution")
-async def get_physique_distribution() -> dict[str, Any]:
+def get_physique_distribution() -> dict[str, Any]:
     prof = resolve_profile()
     with session_scope() as session:
         row = (

@@ -81,7 +81,7 @@ class CaffeineIntakeOut(BaseModel):
 
 
 @router.post("/api/caffeine", response_model=CaffeineIntakeOut)
-async def add_caffeine_intake(body: CaffeineIntakeIn) -> CaffeineIntakeOut:
+def add_caffeine_intake(body: CaffeineIntakeIn) -> CaffeineIntakeOut:
     settings = get_settings()
     if body.source not in PRESET_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"unknown source: {body.source}")
@@ -122,7 +122,7 @@ async def add_caffeine_intake(body: CaffeineIntakeIn) -> CaffeineIntakeOut:
 
 
 @router.get("/api/caffeine")
-async def list_caffeine_intakes(hours: int = 24) -> dict[str, Any]:
+def list_caffeine_intakes(hours: int = 24) -> dict[str, Any]:
     """直近 hours 時間の摂取記録を返す。"""
     settings = get_settings()
     since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
@@ -151,7 +151,7 @@ class CaffeineIntakePatch(BaseModel):
 
 
 @router.patch("/api/caffeine/{intake_id}", response_model=CaffeineIntakeOut)
-async def patch_caffeine_intake(
+def patch_caffeine_intake(
     intake_id: int, body: CaffeineIntakePatch
 ) -> CaffeineIntakeOut:
     settings = get_settings()
@@ -198,7 +198,7 @@ async def patch_caffeine_intake(
 
 
 @router.delete("/api/caffeine/{intake_id}")
-async def delete_caffeine_intake(intake_id: int) -> dict[str, Any]:
+def delete_caffeine_intake(intake_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(CaffeineIntake, intake_id)
         if row is None:
@@ -208,7 +208,7 @@ async def delete_caffeine_intake(intake_id: int) -> dict[str, Any]:
 
 
 @router.get("/api/caffeine/presets")
-async def caffeine_presets() -> dict[str, Any]:
+def caffeine_presets() -> dict[str, Any]:
     """フロントエンドが利用するプリセット情報を返す。"""
     settings = get_settings()
     out: dict[str, Any] = {}
@@ -228,7 +228,7 @@ async def caffeine_presets() -> dict[str, Any]:
 
 
 @router.get("/api/caffeine/med-status")
-async def med_status() -> dict[str, Any]:
+def med_status() -> dict[str, Any]:
     """鎮痛薬(バファリン/イブ)の服用可否。直近服用時刻・本日回数から
     「今飲めるか / 次に飲める時刻」を計算して返す。"""
     from app.scoring.caffeine import (

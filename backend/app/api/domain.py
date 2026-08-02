@@ -27,7 +27,7 @@ class DomainIngestIn(BaseModel):
 
 
 @router.post("/api/domain/{key}/ingest")
-async def ingest_domain(key: str, body: DomainIngestIn) -> dict[str, Any]:
+def ingest_domain(key: str, body: DomainIngestIn) -> dict[str, Any]:
     if key not in _EXTERNAL:
         raise HTTPException(status_code=404, detail=f"unknown external domain: {key}")
     d = date_type.fromisoformat(body.date)
@@ -42,7 +42,7 @@ async def ingest_domain(key: str, body: DomainIngestIn) -> dict[str, Any]:
 
 
 @router.get("/api/domain/{key}")
-async def list_domain(key: str, days: int = 28) -> dict[str, Any]:
+def list_domain(key: str, days: int = 28) -> dict[str, Any]:
     end = app_today()
     start = end - timedelta(days=days)
     with session_scope() as session:

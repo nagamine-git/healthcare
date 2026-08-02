@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/api/learning/state")
-async def learning_state() -> dict[str, Any]:
+def learning_state() -> dict[str, Any]:
     return learning.state()
 
 
@@ -28,7 +28,7 @@ class SectionCheckIn(BaseModel):
 
 
 @router.post("/api/learning/section/{section_id}/check")
-async def check_section(section_id: str, body: SectionCheckIn) -> dict[str, Any]:
+def check_section(section_id: str, body: SectionCheckIn) -> dict[str, Any]:
     try:
         return learning.set_section_check(
             section_id, body.field, body.done, done_at_iso=body.done_at_iso
@@ -43,7 +43,7 @@ class RustlingsIn(BaseModel):
 
 
 @router.post("/api/learning/chapter/{chapter}/rustlings")
-async def check_rustlings(chapter: int, body: RustlingsIn) -> dict[str, Any]:
+def check_rustlings(chapter: int, body: RustlingsIn) -> dict[str, Any]:
     """章単位の Rustlings 達成をトグル (演習のある章のみ)。"""
     try:
         return learning.set_chapter_rustlings(chapter, body.done, done_at_iso=body.done_at_iso)
@@ -140,7 +140,7 @@ class ActivityIn(BaseModel):
 
 
 @router.post("/api/learning/activity")
-async def record_activity(body: ActivityIn) -> dict[str, Any]:
+def record_activity(body: ActivityIn) -> dict[str, Any]:
     return learning.record_activity(body.detail)
 
 
@@ -152,7 +152,7 @@ class PlanIn(BaseModel):
 
 
 @router.post("/api/learning/plan")
-async def set_plan(body: PlanIn) -> dict[str, Any]:
+def set_plan(body: PlanIn) -> dict[str, Any]:
     try:
         return learning.set_plan(
             started_on=body.started_on, target_date=body.target_date,

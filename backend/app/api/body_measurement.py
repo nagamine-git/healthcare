@@ -117,7 +117,7 @@ def _evaluate(row: BodyMeasurement | None) -> dict[str, Any]:
 
 
 @router.get("/api/body-measurement")
-async def get_body_measurement() -> dict[str, Any]:
+def get_body_measurement() -> dict[str, Any]:
     with session_scope() as session:
         row = (
             session.execute(select(BodyMeasurement).order_by(BodyMeasurement.date.desc()).limit(1))
@@ -130,7 +130,7 @@ async def get_body_measurement() -> dict[str, Any]:
 
 
 @router.get("/api/body-measurement/history")
-async def get_body_measurement_history(days: int = 90) -> dict[str, Any]:
+def get_body_measurement_history(days: int = 90) -> dict[str, Any]:
     days = max(1, min(days, _HISTORY_LIMIT))
     today = app_today()
     start = today.fromordinal(today.toordinal() - days + 1)
@@ -157,7 +157,7 @@ class BodyMeasurementIn(BaseModel):
 
 
 @router.put("/api/body-measurement")
-async def put_body_measurement(body: BodyMeasurementIn) -> dict[str, Any]:
+def put_body_measurement(body: BodyMeasurementIn) -> dict[str, Any]:
     """確認済みの値を日付ごとに upsert。周径が全て None (note のみ) は 422。"""
     if all(v is None for v in (body.waist_cm, body.neck_cm, body.chest_cm, body.hip_cm)):
         raise HTTPException(status_code=422, detail="保存する測定値がありません")

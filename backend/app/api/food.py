@@ -29,7 +29,7 @@ def _food_out(f: FoodItem) -> dict[str, Any]:
 
 
 @router.get("/api/foods")
-async def list_foods() -> dict[str, Any]:
+def list_foods() -> dict[str, Any]:
     with session_scope() as session:
         foods = session.execute(select(FoodItem).order_by(FoodItem.name)).scalars().all()
         return {"items": [_food_out(f) for f in foods]}
@@ -63,7 +63,7 @@ class FoodIn(BaseModel):
 
 
 @router.post("/api/foods")
-async def create_food(body: FoodIn) -> dict[str, Any]:
+def create_food(body: FoodIn) -> dict[str, Any]:
     with session_scope() as session:
         f = FoodItem(**body.model_dump())
         session.add(f)
@@ -72,7 +72,7 @@ async def create_food(body: FoodIn) -> dict[str, Any]:
 
 
 @router.put("/api/foods/{food_id}")
-async def update_food(food_id: int, body: FoodIn) -> dict[str, Any]:
+def update_food(food_id: int, body: FoodIn) -> dict[str, Any]:
     with session_scope() as session:
         f = session.get(FoodItem, food_id)
         if f is None:
@@ -84,7 +84,7 @@ async def update_food(food_id: int, body: FoodIn) -> dict[str, Any]:
 
 
 @router.delete("/api/foods/{food_id}")
-async def delete_food(food_id: int) -> dict[str, Any]:
+def delete_food(food_id: int) -> dict[str, Any]:
     with session_scope() as session:
         f = session.get(FoodItem, food_id)
         if f is None:
@@ -102,7 +102,7 @@ async def delete_food(food_id: int) -> dict[str, Any]:
 
 
 @router.get("/api/meal-patterns")
-async def list_patterns() -> dict[str, Any]:
+def list_patterns() -> dict[str, Any]:
     with session_scope() as session:
         rows = session.execute(
             select(MealPattern, FoodItem).join(FoodItem, MealPattern.food_id == FoodItem.id)
@@ -125,7 +125,7 @@ class MealPatternIn(BaseModel):
 
 
 @router.post("/api/meal-patterns")
-async def add_pattern(body: MealPatternIn) -> dict[str, Any]:
+def add_pattern(body: MealPatternIn) -> dict[str, Any]:
     with session_scope() as session:
         if session.get(FoodItem, body.food_id) is None:
             raise HTTPException(status_code=400, detail="unknown food_id")
@@ -136,7 +136,7 @@ async def add_pattern(body: MealPatternIn) -> dict[str, Any]:
 
 
 @router.delete("/api/meal-patterns/{pattern_id}")
-async def delete_pattern(pattern_id: int) -> dict[str, Any]:
+def delete_pattern(pattern_id: int) -> dict[str, Any]:
     with session_scope() as session:
         mp = session.get(MealPattern, pattern_id)
         if mp is None:
@@ -149,7 +149,7 @@ async def delete_pattern(pattern_id: int) -> dict[str, Any]:
 
 
 @router.get("/api/meal-plan")
-async def meal_plan() -> dict[str, Any]:
+def meal_plan() -> dict[str, Any]:
     from app.scoring.meal_estimate import meal_suggestions
     from app.scoring.timewindow import app_today
 

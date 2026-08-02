@@ -65,6 +65,22 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // vendor を独立チャンクに切り出す。1つのバンドルに全部入れていると、
+        // アプリ側を1行直すだけで 1.1MB 全部が content hash 変更 → 再ダウンロードに
+        // なっていた。ライブラリは滅多に変わらないので分けておけばデプロイをまたいで
+        // ブラウザキャッシュが効き、更新時に落ちてくるのはアプリのコードだけになる。
+        // ⚠️ react / react-dom は**切り出さない**。手動で分けるとチャンクの読み込み
+        // 順序次第で React が二重になったり未初期化で参照されたりする事故があるので、
+        // 依存解決は Vite に任せ、ここでは「重くて滅多に変わらない」recharts だけ分ける。
+        manualChunks: {
+          "vendor-charts": ["recharts"],  // 561KB (gz 156KB)。断トツで重い
+        },
+      },
+    },
+  },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

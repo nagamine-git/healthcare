@@ -36,6 +36,11 @@ def init_engine(db_path: Path | str) -> Engine:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA synchronous=NORMAL")
+            # ⚠️ API ハンドラはスレッドプールで**並列**に走るので、書き込みが衝突しうる。
+            # SQLite の書き込みは1度に1つだけで、busy_timeout が無いと衝突した側は
+            # 待たずに即 "database is locked" で失敗する。数秒待てばまず解消するので
+            # 待たせる (WAL なので読み取りは書き込みと衝突しない)。
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
 
     _engine = engine
@@ -156,6 +161,14 @@ def _apply_lightweight_migrations() -> None:
             ("water_ml_per_kg", "REAL"),
         ],
     }
+    # 既存 DB に欠けている index。⚠️ `create_all` は**既存テーブル**には index を
+    # 追加しないので、モデルの __table_args__ に書くだけでは新規 DB にしか効かない。
+    # ここで明示的に作る (CREATE INDEX IF NOT EXISTS なので再実行は無害)。
+    expected_indexes = [
+        # metric_sample は 77万行。ほぼ全クエリが `metric_key=? AND ts>=?` なのに
+        # 単独 index しか無く、件数の多いキーを全走査していた (実測 0.83s/リクエスト)。
+        ("metric_sample", "ix_metric_sample_key_ts", "(metric_key, ts)"),
+    ]
     with engine.begin() as conn:
         for table, cols in expected.items():
             if table not in inspector.get_table_names():
@@ -164,6 +177,11 @@ def _apply_lightweight_migrations() -> None:
             for name, sql_type in cols:
                 if name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+        for table, index_name, cols_sql in expected_indexes:
+            if table in inspector.get_table_names():
+                conn.execute(
+                    text(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table} {cols_sql}")
+                )
         # 旧 done_at (節の単一トグル) を read_at へ引き継ぐ。done_at がまだ
         # 物理的に残っている既存 DB のみ対象 (新規 DB には存在しない)。
         if "learning_section_progress" in inspector.get_table_names():

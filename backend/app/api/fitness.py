@@ -42,13 +42,13 @@ class FitnessResultIn(BaseModel):
 
 
 @router.get("/api/fitness/tests")
-async def get_fitness_tests() -> dict[str, Any]:
+def get_fitness_tests() -> dict[str, Any]:
     """全テストの定義 + 最新結果 + 評価 + トレンド + 次回推奨。"""
     return build_overview(_today_jst())
 
 
 @router.post("/api/fitness/results")
-async def record_fitness_result(body: FitnessResultIn) -> dict[str, Any]:
+def record_fitness_result(body: FitnessResultIn) -> dict[str, Any]:
     defn = FITNESS_TESTS.get(body.test_key)
     if defn is None:
         raise HTTPException(status_code=400, detail=f"unknown test_key: {body.test_key}")
@@ -102,7 +102,7 @@ async def record_fitness_result(body: FitnessResultIn) -> dict[str, Any]:
 
 
 @router.get("/api/fitness/history/{test_key}")
-async def get_fitness_history(test_key: str, limit: int = 24) -> dict[str, Any]:
+def get_fitness_history(test_key: str, limit: int = 24) -> dict[str, Any]:
     if test_key not in FITNESS_TESTS:
         raise HTTPException(status_code=400, detail=f"unknown test_key: {test_key}")
     with session_scope() as session:
@@ -130,7 +130,7 @@ async def get_fitness_history(test_key: str, limit: int = 24) -> dict[str, Any]:
 
 
 @router.delete("/api/fitness/results/{result_id}")
-async def delete_fitness_result(result_id: int) -> dict[str, Any]:
+def delete_fitness_result(result_id: int) -> dict[str, Any]:
     with session_scope() as session:
         row = session.get(FitnessTestResult, result_id)
         if row is None:

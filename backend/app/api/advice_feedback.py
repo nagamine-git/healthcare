@@ -44,7 +44,7 @@ class FeedbackIn(BaseModel):
 
 
 @router.post("/api/advice/feedback")
-async def post_feedback(body: FeedbackIn) -> dict[str, Any]:
+def post_feedback(body: FeedbackIn) -> dict[str, Any]:
     target = date_type.fromisoformat(body.date) if body.date else _today()
     with session_scope() as session:
         row = session.get(AdviceFeedback, (target, body.action_key))

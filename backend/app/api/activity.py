@@ -16,6 +16,6 @@ router = APIRouter()
 
 
 @router.get("/api/activity/signal")
-async def get_activity_signal(days: int = 14) -> dict[str, Any]:
+def get_activity_signal(days: int = 14) -> dict[str, Any]:
     days = max(1, min(days, 60))
     return {"days": recent_signals(days)}
