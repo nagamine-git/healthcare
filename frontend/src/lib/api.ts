@@ -743,7 +743,11 @@ export type Pressure = {
 
 export type SleepWindow = { rec: string; start: string; end: string };
 export type TonightPlan = {
-  wake: string; // HH:MM
+  wake: string; // HH:MM ＝ **布団から出る**時刻 (睡眠が終わる時刻ではない)
+  /** 睡眠が終わる (目が覚める) 目安。wake との差が「布団の中」。逆算はこちらが基準 */
+  sleep_end?: string;
+  /** 習慣的な「布団の中」時間 (分)。体動から検出できていなければ null */
+  lingering_min?: number | null;
   bedtime: string;
   bath: string;
   bath_start?: string;

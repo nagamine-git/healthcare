@@ -1,9 +1,18 @@
 """今夜のスリープリズムを起床時刻から逆算する。
 
 - 起床時刻 (config の target_wake_time) を翌日として固定
-- bedtime = wake - target_sleep_min
+- **目覚め (睡眠終了) = 起床 − 習慣的な「布団の中」時間** ← 逆算のアンカーはこちら
+- bedtime = 目覚め - target_sleep_min
 - bath_time = bedtime - bath_to_bed_lead_min
 - dinner_cutoff = bedtime - dinner_to_bed_lead_min
+
+⚠️ **「起床」は布団から出る時刻**であって睡眠が終わる時刻ではない。実データ
+(``scoring/wake_detect.py``) では睡眠終了から実際に動き出すまで中央値 20 分
+(範囲 1〜55 分) の開きがあった。睡眠時間は「就寝→睡眠終了」で測られるので、
+就寝時刻を起床時刻から直接引くと、その「布団の中」の分だけ睡眠を過大に
+見積もってしまう。逆算は必ず ``sleep_end_dt`` を経由すること。
+一方 **朝の光浴は布団から出ないと浴びられない**ので、光浴の窓は ``wake_dt``
+(布団から出る時刻) に置く。この2つのアンカーの使い分けが本モジュールの肝。
 
 夜遅くにトレーニングがあるなど現実的に難しい場合は LLM 側で調整するため、
 ここでは「理想の時刻」を返すだけにとどめる。
@@ -21,6 +30,10 @@ from app.config import get_settings
 # 概日リズムの前進は行動・光で1日~30-60分が限界 (Burgess/Eastman)。
 # 一気に理想へ飛ばさず、習慣の就寝から最大この分だけ前倒しする。
 MAX_ADVANCE_MIN = 45
+
+# 「布団の中」時間として採用する上限 (分)。実データの範囲は 1〜55 分だったが、
+# 外れ値の median 押し上げで逆算が大きく狂わないよう常識的な線で切る。
+_MAX_LINGERING_MIN = 60
 
 
 def _parse_hhmm(s: str) -> time:
@@ -84,6 +97,47 @@ def _habitual_phase(target: date_type, *, days: int = 14) -> dict[str, float] | 
     return {"midpoint_h": mid, "dur_min": dur, "bedtime_h": mid - dur / 120.0}
 
 
+def _habitual_lingering_min(target: date_type, *, days: int = 14) -> int | None:
+    """直近の実データから「睡眠終了→実際に動き出す」までの分数を median 推定。
+
+    体動から起床を検出できた夜だけを使い、1夜も検出できなければ ``None``
+    (=呼び出し側は 0 分として扱い、従来どおり起床時刻をそのまま逆算に使う)。
+    それらしい値で埋めることはしない (``wake_detect`` と同じ方針)。
+
+    ``_habitual_phase`` と同様、読めなくても例外は投げない。ここは
+    ``compute_tonight_plan`` の一部であり、多数のモジュールが依存しているため。
+    """
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import SleepSession
+    from app.scoring.wake_detect import wake_stages_from_raw
+
+    vals: list[int] = []
+    try:
+        with session_scope() as ses:
+            rows = ses.execute(
+                select(SleepSession.raw_json).where(
+                    SleepSession.date > target - timedelta(days=days),
+                    SleepSession.date <= target,
+                )
+            ).all()
+        for (raw,) in rows:
+            stages = wake_stages_from_raw(raw if isinstance(raw, dict) else None)
+            lm = stages["lingering_min"] if stages else None
+            # 負 (睡眠終了より前に動き出した = 二度寝など) は「布団の中」ではないので除外。
+            # 上限は wake_detect の探索窓 (+120分) 由来だが、逆算を一気に狂わせないよう
+            # 常識的な範囲に丸める。
+            if lm is not None and 0 < lm <= _MAX_LINGERING_MIN:
+                vals.append(int(lm))
+    except Exception:
+        return None
+    if not vals:
+        return None
+    vals.sort()
+    return vals[len(vals) // 2]
+
+
 def compute_tonight_plan(
     target: date_type,
     *,
@@ -135,7 +189,13 @@ def compute_tonight_plan(
             break
     if wake_dt is None:  # 両日とも過ぎている (異常系) — 従来どおり翌日の既定へ
         wake_dt = datetime.combine(target, default_wake_t, tz) + timedelta(days=1)
-    ideal_bedtime_dt = wake_dt - timedelta(minutes=target_sleep_min)
+
+    # ⚠️ 逆算のアンカーは「布団から出る時刻 (wake_dt)」ではなく「睡眠が終わる時刻」。
+    # 睡眠時間は就寝→睡眠終了で測られるので、布団の中でグダグダしている分
+    # (実データ median 20分) を引かないと睡眠を過大に見積もる。
+    lingering_min = _habitual_lingering_min(target)
+    sleep_end_dt = wake_dt - timedelta(minutes=lingering_min or 0)
+    ideal_bedtime_dt = sleep_end_dt - timedelta(minutes=target_sleep_min)
     # 夕食の上限に使う「**その朝**の起床」(次に迎える起床ではない)。上書きがあれば尊重する。
     morning_wake_dt = datetime.combine(target, overrides.get(target) or default_wake_t, tz)
 
@@ -164,7 +224,7 @@ def compute_tonight_plan(
                 "毎晩30-45分ずつ前倒しで近づける。"
             )
 
-    sleep_min = int((wake_dt - bedtime_dt).total_seconds() / 60)
+    sleep_min = int((sleep_end_dt - bedtime_dt).total_seconds() / 60)
     compressed = bedtime_dt > ideal_bedtime_dt + timedelta(minutes=5)
     # 入浴は「上がる」を就寝90分前に置き、そこから逆算して「入る」を出す (湯船に浸かる前提)
     bath_end_dt = bedtime_dt - timedelta(minutes=s.bath_to_bed_lead_min)
@@ -180,7 +240,7 @@ def compute_tonight_plan(
             new_bedtime = bath_dt + timedelta(minutes=s.bath_to_bed_lead_min)
             if new_bedtime > bedtime_dt:
                 bedtime_dt = new_bedtime
-                actual_sleep = (wake_dt - bedtime_dt).total_seconds() / 60
+                actual_sleep = (sleep_end_dt - bedtime_dt).total_seconds() / 60
                 if actual_sleep < target_sleep_min:
                     compressed = True
                     sleep_min = int(actual_sleep)
@@ -194,14 +254,16 @@ def compute_tonight_plan(
     # 単に就寝目標より夜更かししている場合も含む) は「これから今夜の予定を組む」のでは
     # なく「今すぐ寝るべき」局面。目安睡眠を現在時刻起点で再計算し、最優先の note として
     # 先頭に出す。
-    sleep_now = bedtime_dt <= now_dt < wake_dt
+    # 「まだ寝られる」局面かは**睡眠が終わる時刻**まで。布団の中でグダグダしている
+    # 時間帯 (sleep_end〜wake) はもう朝であって「今すぐ寝るべき」ではない。
+    sleep_now = bedtime_dt <= now_dt < sleep_end_dt
     if sleep_now:
-        sleep_min = max(0, int((wake_dt - now_dt).total_seconds() / 60))
+        sleep_min = max(0, int((sleep_end_dt - now_dt).total_seconds() / 60))
         compressed = True
         notes.insert(
             0,
             f"目安の就寝時刻 ({bedtime_dt.strftime('%H:%M')}) をすでに過ぎています。今すぐ寝てください。"
-            f"今から寝れば起床 {wake_dt.strftime('%H:%M')} まで約{sleep_min // 60}h{sleep_min % 60:02d}m 眠れます。",
+            f"今から寝れば目覚め {sleep_end_dt.strftime('%H:%M')} まで約{sleep_min // 60}h{sleep_min % 60:02d}m 眠れます。",
         )
 
     # 夕食: 就寝3h前 と「起床+13h(遅すぎない上限)」の早い方を食べ終わりに。遅い夕食を回避。
@@ -242,13 +304,29 @@ def compute_tonight_plan(
     # ラグは config を正とする (sleep_drivers の助言文と同じ値を共有し食い違いを作らない)
     dim_light_dt = bedtime_dt - timedelta(minutes=s.dim_light_lead_min)
     exercise_cutoff_dt = bedtime_dt - timedelta(minutes=s.exercise_to_bed_lead_min)
+    # 朝の光浴だけは wake_dt (布団から出る時刻) が正しいアンカー。布団の中では
+    # 屋外光を浴びられないので、睡眠終了に合わせると実行不能な窓になる。
     morning_light = {
         "start": wake_dt.strftime("%H:%M"),
         "end": (wake_dt + timedelta(minutes=30)).strftime("%H:%M"),
     }
 
+    if lingering_min:
+        notes.append(
+            f"起床 {wake_dt.strftime('%H:%M')} は「布団から出る」時刻。普段は目が覚めてから"
+            f"実際に動き出すまで約{lingering_min}分かかっている (体動データの中央値) ため、"
+            f"逆算は目覚め {sleep_end_dt.strftime('%H:%M')} を基準にしている。"
+            f"この{lingering_min}分を縮められれば、そのぶん就寝を遅らせても同じ睡眠量を確保できる。"
+        )
+
     return {
         "wake": wake_dt.strftime("%H:%M"),
+        # 睡眠が終わる (目が覚める) 目安。wake との差が「布団の中」。
+        # ⚠️ 逆算 (bedtime/入浴/夕食/カフェイン) はすべてこちらが基準。
+        "sleep_end": sleep_end_dt.strftime("%H:%M"),
+        # 習慣的な「布団の中」時間 (分)。体動から1夜も検出できなければ None
+        # (= wake をそのまま逆算に使う従来挙動)。
+        "lingering_min": lingering_min,
         "bedtime": bedtime_dt.strftime("%H:%M"),  # 今夜の現実的な目標 (習慣から前倒し)
         # bedtime の完全な日時 (TZ-aware ISO)。日付境界 (深夜0時台の呼び出し等) を
         # 正しくまたいだ値なので、他モジュール (wind_down 等) が「就寝まで残り分」を

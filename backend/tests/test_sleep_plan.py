@@ -147,3 +147,100 @@ def test_cutoff_times_are_derived_from_bedtime(session):
         s.caffeine_cutoff_hours_before_bed * 60)
     assert (bed - _mins(got["exercise_cutoff_time"])) % 1440 == s.exercise_to_bed_lead_min
     assert (bed - _mins(got["dim_light_time"])) % 1440 == s.dim_light_lead_min
+
+
+# ---------------------------------------------------------------------------
+# 「起床」= 布団から出る時刻。逆算のアンカーは睡眠終了 (= 起床 − 布団の中)
+# ---------------------------------------------------------------------------
+
+
+def _seed_lingering(
+    session, *, days: int, sleep_end_jst_h: int, lingering_min: int, offset: int = 0
+) -> None:
+    """体動から `lingering_min` 分の「布団の中」が検出できる夜を days 夜ぶん仕込む。
+
+    offset は TARGET から何日遡って始めるか (sleep_session.date は UNIQUE なので、
+    複数回呼ぶときは日付が重ならないようずらすこと)。
+    """
+    from datetime import UTC
+
+    from app.models import SleepSession
+
+    for i in range(1 + offset, days + 1 + offset):
+        d = TARGET - timedelta(days=i)
+        # 睡眠終了 (JST) → epoch ms (UTC)
+        end_jst = datetime.combine(d, datetime.min.time(), JST) + timedelta(hours=sleep_end_jst_h)
+        end_utc = end_jst.astimezone(UTC).replace(tzinfo=None)
+        movement = []
+        # 睡眠終了から lingering_min 分は低体動、その後3分以上 閾値超えを続ける
+        for m in range(lingering_min + 5):
+            s = end_utc + timedelta(minutes=m)
+            movement.append({
+                "startGMT": s.strftime("%Y-%m-%dT%H:%M:%S.0"),
+                "endGMT": (s + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.0"),
+                "activityLevel": 1.0 if m < lingering_min else 6.0,
+            })
+        session.add(SleepSession(
+            date=d, source="garmin", total_min=342,
+            raw_json={
+                "dailySleepDTO": {"sleepEndTimestampGMT": int(end_jst.timestamp() * 1000)},
+                "sleepMovement": movement,
+            },
+        ))
+    session.commit()
+
+
+def test_backcalc_anchors_on_sleep_end_not_out_of_bed(db_engine, session):
+    """布団の中 20分なら、逆算の基準は起床 06:30 ではなく目覚め 06:10 になる。
+
+    起床時刻をそのままアンカーにすると、布団でグダグダしている20分を睡眠として
+    数えてしまい、必要睡眠 8h を確保できない就寝時刻を「理想」と呼んでしまう。
+    """
+    _seed_lingering(session, days=5, sleep_end_jst_h=6, lingering_min=20)
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["wake"] == "06:30"          # 布団から出る時刻 (表示上の「起床」)
+    assert plan["lingering_min"] == 20
+    assert plan["sleep_end"] == "06:10"     # 逆算のアンカー
+    assert plan["ideal_bedtime"] == "22:10"  # 06:10 − 8h (06:30 − 8h = 22:30 ではない)
+    assert plan["estimated_sleep_min"] == 480
+
+
+def test_morning_light_window_still_anchored_on_out_of_bed(db_engine, session):
+    """朝の光浴だけは「布団から出る時刻」が基準 (布団の中では屋外光を浴びられない)。"""
+    _seed_lingering(session, days=5, sleep_end_jst_h=6, lingering_min=20)
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["morning_light"] == {"start": "06:30", "end": "07:00"}
+
+
+def test_no_movement_data_falls_back_to_wake_time(db_engine, session):
+    """体動から1夜も検出できなければ従来どおり起床時刻をそのまま逆算に使う (捏造しない)。"""
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["lingering_min"] is None
+    assert plan["sleep_end"] == plan["wake"] == "06:30"
+    assert plan["ideal_bedtime"] == "22:30"
+
+
+def test_lingering_uses_median_and_ignores_outliers(db_engine, session):
+    """外れ値混じりでも median を採り、上限 (_MAX_LINGERING_MIN) 超えは捨てる。"""
+    from app.scoring.sleep_plan import _MAX_LINGERING_MIN, _habitual_lingering_min
+
+    _seed_lingering(session, days=3, sleep_end_jst_h=6, lingering_min=15)
+    # 上限を超える異常な夜を1つ足しても median は 15 のまま (異常夜は除外される)
+    _seed_lingering(
+        session, days=1, sleep_end_jst_h=3,
+        lingering_min=_MAX_LINGERING_MIN + 30, offset=3,
+    )
+
+    assert _habitual_lingering_min(TARGET) == 15
+
+
+def test_sleep_now_window_ends_at_sleep_end(db_engine, session):
+    """睡眠終了〜起床 (布団の中) の時間帯は「今すぐ寝るべき」ではない。"""
+    _seed_lingering(session, days=5, sleep_end_jst_h=6, lingering_min=20)
+    # 06:20 = 目覚め 06:10 を過ぎ、布団から出る 06:30 の前
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 6, 20, tzinfo=JST))
+
+    assert plan["sleep_now"] is False

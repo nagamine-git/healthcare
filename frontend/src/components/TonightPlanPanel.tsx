@@ -91,7 +91,7 @@ export function TonightPlanPanel({ plan }: Props) {
         <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-950/30 px-3 py-2 text-sm text-rose-300">
           🌙 就寝目安時刻を過ぎています。<b>今すぐ寝てください</b>
           <span className="ml-1 text-rose-300/70">
-            (今から寝れば起床 {plan.wake} まで約 {fmtHm(plan.estimated_sleep_min)})
+            (今から寝れば目覚め {plan.sleep_end ?? plan.wake} まで約 {fmtHm(plan.estimated_sleep_min)})
           </span>
         </div>
       )}
@@ -113,8 +113,15 @@ export function TonightPlanPanel({ plan }: Props) {
           hint={sleepNow ? `目安 ${plan.bedtime} 経過` : plan.compressed ? "圧縮中" : "目標"}
           accent={sleepNow ? "rose" : plan.compressed ? "amber" : "emerald"}
         />
-        <Slot label="起床" time={plan.wake} range={plan.windows?.wake}
-          hint={plan.wake_overridden ? "この日だけ変更中" : sleepNow ? "今日の朝" : "次の日"}
+        {/* 「起床」= 布団から出る時刻。目覚め (睡眠終了) との差＝布団の中は、
+            逆算の基準がなぜ起床時刻そのものでないかの説明になるので必ず併記する。 */}
+        <Slot label="起床 (布団を出る)" time={plan.wake} range={plan.windows?.wake}
+          hint={[
+            plan.lingering_min && plan.sleep_end
+              ? `目覚め ${plan.sleep_end}・布団の中 ${plan.lingering_min}分`
+              : null,
+            plan.wake_overridden ? "この日だけ変更中" : sleepNow ? "今日の朝" : "次の日",
+          ].filter(Boolean).join(" / ")}
           accent={plan.wake_overridden ? "amber" : undefined} />
       </div>
       <WakeEditor plan={plan} />
