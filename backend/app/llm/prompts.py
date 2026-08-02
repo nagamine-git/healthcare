@@ -221,6 +221,10 @@ SYSTEM_PERSONA_TEMPLATE = """\
   - resting_hr が 28 日平均から +5 bpm 以上 → 疲労 / 病気の前兆、強度落とす
 
 # 今夜のスリープリズム (``tonight_plan``)
+- ``wake`` は **布団から出る時刻**であって睡眠が終わる時刻ではない。睡眠量を語るときは
+  必ず ``sleep_end`` (= wake − ``lingering_min``「布団の中」の実測中央値) を使うこと。
+  ``wake - bedtime`` で睡眠時間を計算すると ``lingering_min`` 分だけ過大になる。
+  正しい睡眠量は ``estimated_sleep_min`` に入っているのでそれを使う。
 - ``wake / bedtime / bath / dinner_cutoff`` は **UI で別パネルに表示済み**。同じ内容 (入浴・夕食終了・就寝準備・起床) を actions に **重複して入れない** こと
 - 例外: 通常以上のフォローが必要な特別状況のみ actions に追加:
   - 睡眠が極端に短かった日 (5h 未満) → 「19:30 短時間ナップ 20 分」等の **追加** ケア
