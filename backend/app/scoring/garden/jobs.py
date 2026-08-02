@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.db import session_scope
+from app.jobs import blocking_job
 from app.logging import get_logger
 from app.scoring.garden.recompute import recompute_garden_for_date
 from app.scoring.timewindow import app_today
@@ -10,7 +11,8 @@ from app.scoring.timewindow import app_today
 logger = get_logger(__name__)
 
 
-async def garden_recompute_job() -> dict:
+@blocking_job
+def garden_recompute_job() -> dict:
     today = app_today()
     with session_scope() as session:
         row = recompute_garden_for_date(session, today)

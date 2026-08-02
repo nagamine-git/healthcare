@@ -10,6 +10,7 @@ from typing import Any
 
 from app.db import session_scope
 from app.integrations import freee_client
+from app.jobs import blocking_job
 from app.logging import get_logger
 from app.models.health import CorporateFinanceSnapshot
 from app.scoring.corporate_finance import parse_trial_bs, parse_trial_pl
@@ -58,7 +59,8 @@ def sync_corporate_finance() -> dict[str, Any]:
     return {"status": "ok", "date": today.isoformat()}
 
 
-async def freee_sync_job() -> None:
+@blocking_job
+def freee_sync_job() -> None:
     """cron から呼ぶラッパー。未接続 (OAuth 未認可) なら静かに何もしない。"""
     result = sync_corporate_finance()
     if result["status"] == "error":

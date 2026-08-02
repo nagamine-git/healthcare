@@ -74,7 +74,7 @@ class InterventionIn(BaseModel):
 
 
 @router.post("/api/sleep-intervention")
-async def post_intervention(body: InterventionIn) -> dict[str, Any]:
+def post_intervention(body: InterventionIn) -> dict[str, Any]:
     target = date_type.fromisoformat(body.date) if body.date else _target_date()
     with session_scope() as session:
         row = session.get(SleepInterventionLog, target)
@@ -82,7 +82,7 @@ async def post_intervention(body: InterventionIn) -> dict[str, Any]:
             # その夜を「未記録」に戻す = 行ごと削除 (空行を残すと n_nights を水増しする)
             if row is not None:
                 session.delete(row)
-            return await get_intervention()
+            return get_intervention()
         if row is None:
             row = SleepInterventionLog(date=target)
             session.add(row)
@@ -106,11 +106,11 @@ async def post_intervention(body: InterventionIn) -> dict[str, Any]:
             session.delete(row)
         else:
             row.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    return await get_intervention()
+    return get_intervention()
 
 
 @router.get("/api/sleep-intervention")
-async def get_intervention(days: int = 30) -> dict[str, Any]:
+def get_intervention(days: int = 30) -> dict[str, Any]:
     target = _target_date()
     since = target - timedelta(days=days)
     with session_scope() as session:

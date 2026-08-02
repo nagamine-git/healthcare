@@ -54,7 +54,7 @@ class CheckinIn(BaseModel):
 
 
 @router.post("/api/checkin")
-async def post_checkin(body: CheckinIn) -> dict[str, Any]:
+def post_checkin(body: CheckinIn) -> dict[str, Any]:
     from datetime import date as date_type
 
     target = date_type.fromisoformat(body.date) if body.date else _today()
@@ -78,11 +78,11 @@ async def post_checkin(body: CheckinIn) -> dict[str, Any]:
                 provenance.pop(field, None)
         row.from_suggested = provenance or None
         row.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    return await get_checkin()
+    return get_checkin()
 
 
 @router.get("/api/checkin")
-async def get_checkin(days: int = 14) -> dict[str, Any]:
+def get_checkin(days: int = 14) -> dict[str, Any]:
     today = _today()
     since = today - timedelta(days=days)
     with session_scope() as session:

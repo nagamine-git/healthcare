@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import session_scope
 from app.ingest.garmin_client import GarminClient
+from app.jobs import blocking_job
 from app.logging import get_logger
 from app.models import (
     BodyBattery,
@@ -161,7 +162,8 @@ def _has_garmin_token(settings: Any) -> bool:
     return False
 
 
-async def sync_garmin_job(target: date_type | None = None) -> dict[str, Any]:
+@blocking_job
+def sync_garmin_job(target: date_type | None = None) -> dict[str, Any]:
     settings = get_settings()
     if not (settings.garmin_email and settings.garmin_password):
         logger.info("garmin_sync_skipped_no_credentials")

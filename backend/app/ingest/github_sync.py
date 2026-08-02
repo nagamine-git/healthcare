@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import session_scope
+from app.jobs import blocking_job
 from app.logging import get_logger
 from app.models.health import GardenConfig, GithubContributionDaily
 from app.scoring.garden.recompute import recompute_garden_range
@@ -110,6 +111,7 @@ def sync_and_backfill(session: Session, *, days: int = 365) -> dict:
     return {**sync_result, "recomputed_days": recomputed}
 
 
-async def github_sync_job() -> dict:
+@blocking_job
+def github_sync_job() -> dict:
     with session_scope() as session:
         return sync_and_backfill(session)

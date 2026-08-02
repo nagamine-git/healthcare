@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import session_scope
+from app.jobs import blocking_job
 from app.logging import get_logger
 from app.models import (
     BodyBatteryDaily,
@@ -227,7 +228,8 @@ def recompute_for_date(target: date_type) -> dict[str, Any]:
         return {"subs": subs, "total": total}
 
 
-async def recompute_today_job() -> dict[str, Any]:
+@blocking_job
+def recompute_today_job() -> dict[str, Any]:
     from app.scoring.timewindow import app_today
 
     return recompute_for_date(app_today())
@@ -263,7 +265,8 @@ def ensure_today_fresh(min_interval_s: int = ONDEMAND_MIN_INTERVAL_S) -> bool:
         return False
 
 
-async def refresh_baselines_job() -> dict[str, Any]:
+@blocking_job
+def refresh_baselines_job() -> dict[str, Any]:
     """Currently a no-op placeholder; baselines are computed on demand."""
     logger.info("baseline_refresh_noop")
     return {"status": "ok"}

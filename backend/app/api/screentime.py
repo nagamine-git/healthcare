@@ -75,7 +75,7 @@ async def import_screentime(body: STImportIn) -> dict[str, Any]:
         for got in parsed:
             _apply(session, got)
         session.flush()
-    return await get_screentime()
+    return get_screentime()
 
 
 def _to_dict(r: ScreenTimeSample) -> dict[str, Any]:
@@ -90,7 +90,7 @@ def _to_dict(r: ScreenTimeSample) -> dict[str, Any]:
 
 
 @router.get("/api/screentime")
-async def get_screentime(days: int = 30) -> dict[str, Any]:
+def get_screentime(days: int = 30) -> dict[str, Any]:
     """直近の日サンプル + 最新週サンプル + 集計。"""
     since = datetime.now().date() - timedelta(days=days)
     with session_scope() as session:

@@ -7,12 +7,14 @@ monthly: SJT 本測のリマインドを Web Push で送る (盲点は時間と�
 from __future__ import annotations
 
 from app.db import session_scope
+from app.jobs import blocking_job
 from app.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-async def identity_weekly_job() -> dict:
+@blocking_job
+def identity_weekly_job() -> dict:
     """週次: 意思決定ログから現在地を再計算する。"""
     with session_scope() as session:
         from app.scoring.identity.store import recompute_dimension_scores
@@ -22,7 +24,8 @@ async def identity_weekly_job() -> dict:
     return {"status": "ok", "dimensions": len(currents)}
 
 
-async def identity_monthly_job() -> dict:
+@blocking_job
+def identity_monthly_job() -> dict:
     """月次: SJT 本測のリマインドを送る。"""
     from app.config import get_settings
 

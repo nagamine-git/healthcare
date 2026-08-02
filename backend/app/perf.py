@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
+from app.jobs import blocking_job
+
 SLOW_REQUEST_MS = 800.0
 SLOW_QUERY_MS = 200.0
 _MAX_ISSUES = 1000
@@ -127,7 +129,8 @@ async def perf_middleware(request: Any, call_next: Any) -> Any:
         registry.record_request(f"{request.method} {path}", ms, status)
 
 
-async def perf_tick_job() -> dict[str, Any]:
+@blocking_job
+def perf_tick_job() -> dict[str, Any]:
     """in-memory に溜まった問題を集約して PerfIssue へ flush する(スケジューラ起点)。"""
     from datetime import datetime
 
