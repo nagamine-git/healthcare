@@ -59,14 +59,15 @@ def test_habitual_bedtime_after_midnight_not_yet_passed(db_engine, session):
 
 
 def test_habitual_bedtime_after_midnight_now_passed_triggers_sleep_now(db_engine, session):
-    # 同じ状況で 01:14 (=就寝目標00:57 を17分過ぎた) に呼ぶと、今すぐ寝るべき局面になり、
-    # 目安睡眠は「今から寝た場合」に現在時刻起点で補正される (単純な固定値ではない)。
+    # 同じ状況で 01:14 (=布団に入る目安 00:42 を過ぎた) に呼ぶと、今すぐ寝るべき局面になり、
+    # 目安睡眠は「今から布団に入った場合」に現在時刻起点で補正される (単純な固定値ではない)。
     _seed_habitual_phase(session, mid_hour=4.55, dur_min=342)
     now = datetime(2026, 7, 20, 1, 14, tzinfo=JST)
     plan = compute_tonight_plan(TARGET, now=now)
     assert plan["sleep_now"] is True
     assert plan["compressed"] is True
-    assert plan["estimated_sleep_min"] == 5 * 60 + 16  # 01:14 → 06:30
+    # 01:14 → 06:30 は 316分だが、寝つくまでの 15分は眠っていないので差し引く
+    assert plan["estimated_sleep_min"] == 5 * 60 + 16 - 15
     assert "今すぐ寝てください" in plan["notes"][0]
 
 
@@ -244,3 +245,79 @@ def test_sleep_now_window_ends_at_sleep_end(db_engine, session):
     plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 6, 20, tzinfo=JST))
 
     assert plan["sleep_now"] is False
+
+
+# ---------------------------------------------------------------------------
+# 「就寝」= 寝つく時刻。行動としての指示は in_bed (= 就寝 − 入眠潜時)
+# ---------------------------------------------------------------------------
+
+
+def test_in_bed_uses_clinical_default_until_recorded(db_engine, session):
+    """記録が無いうちは臨床既定値 (15分) で「布団に入る」時刻を出す。"""
+    from app.config import get_settings
+
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["sleep_onset_source"] == "default"
+    assert plan["sleep_onset_min"] == get_settings().sleep_onset_latency_min == 15
+    assert plan["bedtime"] == "22:30"   # 寝つく目標
+    assert plan["in_bed"] == "22:15"    # 行動としての指示
+
+
+def _seed_in_bed(session, *, nights: list[tuple[int, int]]) -> None:
+    """(何日前, 入眠潜時[分]) の夜を仕込む。in_bed_at 記録 + Garmin の寝ついた時刻。"""
+    from datetime import UTC
+
+    from app.models import SleepInterventionLog, SleepSession
+
+    for days_ago, latency in nights:
+        d = TARGET - timedelta(days=days_ago)
+        sleep_start_jst = datetime.combine(d, datetime.min.time(), JST) + timedelta(hours=1)
+        in_bed = (sleep_start_jst - timedelta(minutes=latency)).astimezone(UTC).replace(tzinfo=None)
+        session.add(SleepInterventionLog(date=d, earplugs=True, in_bed_at=in_bed))
+        session.add(SleepSession(
+            date=d, source="garmin", total_min=342,
+            raw_json={"dailySleepDTO": {
+                "sleepStartTimestampGMT": int(sleep_start_jst.timestamp() * 1000)}},
+        ))
+    session.commit()
+
+
+def test_in_bed_switches_to_measured_median_once_enough_nights(db_engine, session):
+    """本人の記録が閾値夜数たまれば、臨床既定値ではなく実測 median を使う。"""
+    _seed_in_bed(session, nights=[(1, 20), (2, 25), (3, 30), (4, 35), (5, 40)])
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["sleep_onset_source"] == "measured"
+    assert plan["sleep_onset_min"] == 30  # median(20,25,30,35,40)
+    assert plan["in_bed"] == "22:00"      # 22:30 − 30分
+
+
+def test_measured_onset_needs_minimum_nights(db_engine, session):
+    """記録が閾値未満なら既定値のまま (薄いデータから本人の値を名乗らない)。"""
+    _seed_in_bed(session, nights=[(1, 40), (2, 40)])
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    assert plan["sleep_onset_source"] == "default"
+    assert plan["sleep_onset_min"] == 15
+
+
+def test_measured_onset_drops_impossible_values(db_engine, session):
+    """負の値 (寝落ち後に押した) と非現実的な長さは median から除く。"""
+    from app.scoring.sleep_plan import _measured_sleep_onset_min
+
+    _seed_in_bed(session, nights=[(1, 10), (2, 12), (3, 14), (4, -30), (5, 300), (6, 16), (7, 18)])
+
+    # 除外後は 10,12,14,16,18 → median 14
+    assert _measured_sleep_onset_min(TARGET) == 14
+
+
+def test_sleep_now_triggers_at_in_bed_not_bedtime(db_engine, session):
+    """「今すぐ寝て」は布団に入る時刻で発火する (寝つく時刻まで待たない)。"""
+    # 既定 15分 → 布団に入る 22:15 / 寝つく 22:30
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 22, 20, tzinfo=JST))
+
+    assert plan["in_bed"] == "22:15"
+    assert plan["sleep_now"] is True
+    # 22:20 から 06:30 まで 490分、うち寝つくのに 15分 → 475分
+    assert plan["estimated_sleep_min"] == 475

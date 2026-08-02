@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioWaveform, Brain, Ear, Eye, VolumeX, Wind } from "lucide-react";
+import { AudioWaveform, BedDouble, Brain, Ear, Eye, VolumeX, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { LoadingState } from "./ui/cockpit";
@@ -53,6 +53,12 @@ export function SleepInterventionCard() {
           : {
               ...t,
               ...Object.fromEntries(KEYS.map((k) => [k, body[k] ?? t[k]])),
+              in_bed_at:
+                body.in_bed_now === undefined
+                  ? t.in_bed_at
+                  : body.in_bed_now
+                    ? new Date().toISOString()
+                    : null,
               updated_at: new Date().toISOString(),
             };
         return { ...old, tonight: next };
@@ -129,6 +135,31 @@ export function SleepInterventionCard() {
         {recorded
           ? "タップで使用/なしを切替。効果は「着けた夜 vs 外した夜」で分析します。"
           : "今夜使うものをタップ。1つ押すと残りは自動で「なし」になり、その夜が記録されます。"}
+      </p>
+
+      {/* 「布団に入った時刻」は Garmin が測れない唯一の時刻 (寝ついた時刻は測れる)。
+          記録が貯まると入眠潜時が臨床既定値 15分 から本人の実測 median に切り替わり、
+          今夜の計画の「布団に入る」時刻がその人に合った値になる。 */}
+      <button
+        onClick={() => save.mutate({ in_bed_now: !t.in_bed_at })}
+        aria-pressed={!!t.in_bed_at}
+        className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition active:scale-[0.98] ${
+          t.in_bed_at
+            ? "border-prog-500 bg-prog-500/15 text-ink"
+            : "border-dashed border-hairline bg-panel/40 text-ink-faint"
+        }`}
+      >
+        <BedDouble size={16} className={t.in_bed_at ? "text-prog-300" : "text-ink-faint"} />
+        <span className="min-w-0 flex-1 truncate text-[12px]">布団に入った</span>
+        <span className="shrink-0 text-[10px] tabular-nums">
+          {t.in_bed_at
+            ? new Date(t.in_bed_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })
+            : "いま記録"}
+        </span>
+      </button>
+      <p className="text-[10px] text-ink-faint">
+        寝ついた時刻は Garmin が測れますが、布団に入った時刻は測れません。押しておくと
+        「布団に入ってから寝つくまで」が実測でき、今夜の計画の逆算があなたの値に変わります。
       </p>
     </section>
   );

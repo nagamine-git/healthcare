@@ -89,9 +89,9 @@ export function TonightPlanPanel({ plan }: Props) {
       </div>
       {sleepNow && (
         <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-950/30 px-3 py-2 text-sm text-rose-300">
-          🌙 就寝目安時刻を過ぎています。<b>今すぐ寝てください</b>
+          🌙 布団に入る目安を過ぎています。<b>今すぐ寝てください</b>
           <span className="ml-1 text-rose-300/70">
-            (今から寝れば目覚め {plan.sleep_end ?? plan.wake} まで約 {fmtHm(plan.estimated_sleep_min)})
+            (今から布団に入れば目覚め {plan.sleep_end ?? plan.wake} まで約 {fmtHm(plan.estimated_sleep_min)})
           </span>
         </div>
       )}
@@ -106,11 +106,20 @@ export function TonightPlanPanel({ plan }: Props) {
           time={plan.bath_start && plan.bath_end ? `${plan.bath_start}–${plan.bath_end}` : plan.bath}
           hint={sleepNow ? "済 (昨夜)" : `${plan.bath_method ?? "湯船"}${plan.bath_temp_c ? ` ${plan.bath_temp_c}℃` : ""}・就寝90分前に上がる`}
         />
+        {/* 表示するのは「布団に入る」= 実際に取る行動。plan.bedtime は**寝つく**目標
+            なので、そのまま就寝時刻として出すと入眠潜時のぶん寝るのが遅れる。 */}
         <Slot
-          label="就寝"
-          time={sleepNow ? "今すぐ" : plan.bedtime}
-          range={sleepNow ? undefined : plan.windows?.bedtime}
-          hint={sleepNow ? `目安 ${plan.bedtime} 経過` : plan.compressed ? "圧縮中" : "目標"}
+          label="就寝 (布団に入る)"
+          time={sleepNow ? "今すぐ" : plan.in_bed ?? plan.bedtime}
+          range={sleepNow ? undefined : plan.windows?.in_bed ?? plan.windows?.bedtime}
+          hint={[
+            plan.in_bed && plan.sleep_onset_min
+              ? `寝つく ${plan.bedtime}・入眠まで${plan.sleep_onset_min}分${
+                  plan.sleep_onset_source === "measured" ? "(実測)" : "(目安)"
+                }`
+              : null,
+            sleepNow ? `目安 ${plan.in_bed ?? plan.bedtime} 経過` : plan.compressed ? "圧縮中" : "目標",
+          ].filter(Boolean).join(" / ")}
           accent={sleepNow ? "rose" : plan.compressed ? "amber" : "emerald"}
         />
         {/* 「起床」= 布団から出る時刻。目覚め (睡眠終了) との差＝布団の中は、

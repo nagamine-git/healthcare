@@ -38,7 +38,8 @@ def _to_dict(row: SleepInterventionLog | None, target: date_type) -> dict[str, A
     if row is None:
         return {
             "date": target.isoformat(), "display_label": display,
-            **{f: None for f in _FLAGS}, "note": None, "updated_at": None,
+            **{f: None for f in _FLAGS}, "note": None,
+            "in_bed_at": None, "updated_at": None,
         }
     return {
         "date": row.date.isoformat(), "display_label": display,
@@ -47,6 +48,9 @@ def _to_dict(row: SleepInterventionLog | None, target: date_type) -> dict[str, A
         "breathing": row.breathing,
         "meditation": row.meditation,
         "note": row.note,
+        "in_bed_at": (
+            row.in_bed_at.replace(tzinfo=UTC).isoformat() if row.in_bed_at else None
+        ),
         "updated_at": (
             row.updated_at.replace(tzinfo=UTC).isoformat() if row.updated_at else None
         ),
@@ -61,6 +65,9 @@ class InterventionIn(BaseModel):
     breathing: bool | None = None
     meditation: bool | None = None
     note: str | None = Field(default=None, max_length=500)
+    # 「布団に入った」記録。true=今この瞬間を記録 / false=記録を取り消す。
+    # Garmin が測れない唯一の時刻なので、これだけが入眠潜時の実測手段になる。
+    in_bed_now: bool | None = None
     clear: list[str] = Field(default_factory=list)  # None に戻すフィールド名 (3状態トグル用)
     reset: bool = False  # その夜の記録を未記録 (全 None) に戻す
     date: str | None = None
@@ -90,8 +97,12 @@ async def post_intervention(body: InterventionIn) -> dict[str, Any]:
                 setattr(row, f, None)
         if body.note is not None:
             row.note = body.note
+        if body.in_bed_now is not None:
+            # 時刻はサーバ側の「今」で確定させる (端末時計のズレを持ち込まない)。
+            # DB は naive UTC 統一。
+            row.in_bed_at = datetime.now(UTC).replace(tzinfo=None) if body.in_bed_now else None
         # 全項目 未記録になったら空行を残さない (n_nights 水増し防止)
-        if all(getattr(row, f) is None for f in _FLAGS) and not row.note:
+        if all(getattr(row, f) is None for f in _FLAGS) and not row.note and row.in_bed_at is None:
             session.delete(row)
         else:
             row.updated_at = datetime.now(UTC).replace(tzinfo=None)

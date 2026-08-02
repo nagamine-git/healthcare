@@ -744,11 +744,17 @@ export type Pressure = {
 export type SleepWindow = { rec: string; start: string; end: string };
 export type TonightPlan = {
   wake: string; // HH:MM ＝ **布団から出る**時刻 (睡眠が終わる時刻ではない)
+  /** 布団に入る目安 (= bedtime − 入眠潜時)。行動として実行する時刻はこちら */
+  in_bed?: string;
+  /** 寝つくまでの分数 */
+  sleep_onset_min?: number;
+  /** measured=本人の記録から算出 / default=臨床既定値 (未記録) */
+  sleep_onset_source?: "measured" | "default";
   /** 睡眠が終わる (目が覚める) 目安。wake との差が「布団の中」。逆算はこちらが基準 */
   sleep_end?: string;
   /** 習慣的な「布団の中」時間 (分)。体動から検出できていなければ null */
   lingering_min?: number | null;
-  bedtime: string;
+  bedtime: string; // **寝つく**目標 (布団に入る時刻ではない)
   bath: string;
   bath_start?: string;
   bath_end?: string;
@@ -761,7 +767,7 @@ export type TonightPlan = {
   estimated_sleep_min: number;
   compressed: boolean;
   sleep_now?: boolean;
-  windows?: { bedtime: SleepWindow; wake: SleepWindow };
+  windows?: { bedtime: SleepWindow; in_bed?: SleepWindow; wake: SleepWindow };
   caffeine_cutoff_time?: string;
   dim_light_time?: string;
   exercise_cutoff_time?: string;
@@ -972,6 +978,8 @@ export type SleepInterventionNight = SleepInterventionFlags & {
   date: string;
   display_label: string;
   note: string | null;
+  /** 「布団に入った」記録時刻 (ISO)。Garmin が測れない唯一の時刻で、入眠潜時の実測源 */
+  in_bed_at: string | null;
   updated_at: string | null;
 };
 export type SleepInterventionRecord = {
@@ -979,6 +987,8 @@ export type SleepInterventionRecord = {
   items: SleepInterventionNight[];
 };
 export type SleepInterventionSet = Partial<SleepInterventionFlags> & {
+  /** true=いまを「布団に入った」として記録 / false=記録を取り消す */
+  in_bed_now?: boolean;
   reset?: boolean;
   clear?: string[];
   date?: string;

@@ -489,6 +489,12 @@ class SleepInterventionLog(Base):
     mouth_tape: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     breathing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の呼吸法セッション
     meditation: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の瞑想セッション
+    # 「布団に入った時刻」(naive UTC)。Garmin は寝ついた時刻 (sleepStartTimestampGMT) しか
+    # 測らず、布団に入った時刻は原理的に観測できない (体動から推定する検出器を実装して
+    # 検証したが、就寝の遅さ→入眠潜時 という確立した関係を 24 通りのパラメータどれでも
+    # 再現できず p>0.05 だったため採用しない)。本人の記録だけが唯一の実測手段。
+    # これが貯まると sleep_plan が入眠潜時を本人の median へ自動で切り替える。
+    in_bed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
