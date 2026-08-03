@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ChevronRight, Clock, MonitorOff } from "lucide-react";
 import { api } from "../lib/api";
 import type { SleepWindow, TonightPlan } from "../lib/api";
 
@@ -42,10 +43,31 @@ function WakeEditor({ plan }: { plan: TonightPlan }) {
   });
 
   if (!open) {
+    // 起床時刻はこの計画すべての起点なので、変更は「気づける・押しやすい」必要がある。
+    // 小さな下線リンクだと存在に気づかれず、予定が変わった日に計画が現実と食い違ったまま
+    // 放置されてしまう。時刻を大きく出したタップ領域の広いチップにする。
     return (
       <button onClick={() => { setValue(plan.wake); setOpen(true); }}
-        className="press mt-2 text-[10px] text-ink-faint underline">
-        {plan.wake_overridden ? "起床時刻を変更中 (タップで編集)" : "この日だけ起床時刻を変える"}
+        className={`press mt-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition active:scale-[0.99] ${
+          plan.wake_overridden
+            ? "border-act-500/50 bg-act/10"
+            : "border-hairline bg-panel/50 hover:bg-panel"
+        }`}
+      >
+        <Clock size={15} className={plan.wake_overridden ? "text-act-300" : "text-ink-dim"} />
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-[12px] text-ink">
+            {plan.wake_overridden ? "この日の起床時刻を変更中" : "明日の起床時刻を変える"}
+          </span>
+          <span className="block text-[10px] text-ink-faint">
+            {plan.wake_overridden ? "タップして編集・既定に戻す" : "予定が違う日はここから"}
+          </span>
+        </span>
+        <span className={`shrink-0 text-[15px] font-semibold tabular-nums ${
+          plan.wake_overridden ? "text-act-300" : "text-ink"}`}>
+          {plan.wake}
+        </span>
+        <ChevronRight size={14} className="shrink-0 text-ink-faint" />
       </button>
     );
   }
@@ -136,6 +158,16 @@ export function TonightPlanPanel({ plan }: Props) {
       <WakeEditor plan={plan} />
       {/* 科学的に大事な timing (厳選) */}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-dim">
+        {plan.work_cutoff_time && (
+          <span className="w-full">
+            <MonitorOff size={12} className="mr-1 inline align-[-1px] text-rose-300" />
+            <b className="text-rose-300">PC仕事はここまで</b>{" "}
+            <b className="tabular-nums text-rose-200">{plan.work_cutoff_time}</b>
+            {plan.work_cutoff_reason && (
+              <span className="text-ink-faint"> ({plan.work_cutoff_reason})</span>
+            )}
+          </span>
+        )}
         {plan.morning_light && (
           <span>🌅 朝の光浴 <b className="tabular-nums text-act-300">{plan.morning_light.start}–{plan.morning_light.end}</b>
             <span className="text-ink-faint"> 起床後すぐ屋外光</span></span>

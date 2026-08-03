@@ -771,6 +771,10 @@ export type TonightPlan = {
   caffeine_cutoff_time?: string;
   dim_light_time?: string;
   exercise_cutoff_time?: string;
+  /** PC仕事の絶対の締切 (逆算 と 入浴開始 の早い方) */
+  work_cutoff_time?: string;
+  /** なぜその時刻か ("入浴開始" / "就寝90分前") */
+  work_cutoff_reason?: string;
   morning_light?: { start: string; end: string };
   ideal_bedtime?: string;
   habitual_bedtime?: string | null;

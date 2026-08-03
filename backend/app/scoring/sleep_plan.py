@@ -389,6 +389,14 @@ def compute_tonight_plan(
     # ラグは config を正とする (sleep_drivers の助言文と同じ値を共有し食い違いを作らない)
     dim_light_dt = bedtime_dt - timedelta(minutes=s.dim_light_lead_min)
     exercise_cutoff_dt = bedtime_dt - timedelta(minutes=s.exercise_to_bed_lead_min)
+    # PC 仕事の「絶対にここまで」。逆算の締切と入浴開始の**早い方**を採る。
+    # 逆算だけ出すと、実際には入浴が先に始まるので守れない時刻になってしまう
+    # (入浴に入ったらもう PC は触れない = そこが物理的な締切)。
+    work_cutoff_dt = min(bedtime_dt - timedelta(minutes=s.work_to_bed_lead_min), bath_start_dt)
+    work_cutoff_reason = (
+        "入浴開始" if bath_start_dt < bedtime_dt - timedelta(minutes=s.work_to_bed_lead_min)
+        else f"就寝{s.work_to_bed_lead_min}分前"
+    )
     # 朝の光浴だけは wake_dt (布団から出る時刻) が正しいアンカー。布団の中では
     # 屋外光を浴びられないので、睡眠終了に合わせると実行不能な窓になる。
     morning_light = {
@@ -396,6 +404,12 @@ def compute_tonight_plan(
         "end": (wake_dt + timedelta(minutes=30)).strftime("%H:%M"),
     }
 
+    notes.append(
+        f"PC仕事は {work_cutoff_dt.strftime('%H:%M')} で終わり ({work_cutoff_reason})。"
+        "画面は至近距離の強い光源でメラトニン分泌を抑えるうえ、仕事による認知的覚醒は"
+        "光とは独立に入眠を妨げる (就寝前の認知的覚醒と仕事の反芻は入眠潜時延長の強い予測因子)。"
+        "画面を暗くしても後者は消えないので、時間で切るしかない。"
+    )
     notes.append(
         f"就寝 {bedtime_dt.strftime('%H:%M')} は「**寝つく**」目標。"
         + (
@@ -445,6 +459,9 @@ def compute_tonight_plan(
         "caffeine_cutoff_time": caffeine_cutoff_dt.strftime("%H:%M"),  # これ以降カフェイン断ち
         "dim_light_time": dim_light_dt.strftime("%H:%M"),  # これ以降 照明↓・ブルーライト減
         "exercise_cutoff_time": exercise_cutoff_dt.strftime("%H:%M"),  # これ以降 高強度運動を避ける
+        # PC 仕事の絶対の締切 (逆算 と 入浴開始 の早い方)
+        "work_cutoff_time": work_cutoff_dt.strftime("%H:%M"),
+        "work_cutoff_reason": work_cutoff_reason,  # なぜその時刻か ("入浴開始" / "就寝90分前")
         "morning_light": morning_light,  # 起床後すぐ屋外光 (概日リズム同調)
         # 起床時刻がその日だけの上書きか (UI で「既定に戻す」を出す判断に使う)
         "wake_overridden": wake_overridden,

@@ -321,3 +321,41 @@ def test_sleep_now_triggers_at_in_bed_not_bedtime(db_engine, session):
     assert plan["sleep_now"] is True
     # 22:20 から 06:30 まで 490分、うち寝つくのに 15分 → 475分
     assert plan["estimated_sleep_min"] == 475
+
+
+# ---------------------------------------------------------------------------
+# PC仕事の締切 (逆算 と 入浴開始 の早い方)
+# ---------------------------------------------------------------------------
+
+
+def test_work_cutoff_is_the_earlier_of_backcalc_and_bath(db_engine, session):
+    """入浴が先に始まるなら、そちらが実質の締切になる。
+
+    逆算だけ出すと「入浴中なのに PC を触れる時刻」を提示してしまい守れない。
+    """
+    from app.config import get_settings
+
+    s = get_settings()
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    def _mins(hhmm: str) -> int:
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+
+    backcalc = (_mins(plan["bedtime"]) - s.work_to_bed_lead_min) % 1440
+    bath_start = _mins(plan["bath_start"])
+    assert _mins(plan["work_cutoff_time"]) == min(backcalc, bath_start)
+    # 早い方を採った理由が伝わること
+    assert plan["work_cutoff_reason"] in ("入浴開始", f"就寝{s.work_to_bed_lead_min}分前")
+
+
+def test_work_cutoff_never_after_bath_start(db_engine, session):
+    """どの状況でも「入浴開始より後」にはならない。"""
+    for hour in (18, 20, 22):
+        plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, hour, 0, tzinfo=JST))
+
+        def _mins(hhmm: str) -> int:
+            h, m = hhmm.split(":")
+            return int(h) * 60 + int(m)
+
+        assert _mins(plan["work_cutoff_time"]) <= _mins(plan["bath_start"])
