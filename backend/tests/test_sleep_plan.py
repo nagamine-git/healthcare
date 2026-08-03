@@ -328,10 +328,11 @@ def test_sleep_now_triggers_at_in_bed_not_bedtime(db_engine, session):
 # ---------------------------------------------------------------------------
 
 
-def test_work_cutoff_is_the_earlier_of_backcalc_and_bath(db_engine, session):
-    """入浴が先に始まるなら、そちらが実質の締切になる。
+def test_work_cutoff_is_purely_physiological(db_engine, session):
+    """PC仕事の締切は「寝つく − 90分」の固定線。動く予定 (入浴) に引きずられない。
 
-    逆算だけ出すと「入浴中なのに PC を触れる時刻」を提示してしまい守れない。
+    以前は入浴開始との早い方を採っていたが、それは入浴が就寝直前にある前提に依存し、
+    実生活で入浴がトレーニング直後に来る日には意味の無い締切になっていた。
     """
     from app.config import get_settings
 
@@ -342,20 +343,39 @@ def test_work_cutoff_is_the_earlier_of_backcalc_and_bath(db_engine, session):
         h, m = hhmm.split(":")
         return int(h) * 60 + int(m)
 
-    backcalc = (_mins(plan["bedtime"]) - s.work_to_bed_lead_min) % 1440
-    bath_start = _mins(plan["bath_start"])
-    assert _mins(plan["work_cutoff_time"]) == min(backcalc, bath_start)
-    # 早い方を採った理由が伝わること
-    assert plan["work_cutoff_reason"] in ("入浴開始", f"就寝{s.work_to_bed_lead_min}分前")
+    assert (_mins(plan["bedtime"]) - _mins(plan["work_cutoff_time"])) % 1440 == s.work_to_bed_lead_min
+    assert plan["work_cutoff_reason"] == f"寝つく{s.work_to_bed_lead_min}分前"
 
 
-def test_work_cutoff_never_after_bath_start(db_engine, session):
-    """どの状況でも「入浴開始より後」にはならない。"""
-    for hour in (18, 20, 22):
-        plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, hour, 0, tzinfo=JST))
+def test_bath_is_a_window_not_a_point(db_engine, session):
+    """入浴は「上がる時刻の窓」で返す (生活の都合で動くので点で縛らない)。"""
+    from app.config import get_settings
 
-        def _mins(hhmm: str) -> int:
-            h, m = hhmm.split(":")
-            return int(h) * 60 + int(m)
+    s = get_settings()
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
 
-        assert _mins(plan["work_cutoff_time"]) <= _mins(plan["bath_start"])
+    def _mins(hhmm: str) -> int:
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+
+    bed = _mins(plan["bedtime"])
+    w = plan["bath_window"]
+    assert (bed - _mins(w["earliest_out"])) % 1440 == s.bath_lead_window_max_min
+    assert (bed - _mins(w["latest_out"])) % 1440 == s.bath_lead_window_min_min
+
+
+def test_plan_separates_hard_deadlines_from_flexible(db_engine, session):
+    """「動かせない線」と「幅を持たせてよいもの」が分かれて返ること。
+
+    全部が固定の予定表に見えると、順番が変わる日に計画ごと無視されてしまう。
+    """
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    hard = {d["key"] for d in plan["hard_deadlines"]}
+    flex = {f["key"] for f in plan["flexible"]}
+    assert {"work", "caffeine", "exercise", "dim_light", "in_bed"} <= hard
+    assert {"bath", "dinner"} <= flex
+    assert not (hard & flex)  # 同じものが両方に出ない
+    # どれも「なぜその時刻か」を持つ (根拠なしの締切を出さない)
+    assert all(d.get("why") for d in plan["hard_deadlines"])
+    assert all(f.get("why") for f in plan["flexible"])

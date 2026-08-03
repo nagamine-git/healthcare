@@ -364,9 +364,22 @@ def compute_tonight_plan(
     # 入浴: トレーニングで bath_dt が後ろ倒しになった場合も「入る→上がる」を再算出
     bath_end_dt = bath_dt
     bath_start_dt = bath_end_dt - timedelta(minutes=s.bath_soak_duration_min)
+    # 入浴の「睡眠に効く窓」(上がる時刻)。点ではなく幅で出す。
+    # ⚠️ bedtime_dt はトレーニング都合の後ろ倒しを反映済みなので、ここで算出する。
+    bath_out_earliest = (
+        bedtime_dt - timedelta(minutes=s.bath_lead_window_max_min)
+    ).strftime("%H:%M")
+    bath_out_latest = (
+        bedtime_dt - timedelta(minutes=s.bath_lead_window_min_min)
+    ).strftime("%H:%M")
     notes.append(
-        f"入浴は湯船(約{s.bath_temp_c}℃)に{s.bath_soak_duration_min}分。シャワーだけより深部体温が上がり、"
-        f"その後の低下で寝つきが良くなる(Haghayegh 2019)。就寝{s.bath_to_bed_lead_min}分前に上がるのが目安。"
+        f"入浴は湯船(約{s.bath_temp_c}℃)に{s.bath_soak_duration_min}分。深部体温を上げ、その後の低下で"
+        f"寝つきが良くなる(Haghayegh 2019)。ただし効くのは**上がってから就寝までが"
+        f"{s.bath_lead_window_min_min}〜{s.bath_lead_window_max_min}分のとき**で、今夜なら "
+        f"{bath_out_earliest}〜{bath_out_latest} に上がる形。"
+        "これより早い時間に入る日は体温が戻ってしまい睡眠への効果は残らない"
+        "(衛生・運動後の回復としては有効なので、入る時間が動くこと自体は問題ない)。"
+        "入浴が早くなる日は、就寝前は照明を落とす・PCを閉じる方に寄せる。"
     )
 
     def _win(rec_dt: datetime, minus: int, plus: int) -> dict[str, str]:
@@ -389,14 +402,15 @@ def compute_tonight_plan(
     # ラグは config を正とする (sleep_drivers の助言文と同じ値を共有し食い違いを作らない)
     dim_light_dt = bedtime_dt - timedelta(minutes=s.dim_light_lead_min)
     exercise_cutoff_dt = bedtime_dt - timedelta(minutes=s.exercise_to_bed_lead_min)
-    # PC 仕事の「絶対にここまで」。逆算の締切と入浴開始の**早い方**を採る。
-    # 逆算だけ出すと、実際には入浴が先に始まるので守れない時刻になってしまう
-    # (入浴に入ったらもう PC は触れない = そこが物理的な締切)。
-    work_cutoff_dt = min(bedtime_dt - timedelta(minutes=s.work_to_bed_lead_min), bath_start_dt)
-    work_cutoff_reason = (
-        "入浴開始" if bath_start_dt < bedtime_dt - timedelta(minutes=s.work_to_bed_lead_min)
-        else f"就寝{s.work_to_bed_lead_min}分前"
-    )
+    # PC 仕事の「絶対にここまで」。
+    # ⚠️ かつてここは入浴開始との早い方を採っていたが、それは**入浴が就寝直前にある前提**
+    # に依存していて誤りだった。実生活では入浴はトレーニング直後など早い時間に来ることが
+    # あり (順番も日によって変わる)、その日は「入浴開始」が締切として意味を持たない。
+    # 一方この締切は光と認知的覚醒という**生理で決まる固定の線**なので、動く予定に
+    # 引きずられないよう純粋な逆算だけで出す。
+    work_cutoff_dt = bedtime_dt - timedelta(minutes=s.work_to_bed_lead_min)
+    work_cutoff_reason = f"寝つく{s.work_to_bed_lead_min}分前"
+
     # 朝の光浴だけは wake_dt (布団から出る時刻) が正しいアンカー。布団の中では
     # 屋外光を浴びられないので、睡眠終了に合わせると実行不能な窓になる。
     morning_light = {
@@ -459,9 +473,35 @@ def compute_tonight_plan(
         "caffeine_cutoff_time": caffeine_cutoff_dt.strftime("%H:%M"),  # これ以降カフェイン断ち
         "dim_light_time": dim_light_dt.strftime("%H:%M"),  # これ以降 照明↓・ブルーライト減
         "exercise_cutoff_time": exercise_cutoff_dt.strftime("%H:%M"),  # これ以降 高強度運動を避ける
-        # PC 仕事の絶対の締切 (逆算 と 入浴開始 の早い方)
+        # PC 仕事の絶対の締切 (生理で決まる固定の線)
         "work_cutoff_time": work_cutoff_dt.strftime("%H:%M"),
-        "work_cutoff_reason": work_cutoff_reason,  # なぜその時刻か ("入浴開始" / "就寝90分前")
+        "work_cutoff_reason": work_cutoff_reason,
+        # 入浴の「睡眠に効く窓」= 上がる時刻がここに入っていれば寝つきに効く。
+        # 生活の都合で外れる日があるのは前提で、外れても失敗ではない (下の note 参照)。
+        "bath_window": {"earliest_out": bath_out_earliest, "latest_out": bath_out_latest},
+        # 動かせない線 / 幅を持たせてよいもの の区別。UI はこれを見て出し分ける。
+        # ⚠️ 「全部が固定の予定表」に見えると、順番が変わる日に計画ごと無視されてしまう。
+        "hard_deadlines": [
+            {"key": "work", "label": "PC仕事", "time": work_cutoff_dt.strftime("%H:%M"),
+             "why": "画面の光 + 仕事による認知的覚醒。画面を暗くしても後者は消えない"},
+            {"key": "caffeine", "label": "カフェイン", "time": caffeine_cutoff_dt.strftime("%H:%M"),
+             "why": "半減期が長く、就寝時に残っていると深睡眠を削る"},
+            {"key": "exercise", "label": "高強度運動", "time": exercise_cutoff_dt.strftime("%H:%M"),
+             "why": "深部体温と交感神経が上がり入眠を妨げる"},
+            {"key": "dim_light", "label": "照明を落とす", "time": dim_light_dt.strftime("%H:%M"),
+             "why": "夜の強い光がメラトニンを抑制し入眠位相を後退させる"},
+            {"key": "in_bed", "label": "布団に入る", "time": in_bed_dt.strftime("%H:%M"),
+             "why": "必要睡眠から逆算した、寝つくために布団に入るべき時刻"},
+        ],
+        "flexible": [
+            {"key": "bath", "label": "入浴",
+             "window": f"{bath_out_earliest}–{bath_out_latest}",
+             "why": "この窓で「上がる」と寝つきに効く (Haghayegh 2019)。"
+                    "早い時間に入る日は睡眠への効果は残らないが、衛生・運動後の回復としては有効"},
+            {"key": "dinner", "label": "夕食",
+             "window": f"〜{dinner_end_dt.strftime('%H:%M')}",
+             "why": "食べ終わりの上限だけ守ればよい。開始時刻は自由"},
+        ],
         "morning_light": morning_light,  # 起床後すぐ屋外光 (概日リズム同調)
         # 起床時刻がその日だけの上書きか (UI で「既定に戻す」を出す判断に使う)
         "wake_overridden": wake_overridden,

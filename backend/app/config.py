@@ -258,6 +258,12 @@ class Settings(BaseSettings):
     target_wake_time: str = "06:30"  # 平日想定の起床時刻 (HH:MM, JST)
     target_sleep_min: int = 480  # 8h を ideal とする (推奨 7-9h)
     bath_to_bed_lead_min: int = 90  # 入浴(上がる)〜就寝の理想ラグ (深部体温↑→↓ で入眠促進)
+    # 入浴の「効く窓」。受動的加温が寝つきを改善するのは就寝の 1-2 時間前に上がった時
+    # (Haghayegh 2019 のメタ解析)。深部体温を上げてその後の低下に乗せる機序なので、
+    # これより早く入ると体温が戻ってしまい**睡眠への効果は残らない** (衛生・運動後の
+    # 回復としては当然有効)。生活の都合で入浴時刻が動く人には、点ではなくこの窓を出す。
+    bath_lead_window_min_min: int = 60   # 上がってから就寝まで、最短これだけ空ける
+    bath_lead_window_max_min: int = 120  # 同 最長。これより早いと睡眠への効果は薄れる
     bath_soak_duration_min: int = 12  # 湯船に浸かる時間 (入る=上がる−これ)。10-15分が目安
     bath_temp_c: int = 40  # 推奨湯温 (40-42℃)。受動的加温で寝つき改善 (Haghayegh 2019)
     dinner_to_bed_lead_min: int = 180  # 夕食〜就寝の理想ラグ (消化負荷を避ける)

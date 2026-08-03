@@ -773,8 +773,14 @@ export type TonightPlan = {
   exercise_cutoff_time?: string;
   /** PC仕事の絶対の締切 (逆算 と 入浴開始 の早い方) */
   work_cutoff_time?: string;
-  /** なぜその時刻か ("入浴開始" / "就寝90分前") */
+  /** なぜその時刻か */
   work_cutoff_reason?: string;
+  /** 入浴の「睡眠に効く窓」= 上がる時刻。生活で動くので点ではなく幅 */
+  bath_window?: { earliest_out: string; latest_out: string };
+  /** 生理で決まる動かせない締切 */
+  hard_deadlines?: { key: string; label: string; time: string; why: string }[];
+  /** 順番も時刻も動いてよいもの */
+  flexible?: { key: string; label: string; window: string; why: string }[];
   morning_light?: { start: string; end: string };
   ideal_bedtime?: string;
   habitual_bedtime?: string | null;

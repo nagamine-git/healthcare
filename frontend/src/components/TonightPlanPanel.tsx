@@ -156,35 +156,50 @@ export function TonightPlanPanel({ plan }: Props) {
           accent={plan.wake_overridden ? "amber" : undefined} />
       </div>
       <WakeEditor plan={plan} />
-      {/* 科学的に大事な timing (厳選) */}
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-dim">
-        {plan.work_cutoff_time && (
-          <span className="w-full">
-            <MonitorOff size={12} className="mr-1 inline align-[-1px] text-rose-300" />
-            <b className="text-rose-300">PC仕事はここまで</b>{" "}
-            <b className="tabular-nums text-rose-200">{plan.work_cutoff_time}</b>
-            {plan.work_cutoff_reason && (
-              <span className="text-ink-faint"> ({plan.work_cutoff_reason})</span>
-            )}
-          </span>
-        )}
-        {plan.morning_light && (
-          <span>🌅 朝の光浴 <b className="tabular-nums text-act-300">{plan.morning_light.start}–{plan.morning_light.end}</b>
-            <span className="text-ink-faint"> 起床後すぐ屋外光</span></span>
-        )}
-        {plan.caffeine_cutoff_time && (
-          <span>☕ カフェイン最終 <b className="tabular-nums text-act-300">{plan.caffeine_cutoff_time}</b>
-            <span className="text-ink-faint"> まで</span></span>
-        )}
-        {plan.exercise_cutoff_time && (
-          <span>🏃 高強度運動 <b className="tabular-nums text-act-300">{plan.exercise_cutoff_time}</b>
-            <span className="text-ink-faint"> まで</span></span>
-        )}
-        {plan.dim_light_time && (
-          <span>🌙 照明↓ <b className="tabular-nums text-indigo-200">{plan.dim_light_time}</b>
-            <span className="text-ink-faint"> 以降</span></span>
-        )}
-      </div>
+      {/* 「動かせない線」と「幅を持たせてよいもの」を分けて出す。
+          全部を固定の予定表として見せると、順番が変わる日に計画ごと無視されてしまう
+          (入浴を就寝直前に固定していた頃、実際はトレーニング直後に入っていて破綻した)。 */}
+      {plan.hard_deadlines && plan.hard_deadlines.length > 0 && (
+        <div className="mt-3 rounded-lg border border-rose-400/25 bg-rose-950/15 p-2.5">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <MonitorOff size={12} className="text-rose-300" />
+            <span className="text-[10px] uppercase tracking-wider text-rose-300">ここは動かせない</span>
+          </div>
+          <ul className="space-y-1">
+            {plan.hard_deadlines.map((d) => (
+              <li key={d.key} className="flex items-baseline gap-2 leading-tight">
+                <span className="w-14 shrink-0 text-right text-[13px] font-semibold tabular-nums text-rose-200">{d.time}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-[12px] text-ink">{d.label}</span>
+                  <span className="ml-1.5 text-[10px] text-ink-faint">{d.why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {plan.flexible && plan.flexible.length > 0 && (
+        <div className="mt-2 rounded-lg border border-hairline bg-panel/40 p-2.5">
+          <span className="mb-1.5 block text-[10px] uppercase tracking-wider text-ink-dim">ここは順番も時刻も自由</span>
+          <ul className="space-y-1">
+            {plan.flexible.map((f) => (
+              <li key={f.key} className="flex items-baseline gap-2 leading-tight">
+                <span className="w-24 shrink-0 text-right text-[12px] tabular-nums text-ink-dim">{f.window}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-[12px] text-ink">{f.label}</span>
+                  <span className="ml-1.5 text-[10px] text-ink-faint">{f.why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {plan.morning_light && (
+        <div className="mt-2 text-[11px] text-ink-dim">
+          🌅 朝の光浴 <b className="tabular-nums text-act-300">{plan.morning_light.start}–{plan.morning_light.end}</b>
+          <span className="text-ink-faint"> 起床後すぐ屋外光</span>
+        </div>
+      )}
       {(() => {
         const restNotes = sleepNow ? plan.notes.slice(1) : plan.notes;
         return restNotes.length > 0 ? (
