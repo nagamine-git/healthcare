@@ -379,3 +379,33 @@ def test_plan_separates_hard_deadlines_from_flexible(db_engine, session):
     # どれも「なぜその時刻か」を持つ (根拠なしの締切を出さない)
     assert all(d.get("why") for d in plan["hard_deadlines"])
     assert all(f.get("why") for f in plan["flexible"])
+
+
+def test_hard_deadlines_are_sorted_chronologically_across_midnight(db_engine, session):
+    """締切が実時刻順に並ぶこと。**日跨ぎでも**壊れないこと。
+
+    HH:MM 文字列でソートすると "00:12" が "18:12" より小さくなり、一番遅い締切
+    (布団に入る) が先頭に来て「最初の締切」に化ける。
+    """
+    # 習慣就寝を深夜に寄せると布団に入る時刻が日を跨ぐ (00時台)
+    _seed_habitual_phase(session, mid_hour=4.55, dur_min=342)
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 19, 20, 0, tzinfo=JST))
+
+    times = [d["time"] for d in plan["hard_deadlines"]]
+    assert any(t < "12:00" for t in times), "日跨ぎの締切を含むケースになっていない"
+    # 「布団に入る」が最後、それより前に夕方の締切が並ぶ
+    assert plan["hard_deadlines"][-1]["key"] == "in_bed"
+    assert plan["hard_deadlines"][0]["key"] == "caffeine"  # 一番早いのはカフェイン
+    # 文字列ソートしたのと同じ並びなら、それは日跨ぎを踏めていない証拠
+    assert times != sorted(times)
+
+
+def test_self_care_has_no_deadline(db_engine, session):
+    """セルフケアは「締切なし」として幅の側に置く (無い線を引かない)。"""
+    plan = compute_tonight_plan(TARGET, now=datetime(2026, 7, 20, 20, 0, tzinfo=JST))
+
+    keys = {d["key"] for d in plan["hard_deadlines"]}
+    assert "self_care" not in keys, "締切の根拠が無いものを固定の線に混ぜない"
+    sc = next(f for f in plan["flexible"] if f["key"] == "self_care")
+    assert sc["window"] == "締切なし"
+    assert sc["why"]

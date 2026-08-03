@@ -209,6 +209,20 @@ def _measured_sleep_onset_min(target: date_type, *, days: int = 60) -> int | Non
     return vals[len(vals) // 2]
 
 
+def _sorted_deadlines(
+    items: list[tuple[datetime, str, str, str]],
+) -> list[dict[str, str]]:
+    """締切を**実時刻順**に並べて dict 化する。
+
+    ⚠️ HH:MM 文字列でソートしてはいけない。就寝が日を跨ぐと "00:12" が "18:12" より
+    小さくなり、一番遅い締切が先頭に来てしまう。datetime のまま並べること。
+    """
+    return [
+        {"key": key, "label": label, "time": dt.strftime("%H:%M"), "why": why}
+        for dt, key, label, why in sorted(items, key=lambda t: t[0])
+    ]
+
+
 def compute_tonight_plan(
     target: date_type,
     *,
@@ -481,26 +495,39 @@ def compute_tonight_plan(
         "bath_window": {"earliest_out": bath_out_earliest, "latest_out": bath_out_latest},
         # 動かせない線 / 幅を持たせてよいもの の区別。UI はこれを見て出し分ける。
         # ⚠️ 「全部が固定の予定表」に見えると、順番が変わる日に計画ごと無視されてしまう。
-        "hard_deadlines": [
-            {"key": "work", "label": "PC仕事", "time": work_cutoff_dt.strftime("%H:%M"),
-             "why": "画面の光 + 仕事による認知的覚醒。画面を暗くしても後者は消えない"},
-            {"key": "caffeine", "label": "カフェイン", "time": caffeine_cutoff_dt.strftime("%H:%M"),
-             "why": "半減期が長く、就寝時に残っていると深睡眠を削る"},
-            {"key": "exercise", "label": "高強度運動", "time": exercise_cutoff_dt.strftime("%H:%M"),
-             "why": "深部体温と交感神経が上がり入眠を妨げる"},
-            {"key": "dim_light", "label": "照明を落とす", "time": dim_light_dt.strftime("%H:%M"),
-             "why": "夜の強い光がメラトニンを抑制し入眠位相を後退させる"},
-            {"key": "in_bed", "label": "布団に入る", "time": in_bed_dt.strftime("%H:%M"),
-             "why": "必要睡眠から逆算した、寝つくために布団に入るべき時刻"},
-        ],
+        # ⚠️ 並びは**datetime で**時系列ソートする。HH:MM 文字列でソートすると
+        # 日跨ぎ (00:12 など) が先頭に来て「一番早い締切」に化ける。
+        "hard_deadlines": _sorted_deadlines([
+            (caffeine_cutoff_dt, "caffeine", "カフェイン",
+             "半減期が長く、就寝時に残っていると深睡眠を削る"),
+            (exercise_cutoff_dt, "exercise", "高強度運動",
+             "深部体温と交感神経が上がり入眠を妨げる"),
+            (work_cutoff_dt, "work", "PC仕事",
+             "画面の光 + 仕事による認知的覚醒。画面を暗くしても後者は消えない"),
+            (dim_light_dt, "dim_light", "照明を落とす",
+             "夜の強い光がメラトニンを抑制し入眠位相を後退させる"),
+            (in_bed_dt, "in_bed", "布団に入る",
+             "必要睡眠から逆算した、寝つくために布団に入るべき時刻"),
+        ]),
         "flexible": [
+            {"key": "dinner", "label": "夕食",
+             "window": f"〜{dinner_end_dt.strftime('%H:%M')}",
+             "why": "食べ終わりの上限だけ守ればよい。開始時刻は自由"},
             {"key": "bath", "label": "入浴",
              "window": f"{bath_out_earliest}–{bath_out_latest}",
              "why": "この窓で「上がる」と寝つきに効く (Haghayegh 2019)。"
                     "早い時間に入る日は睡眠への効果は残らないが、衛生・運動後の回復としては有効"},
-            {"key": "dinner", "label": "夕食",
-             "window": f"〜{dinner_end_dt.strftime('%H:%M')}",
-             "why": "食べ終わりの上限だけ守ればよい。開始時刻は自由"},
+            # ⚠️ ここに時刻を書かないのは手抜きではなく**結論**。高強度運動と違い、
+            # オルガズム後はオキシトシン/プロラクチン放出とコルチゾール低下で副交感優位へ
+            # 振れる (生理反応のプロファイルが逆)。自己申告調査では寝つきが速く睡眠の質も
+            # 良いという関連が報告されている (Lastella 2019, n=778)。横断・自己申告なので
+            # 因果は確定していないが、少なくとも「締切が要る」根拠は無い。無い線を
+            # 引くのは嘘になるので、締切なしと明示する。
+            # 実務上の注意は行為ではなく**画面**で、それは PC仕事の締切が既にカバーする。
+            {"key": "self_care", "label": "セルフケア",
+             "window": "締切なし",
+             "why": "運動と違い直後は副交感優位に振れる。寝つきが速いという報告もある "
+                    "(自己申告調査 n=778)。注意すべきは行為ではなく画面 (PC仕事の締切に含む)"},
         ],
         "morning_light": morning_light,  # 起床後すぐ屋外光 (概日リズム同調)
         # 起床時刻がその日だけの上書きか (UI で「既定に戻す」を出す判断に使う)
