@@ -930,6 +930,8 @@ export type LastNight = {
   wake_stages?: WakeStages | null;
   /** 直近30夜のトレンド。key は SleepQualityComponent.key と同じ */
   history?: SleepNightHistory[];
+  /** 今日ぶんが未同期で前夜へフォールバックした (「昨夜」と偽らないための印) */
+  is_previous_night?: boolean;
 };
 
 /** 1夜ぶんの各指標。深睡眠/REM/睡眠効率は %、中途覚醒/総睡眠時間は分 */

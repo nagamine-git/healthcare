@@ -97,10 +97,36 @@ def _history(target: date_type, days: int) -> list[dict[str, Any]]:
     ]
 
 
+def _latest_measured_date(today: date_type, *, lookback: int = 3) -> date_type | None:
+    """直近で睡眠を計測できた夜 (起床日) を返す。無ければ None。
+
+    今日ぶんがあれば今日。深夜〜Garmin 同期前は前夜へ落ちる。
+    ``lookback`` 日より古い夜は「昨夜の睡眠」として出すには古すぎるので拾わない。
+    """
+    from sqlalchemy import select
+
+    with session_scope() as session:
+        return session.execute(
+            select(SleepSession.date)
+            .where(
+                SleepSession.date <= today,
+                SleepSession.date > today - timedelta(days=lookback + 1),
+                SleepSession.total_min.is_not(None),
+            )
+            .order_by(SleepSession.date.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+
 @router.get("/api/sleep/last-night")
 def get_last_night() -> dict[str, Any]:
     """昨夜 (SleepSession.date = 起床日 = 今日) の評価。データが無ければ available:false。"""
-    target = app_today()
+    today = app_today()
+    # ⚠️ 深夜0時台〜起床後の Garmin 同期までは、今日 (=起床日) の SleepSession がまだ無い。
+    # そこで即 available:false を返すと、**毎晩その時間帯だけパネルが丸ごと消える**
+    # (トレンドのグラフごと消える)。直近で計測できた夜へフォールバックし、いつの夜かを
+    # `date` と `is_previous_night` で明示する (「昨夜」と偽らない)。
+    target = _latest_measured_date(today) or today
     # ⚠️ ORM オブジェクトを with の外へ持ち出さない。session_scope を抜けると
     # detach され、未ロード属性に触った瞬間 DetachedInstanceError で 500 になる。
     # 必要な値は**セッション内で素の値として取り出す**こと。
@@ -119,7 +145,11 @@ def get_last_night() -> dict[str, Any]:
         wake_stages = _wake_stages_payload(sleep.raw_json) if sleep is not None else None
 
     if vals is None or vals["total_min"] is None:
-        return {"date": target.isoformat(), "available": False}
+        # 評価は出せなくてもトレンドは出せる (直近の推移は昨夜のデータに依存しない)
+        return {
+            "date": target.isoformat(), "available": False,
+            "history": _history(today, days=30),
+        }
 
     profile = resolve_profile()
     # sleep_drivers.analyze() は本人の n-of-1 統計分析。改善点の personal 根拠に使う
@@ -133,13 +163,19 @@ def get_last_night() -> dict[str, Any]:
         driver_recommendations=driver.get("recommendations"),
     )
     if result is None:
-        return {"date": target.isoformat(), "available": False}
+        return {
+            "date": target.isoformat(), "available": False,
+            "history": _history(today, days=30),
+        }
 
     return {
         "date": target.isoformat(),
         "available": True,
         "wake_stages": wake_stages,
-        # 直近30夜のトレンド (components と同じ key)。行ごとのスパークライン用
-        "history": _history(target, days=30),
+        # 評価対象が今日ぶんでない (=前夜へフォールバックした) ことを UI に伝える
+        "is_previous_night": target != today,
+        # 直近30夜のトレンド (components と同じ key)。行ごとのスパークライン用。
+        # 窓の基準は today: フォールバックしても「今日までの30夜」を見せる
+        "history": _history(today, days=30),
         **result,
     }

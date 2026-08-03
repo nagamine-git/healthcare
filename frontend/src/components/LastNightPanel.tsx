@@ -132,6 +132,13 @@ export function LastNightPanel() {
           <span className="ml-auto text-[11px] text-ink-faint">スコア {Math.round(d.sleep_score)}</span>
         )}
       </div>
+      {/* 深夜〜起床後の同期前は今日ぶんが無く前夜を出す。いつの夜かを必ず明示する */}
+      {d.is_previous_night && (
+        <p className="text-[10px] text-ink-faint">
+          {new Date(d.date).getMonth() + 1}/{new Date(d.date).getDate()} の夜
+          (今夜ぶんはまだ同期されていません)
+        </p>
+      )}
       <p className="text-[12px] leading-relaxed text-ink-dim">{d.headline}</p>
 
       <div className="space-y-1">
