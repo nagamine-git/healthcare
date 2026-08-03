@@ -928,6 +928,19 @@ export type LastNight = {
   components?: SleepQualityComponent[];
   improvements?: SleepQualityImprovement[];
   wake_stages?: WakeStages | null;
+  /** 直近30夜のトレンド。key は SleepQualityComponent.key と同じ */
+  history?: SleepNightHistory[];
+};
+
+/** 1夜ぶんの各指標。深睡眠/REM/睡眠効率は %、中途覚醒/総睡眠時間は分 */
+export type SleepNightHistory = {
+  date: string;
+  sleep_score: number | null;
+  deep: number | null;
+  rem: number | null;
+  efficiency: number | null;
+  awake: number | null;
+  total: number | null;
 };
 
 // 種目の詳しいフォームガイド (タップで LLM 生成 → キャッシュ)。

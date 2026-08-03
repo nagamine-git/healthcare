@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, timedelta
+from datetime import date as date_type
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -47,6 +48,53 @@ def _wake_stages_payload(raw_json: dict[str, Any] | None) -> dict[str, Any] | No
         "actual_wake_hhmm": actual_wake_jst.strftime("%H:%M") if actual_wake_jst else None,
         "lingering_min": stages["lingering_min"],
     }
+
+
+def _history(target: date_type, days: int) -> list[dict[str, Any]]:
+    """直近 ``days`` 夜の各指標を、``components`` と**同じ key** で返す。
+
+    フロントは行ごとにこの系列をスパークラインとして描き、目安バンドと重ねて
+    「今の値が band に入っているか」だけでなく「どちらへ動いているか」を見せる。
+
+    ⚠️ 新しいエンドポイントを足さず既存レスポンスに同梱する。この画面はリクエスト数が
+    そのまま体感の遅さになる (過去にリクエストが詰まって全画面が固まった経緯がある)。
+    """
+    from sqlalchemy import select
+
+    with session_scope() as session:
+        rows = session.execute(
+            select(
+                SleepSession.date, SleepSession.total_min, SleepSession.deep_min,
+                SleepSession.rem_min, SleepSession.awake_min, SleepSession.sleep_score,
+            )
+            .where(SleepSession.date > target - timedelta(days=days),
+                   SleepSession.date <= target)
+            .order_by(SleepSession.date)
+        ).all()
+
+    by_date: dict[date_type, dict[str, Any]] = {}
+    for d, total, deep, rem, awake, score in rows:
+        if not total:
+            continue  # 計測できていない夜は「0」ではなく**欠測**として扱う
+        # 割合の分母は components と揃える (深睡眠/REM は総睡眠時間に対する割合)
+        eff = (total / (total + awake) * 100) if awake is not None and (total + awake) > 0 else None
+        by_date[d] = {
+            "sleep_score": score,
+            "deep": round(deep / total * 100, 1) if deep is not None else None,
+            "rem": round(rem / total * 100, 1) if rem is not None else None,
+            "efficiency": round(eff, 1) if eff is not None else None,
+            "awake": awake,      # 分 (割合ではなく実分数で見る指標)
+            "total": total,      # 分
+        }
+
+    # ⚠️ 計測できた夜だけを詰めて返してはいけない。1週間空いた夜が隣同士に描かれ、
+    # 「毎晩測れているのに急変した」ように見えてしまう。**日付の位置を保ったまま**
+    # 欠測を null で埋めて返し、描画側で点を落とす (線は繋ぐが位置は動かさない)。
+    empty = {k: None for k in ("sleep_score", "deep", "rem", "efficiency", "awake", "total")}
+    return [
+        {"date": (d := target - timedelta(days=i)).isoformat(), **by_date.get(d, empty)}
+        for i in range(days - 1, -1, -1)
+    ]
 
 
 @router.get("/api/sleep/last-night")
@@ -91,5 +139,7 @@ def get_last_night() -> dict[str, Any]:
         "date": target.isoformat(),
         "available": True,
         "wake_stages": wake_stages,
+        # 直近30夜のトレンド (components と同じ key)。行ごとのスパークライン用
+        "history": _history(target, days=30),
         **result,
     }
