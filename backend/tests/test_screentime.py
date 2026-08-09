@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -23,12 +25,17 @@ def app_client(temp_data_dir, monkeypatch):
 
 
 def test_summarize_avg_and_entertainment_and_target():
+    # ⚠️ 日付を固定で書かない。/api/screentime は「今日から30日」で絞るので、
+    # 固定日付だとその窓から外れた瞬間に必ず落ちる時限爆弾になる (実際 2026-08-04 に発火した)。
+    d0 = (date.today() - timedelta(days=2)).isoformat()
+    d1 = (date.today() - timedelta(days=3)).isoformat()
+    w0 = (date.today() - timedelta(days=9)).isoformat()
     days = [
-        {"period_start": "2026-07-04", "daily_min": 504,
+        {"period_start": d0, "daily_min": 504,
          "categories": {"Entertainment": 185, "Productivity & Finance": 148, "Other": 50}, "top_apps": [{"name": "YouTube", "minutes": 184}]},
-        {"period_start": "2026-07-03", "daily_min": 200, "categories": {}, "top_apps": []},
+        {"period_start": d1, "daily_min": 200, "categories": {}, "top_apps": []},
     ]
-    week = {"period_start": "2026-06-28", "daily_min": 457, "top_apps": [{"name": "Safari", "minutes": 707}]}
+    week = {"period_start": w0, "daily_min": 457, "top_apps": [{"name": "Safari", "minutes": 707}]}
     s = summarize(days, week)
     assert s["status"] == "ok"
     assert s["latest_daily_min"] == 504
@@ -45,10 +52,15 @@ def test_summarize_no_data():
 
 def test_import_upserts_day_and_week(app_client, monkeypatch):
     outs = iter([
-        {"period_type": "day", "period_start": "2026-07-04", "daily_min": 504,
+        {"period_type": "day",
+         # ⚠️ 固定日付にしない。GET /api/screentime は「今日から30日」で絞るので、
+         # 窓から外れた瞬間に必ず落ちる時限爆弾になる (2026-08-04 に発火した)。
+         "period_start": (date.today() - timedelta(days=2)).isoformat(), "daily_min": 504,
          "categories": [{"name": "Entertainment", "minutes": 185}],
          "top_apps": [{"name": "YouTube", "minutes": 184}]},
-        {"period_type": "week", "period_start": "2026-06-28", "daily_min": 457, "total_min": 3200,
+        {"period_type": "week",
+         "period_start": (date.today() - timedelta(days=9)).isoformat(),
+         "daily_min": 457, "total_min": 3200,
          "categories": [], "top_apps": [{"name": "Safari", "minutes": 707}]},
     ])
 

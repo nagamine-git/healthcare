@@ -120,6 +120,17 @@ class GarminClient:
             return None
         return _normalise_summary(raw)
 
+    def get_body_battery_series_from_stress(self, target: date_type) -> list[dict[str, Any]]:
+        """終日ストレスのペイロードから Body Battery の細かい系列を取る (無ければ空)。"""
+        try:
+            raw = self._api.get_stress_data(target.isoformat())
+        except Exception as exc:
+            logger.warning("garmin_stress_bb_fetch_failed", error=str(exc))
+            return []
+        if not isinstance(raw, dict):
+            return []
+        return _body_battery_from_stress(raw)
+
     def get_stress(self, target: date_type) -> list[dict[str, Any]]:
         self.login()
         try:
@@ -497,6 +508,35 @@ def _normalise_heart_rate(raw: dict[str, Any]) -> list[dict[str, Any]]:
         if ts is None or value is None or value <= 0:
             continue
         out.append({"ts": ts, "value": float(value)})
+    return out
+
+
+def _body_battery_from_stress(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """終日ストレスのペイロードに同梱される Body Battery 系列を取り出す。
+
+    ⚠️ ``get_body_battery()`` (日次サマリ用) は**1日6点程度**しか返さない。実測: 10:48〜
+    21:33 JST の 10時間45分がまるごと欠測し、その間に BB は 25→5 まで落ちていた。
+    公式アプリのグラフが分単位で描けるのは、終日ストレスのエンドポイントが
+    ``bodyBatteryValuesArray`` を同じ粒度 (3分) で返しているため。同じ1回の取得で
+    ついてくるので、追加の API 呼び出しもコストも無い。
+
+    入っていない版の API もありうるので、その場合は空を返して従来の疎な系列に委ねる
+    (呼び出し側で点数を記録し、枯れているのを静かに見逃さないようにしてある)。
+    """
+    arr: list[list[Any]] = raw.get("bodyBatteryValuesArray") or []
+    out: list[dict[str, Any]] = []
+    for entry in arr:
+        if len(entry) < 2:
+            continue
+        ts = _to_dt(entry[0])
+        # [ts, type, value] の版と [ts, value] の版がある (BB 取得側と同じ揺れ)
+        value = entry[2] if len(entry) >= 3 else entry[1]
+        if ts is None or value is None:
+            continue
+        try:
+            out.append({"ts": ts, "value": float(value)})
+        except (TypeError, ValueError):
+            continue
     return out
 
 

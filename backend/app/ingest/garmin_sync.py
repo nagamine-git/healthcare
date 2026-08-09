@@ -58,6 +58,19 @@ def sync_garmin(client: GarminClient, target: date_type | None = None) -> dict[s
             counts["hrv"] = 1
 
         bb = client.get_body_battery(target)
+        # ⚠️ get_body_battery() (日次サマリ用) は1日6点程度しか返さない。実測で
+        # 10:48〜21:33 JST の10時間45分が欠測し、その間 BB は 25→5 まで落ちていた。
+        # 終日ストレスのペイロードに同じものが3分粒度で入っているので、取れたら差し替える
+        # (追加の API 呼び出しは無く、同じ1回の取得に同梱されている)。
+        fine = client.get_body_battery_series_from_stress(target)
+        coarse_n = len((bb or {}).get("series") or [])
+        if fine and len(fine) > coarse_n:
+            bb = {**(bb or {}), "series": fine}
+        # 点数を必ず記録する。今回のように「静かに枯れて疎になる」のを見逃さないため。
+        logger.info(
+            "garmin_body_battery_points",
+            date=target.isoformat(), coarse=coarse_n, fine=len(fine), used=len((bb or {}).get("series") or []),
+        )
         if bb:
             with session_scope() as session:
                 counts["body_battery"] = _upsert_body_battery(session, target, bb)
