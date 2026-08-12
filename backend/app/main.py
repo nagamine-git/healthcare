@@ -12,6 +12,7 @@ from app.api import advice_feedback as advice_feedback_api
 from app.api import airgap as airgap_api
 from app.api import airgap_insight as airgap_insight_api
 from app.api import alcohol as alcohol_api
+from app.api import appointment_plan as appointment_plan_api
 from app.api import atlas as atlas_api
 from app.api import becoming as becoming_api
 from app.api import body_comp as body_comp_api
@@ -182,6 +183,7 @@ def create_app() -> FastAPI:
     app.include_router(identity_api.router)
     app.include_router(wind_down_api.router)
     app.include_router(meditation_api.router)
+    app.include_router(appointment_plan_api.router)
     app.include_router(sleep_plan_override_api.router)
     app.include_router(debug.router)
     return app

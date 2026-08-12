@@ -88,6 +88,68 @@ function WakeEditor({ plan }: { plan: TonightPlan }) {
         </button>
       )}
       <button onClick={() => setOpen(false)} className="press px-1 text-[11px] text-ink-faint">閉じる</button>
+      <AppointmentBackCalc date={date} onDone={done} />
+    </div>
+  );
+}
+
+/**
+ * 「何時にどこに居たいか」から起床時刻を逆算する。
+ *
+ * ⚠️ ここで就寝時刻を計算しない。求めた起床時刻をその日の上書きとして保存すれば、
+ * 就寝・入浴・夕食・カフェイン・PC仕事の締切は既存の逆算が全部追随する。
+ * 同じ逆算をフロントにも書くと2箇所に増えて必ず食い違う。
+ */
+function AppointmentBackCalc({ date, onDone }: { date: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [arrive, setArrive] = useState("09:00");
+  const [travel, setTravel] = useState("60");
+  const [err, setErr] = useState<string | null>(null);
+  const run = useMutation({
+    mutationFn: () =>
+      api.sleepPlanFromAppointment({
+        date, arrive_at: arrive, travel_min: Number(travel) || 0,
+      }),
+    onSuccess: () => { setErr(null); onDone(); },
+    onError: (e) => setErr((e as Error).message),
+  });
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="press w-full rounded border border-hairline px-2 py-1.5 text-left text-[11px] text-ink-dim">
+        📍 予定から逆算する (到着時刻 → 起床)
+      </button>
+    );
+  }
+  return (
+    <div className="w-full space-y-1.5 rounded border border-hairline p-2">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-dim">
+        <input type="time" value={arrive} onChange={(e) => setArrive(e.target.value)}
+          className="rounded bg-hull px-2 py-1 tabular-nums text-ink" />
+        <span>までに到着・移動</span>
+        <input type="number" min={0} max={720} value={travel} inputMode="numeric"
+          onChange={(e) => setTravel(e.target.value)}
+          className="w-16 rounded bg-hull px-2 py-1 tabular-nums text-ink" />
+        <span>分</span>
+        <button onClick={() => run.mutate()} disabled={run.isPending}
+          className="press ml-auto rounded bg-act-500/20 px-2 py-1 text-act-300 disabled:opacity-50">
+          {run.isPending ? "計算中…" : "逆算して適用"}
+        </button>
+      </div>
+      {run.data && (
+        <p className="text-[10px] text-ink-faint">
+          出発 <b className="text-ink-dim">{run.data.depart}</b> / 起床{" "}
+          <b className="text-act-300">{run.data.wake}</b>
+          {run.data.sleep_compressed && (
+            <span className="ml-1 text-rose-300">※この予定だと睡眠が削られます</span>
+          )}
+        </p>
+      )}
+      {err && <p className="text-[10px] text-rose-300">{err}</p>}
+      <p className="text-[9px] text-ink-faint">
+        身支度の時間は設定の既定値を使います。就寝・入浴・PC仕事の締切は自動で追随します。
+      </p>
     </div>
   );
 }

@@ -789,6 +789,22 @@ export type TonightPlan = {
   notes: string[];
 };
 
+/** 予定 (到着時刻) からの逆算結果。wake は SleepPlanOverride に適用済み */
+export type AppointmentPlan = {
+  date: string;
+  arrive: string;
+  depart: string;
+  wake: string;
+  travel_min: number;
+  prep_min: number;
+  place: string | null;
+  applied: boolean;
+  plan: TonightPlan;
+  sleep_compressed: boolean;
+  estimated_sleep_min: number;
+  target_sleep_min: number;
+};
+
 /** その夜だけの起床時刻。date は **起床する日**。 */
 export type SleepPlanOverride = { date: string; wake_time: string };
 
@@ -2299,6 +2315,14 @@ export const api = {
   sleepPlanOverride: (date?: string) =>
     request<{ override: SleepPlanOverride | null }>(
       `/api/sleep-plan/override${date ? `?date=${date}` : ""}`),
+  sleepPlanFromAppointment: (body: {
+    date?: string; arrive_at: string; travel_min: number; prep_min?: number;
+    place?: string; apply?: boolean;
+  }) =>
+    request<AppointmentPlan>("/api/sleep-plan/from-appointment", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   sleepPlanOverrideSet: (body: SleepPlanOverride) =>
     request<{ ok: boolean; override: SleepPlanOverride }>("/api/sleep-plan/override", {
       method: "PUT",
