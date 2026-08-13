@@ -1019,6 +1019,8 @@ export type SleepInterventionNight = SleepInterventionFlags & {
   date: string;
   display_label: string;
   note: string | null;
+  /** その夜どの布団で寝たか (自由登録の名前) */
+  bedding: string | null;
   /** 「布団に入った」記録時刻 (ISO)。Garmin が測れない唯一の時刻で、入眠潜時の実測源 */
   in_bed_at: string | null;
   updated_at: string | null;
@@ -1030,6 +1032,8 @@ export type SleepInterventionRecord = {
 export type SleepInterventionSet = Partial<SleepInterventionFlags> & {
   /** true=いまを「布団に入った」として記録 / false=記録を取り消す */
   in_bed_now?: boolean;
+  /** その夜の布団名。"" で未記録に戻す */
+  bedding?: string;
   reset?: boolean;
   clear?: string[];
   date?: string;
@@ -1183,6 +1187,26 @@ export type SleepInterventionAnalysis = {
   interventions: SleepInterventionResult[];
   suggestion: { text: string; reason: string; kind?: string } | null;
   worth_verifying?: WorthVerifyingItem[];
+  /** 布団 (カテゴリ) の one-vs-rest 分析 */
+  bedding?: BeddingAnalysis;
+};
+
+export type BeddingOption = { id: number; name: string };
+export type BeddingAnalysis = {
+  n_nights: number;
+  note?: string;
+  beddings: {
+    name: string;
+    nights: number;
+    verdict: "improves" | "worsens" | "unclear" | "insufficient";
+    outcomes: {
+      outcome: string; outcome_label: string;
+      n_with: number; n_without: number;
+      p: number; q: number | null; diff: number | null;
+      std_effect: number | null;
+      tier: "strong" | "suggestive" | "trend" | "weak" | "preliminary";
+    }[];
+  }[];
 };
 
 export type HabitPaceItem = {
@@ -2315,6 +2339,13 @@ export const api = {
   sleepPlanOverride: (date?: string) =>
     request<{ override: SleepPlanOverride | null }>(
       `/api/sleep-plan/override${date ? `?date=${date}` : ""}`),
+  beddingOptions: () => request<{ items: BeddingOption[] }>("/api/bedding-options"),
+  beddingOptionAdd: (name: string) =>
+    request<{ items: BeddingOption[] }>("/api/bedding-options", {
+      method: "POST", body: JSON.stringify({ name }),
+    }),
+  beddingOptionDelete: (id: number) =>
+    request<{ items: BeddingOption[] }>(`/api/bedding-options/${id}`, { method: "DELETE" }),
   sleepPlanFromAppointment: (body: {
     date?: string; arrive_at: string; travel_min: number; prep_min?: number;
     place?: string; apply?: boolean;

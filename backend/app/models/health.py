@@ -481,6 +481,22 @@ class MentalScreening(Base):
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class BeddingOption(Base):
+    """布団 (寝具) の選択肢。本人が好きな名前で好きな数だけ登録する。
+
+    「どの布団で寝たか」は SleepInterventionLog.bedding に**名前の文字列**で入る。
+    ID 参照にしないのは、選択肢を消しても過去の夜の記録が壊れないようにするため
+    (n-of-1 分析は過去ログの文字列をそのまま群として扱うので、選択肢の削除=分析からの
+    消滅にはならない)。
+    """
+
+    __tablename__ = "bedding_option"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class MorningProtocolLog(Base):
     """朝の起床プロトコル (低血圧向けの起き上がり手順) の実施ログ。
 
@@ -521,6 +537,9 @@ class SleepInterventionLog(Base):
     mouth_tape: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     breathing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の呼吸法セッション
     meditation: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # 就寝前の瞑想セッション
+    # その夜どの布団 (寝具) で寝たか。BeddingOption.name の文字列 (自由登録)。
+    # None=未記録。分析は「この布団の夜 vs それ以外の夜」の one-vs-rest で比較する。
+    bedding: Mapped[str | None] = mapped_column(String(60), nullable=True)
     # 「布団に入った時刻」(naive UTC)。Garmin は寝ついた時刻 (sleepStartTimestampGMT) しか
     # 測らず、布団に入った時刻は原理的に観測できない (体動から推定する検出器を実装して
     # 検証したが、就寝の遅さ→入眠潜時 という確立した関係を 24 通りのパラメータどれでも

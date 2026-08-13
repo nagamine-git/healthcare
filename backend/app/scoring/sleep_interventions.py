@@ -113,6 +113,8 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
                 "mouth_tape": log.mouth_tape,
                 "breathing": log.breathing,
                 "meditation": log.meditation,
+                # カテゴリ (どの布団か)。None=未記録
+                "bedding": log.bedding,
             })
     return rows
 
@@ -442,6 +444,81 @@ def _tonight_plan(
     return None
 
 
+def _analyze_bedding(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """布団 (カテゴリ) の one-vs-rest 分析。
+
+    介入 (二値) と違い布団は「どれを使ったか」なので、布団ごとに
+    「その布団の夜 vs **記録があるそれ以外の夜**」を比較する。
+    ⚠️ 対照群に未記録 (None) の夜を混ぜない。未記録は「別の布団」ではなく
+    「わからない」であり、混ぜると対照群が汚れて差が薄まる。
+
+    検定・FDR・tier は介入側と同じ道具を使う (二重実装しない)。
+    q 値の補正は**布団×アウトカムの検定ファミリー内**で行う
+    (介入側と混ぜると、布団を追加するほど介入側の q が変わってしまう)。
+    """
+    labeled = [r for r in rows if r.get("bedding")]
+    names = sorted({r["bedding"] for r in labeled})
+    base: dict[str, Any] = {"n_nights": len(labeled), "beddings": []}
+    if len(names) < 2:
+        # 1種類しか記録がなければ比較相手がいない (差は定義できない)
+        base["note"] = "布団が2種類以上記録されると比較できます"
+        for nm in names:
+            base["beddings"].append({
+                "name": nm, "nights": sum(1 for r in labeled if r["bedding"] == nm),
+                "outcomes": [], "verdict": "insufficient",
+            })
+        return base
+
+    raw: dict[tuple[str, str], dict[str, Any]] = {}
+    powered: list[tuple[str, str]] = []
+    for nm in names:
+        for okey, olabel in OUTCOMES:
+            did = [r[okey] for r in labeled if r["bedding"] == nm and r.get(okey) is not None]
+            rest = [r[okey] for r in labeled if r["bedding"] != nm and r.get(okey) is not None]
+            if len(did) < _MIN_ARM_PRELIM or len(rest) < _MIN_ARM_PRELIM:
+                continue
+            p, diff = permutation_test(did, rest)
+            if p is None:
+                continue
+            sd = _pooled_sd(did, rest)
+            raw[(nm, okey)] = {
+                "outcome": okey, "outcome_label": olabel,
+                "n_with": len(did), "n_without": len(rest),
+                "p": round(p, 4), "diff": diff,
+                "std_effect": round(diff / sd, 2) if sd else None,
+            }
+            if len(did) >= _MIN_GROUP and len(rest) >= _MIN_GROUP:
+                powered.append((nm, okey))
+
+    qs = benjamini_hochberg([raw[k]["p"] for k in powered]) if powered else []
+    qmap = dict(zip(powered, qs, strict=True))
+    for nm in names:
+        outs = []
+        for okey, _ in OUTCOMES:
+            e = raw.get((nm, okey))
+            if e is None:
+                continue
+            if (nm, okey) in qmap:
+                e = {**e, "q": round(qmap[(nm, okey)], 4),
+                     "tier": _tier(e["p"], qmap[(nm, okey)])}
+            else:
+                e = {**e, "q": None, "tier": "preliminary"}
+            outs.append(e)
+        primary = next((o for o in outs if o["outcome"] == _PRIMARY), None)
+        base["beddings"].append({
+            "name": nm,
+            "nights": sum(1 for r in labeled if r["bedding"] == nm),
+            "outcomes": outs,
+            "verdict": _verdict(primary),
+        })
+    # 夜数が多い順 (よく使っている布団が先頭)
+    base["beddings"].sort(key=lambda b: -b["nights"])
+    return base
+
+
 def analyze(target: date_type | None = None) -> dict[str, Any]:
     target = target or app_today()
-    return _analyze_rows(_collect(target))
+    rows = _collect(target)
+    out = _analyze_rows(rows)
+    out["bedding"] = _analyze_bedding(rows)
+    return out

@@ -76,6 +76,24 @@ function interventionRows(ivs: SleepInterventionResult[]): Row[] {
   return rows;
 }
 
+/** 布団 (one-vs-rest) を既存の Row に流し込む。tier/q/p のキーが同じなので安全に混ざる */
+function beddingRows(b: import("../lib/api").BeddingAnalysis | undefined): Row[] {
+  if (!b) return [];
+  const rows: Row[] = [];
+  for (const bed of b.beddings) {
+    for (const o of bed.outcomes) {
+      if (o.tier === "weak") continue;
+      rows.push({
+        kind: "intervention", name: `布団: ${bed.name}`, outcome_label: o.outcome_label,
+        direction: (o.diff ?? 0) >= 0 ? "改善" : "悪化",
+        diff: o.diff ?? 0, p: o.p, q: o.q, tier: o.tier,
+        nLabel: `この布団${o.n_with}/他${o.n_without}夜`,
+      });
+    }
+  }
+  return rows;
+}
+
 function driverRows(factors: SleepDriverFactor[]): Row[] {
   return factors
     .filter((f) => f.tier !== "weak")
@@ -173,6 +191,7 @@ export function SleepEffectivenessPanel() {
 
   const rows = [
     ...(ivReady ? interventionRows(iv!.interventions) : []),
+    ...(ivReady ? beddingRows(iv!.bedding) : []),
     ...(drReady ? driverRows([...dr!.quality, ...dr!.next_day]) : []),
   ].sort((a, b) => {
     const ka = confKey(a), kb = confKey(b);

@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import session_scope
-from app.models import SleepInterventionLog, SleepSession
+from app.models import BeddingOption, SleepInterventionLog, SleepSession
 from app.scoring import sleep_interventions
 
 router = APIRouter()
@@ -38,7 +38,7 @@ def _to_dict(row: SleepInterventionLog | None, target: date_type) -> dict[str, A
     if row is None:
         return {
             "date": target.isoformat(), "display_label": display,
-            **{f: None for f in _FLAGS}, "note": None,
+            **{f: None for f in _FLAGS}, "note": None, "bedding": None,
             "in_bed_at": None, "updated_at": None,
         }
     return {
@@ -48,6 +48,7 @@ def _to_dict(row: SleepInterventionLog | None, target: date_type) -> dict[str, A
         "breathing": row.breathing,
         "meditation": row.meditation,
         "note": row.note,
+        "bedding": row.bedding,
         "in_bed_at": (
             row.in_bed_at.replace(tzinfo=UTC).isoformat() if row.in_bed_at else None
         ),
@@ -68,6 +69,8 @@ class InterventionIn(BaseModel):
     # 「布団に入った」記録。true=今この瞬間を記録 / false=記録を取り消す。
     # Garmin が測れない唯一の時刻なので、これだけが入眠潜時の実測手段になる。
     in_bed_now: bool | None = None
+    # その夜どの布団で寝たか (BeddingOption.name)。"" を送ると未記録に戻す
+    bedding: str | None = Field(default=None, max_length=60)
     clear: list[str] = Field(default_factory=list)  # None に戻すフィールド名 (3状態トグル用)
     reset: bool = False  # その夜の記録を未記録 (全 None) に戻す
     date: str | None = None
@@ -97,12 +100,15 @@ def post_intervention(body: InterventionIn) -> dict[str, Any]:
                 setattr(row, f, None)
         if body.note is not None:
             row.note = body.note
+        if body.bedding is not None:
+            row.bedding = body.bedding or None  # 空文字 = 未記録に戻す
         if body.in_bed_now is not None:
             # 時刻はサーバ側の「今」で確定させる (端末時計のズレを持ち込まない)。
             # DB は naive UTC 統一。
             row.in_bed_at = datetime.now(UTC).replace(tzinfo=None) if body.in_bed_now else None
         # 全項目 未記録になったら空行を残さない (n_nights 水増し防止)
-        if all(getattr(row, f) is None for f in _FLAGS) and not row.note and row.in_bed_at is None:
+        if (all(getattr(row, f) is None for f in _FLAGS) and not row.note
+                and row.in_bed_at is None and row.bedding is None):
             session.delete(row)
         else:
             row.updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -168,3 +174,46 @@ def get_history(days: int = 14) -> dict[str, Any]:
 def get_intervention_analysis() -> dict[str, Any]:
     """各介入が睡眠の質を有意に改善するかの n-of-1 分析。"""
     return sleep_interventions.analyze()
+
+
+# ===== 布団 (寝具) の選択肢。本人が好きな名前で好きな数だけ登録する =====
+
+
+class BeddingOptionIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+@router.get("/api/bedding-options")
+def list_bedding_options() -> dict[str, Any]:
+    with session_scope() as session:
+        rows = session.execute(
+            select(BeddingOption).order_by(BeddingOption.created_at, BeddingOption.id)
+        ).scalars().all()
+        return {"items": [{"id": r.id, "name": r.name} for r in rows]}
+
+
+@router.post("/api/bedding-options")
+def add_bedding_option(body: BeddingOptionIn) -> dict[str, Any]:
+    name = body.name.strip()
+    with session_scope() as session:
+        exists = session.execute(
+            select(BeddingOption).where(BeddingOption.name == name)
+        ).scalar_one_or_none()
+        if exists is None:
+            # 重複名は黙って既存を使う (登録済みの名前をもう一度足しても増えない)
+            session.add(BeddingOption(name=name, created_at=datetime.now(UTC).replace(tzinfo=None)))
+    return list_bedding_options()
+
+
+@router.delete("/api/bedding-options/{option_id}")
+def delete_bedding_option(option_id: int) -> dict[str, Any]:
+    """選択肢を消す。⚠️ 過去の夜の記録 (log.bedding の文字列) は**消さない**。
+
+    分析は文字列を群として扱うので、選択肢を消しても過去の比較はそのまま生きる
+    (「もう使っていない布団」の成績を後から見られる)。
+    """
+    with session_scope() as session:
+        row = session.get(BeddingOption, option_id)
+        if row is not None:
+            session.delete(row)
+    return list_bedding_options()

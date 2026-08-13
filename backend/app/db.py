@@ -141,6 +141,7 @@ def _apply_lightweight_migrations() -> None:
         "life_profile": [("monthly_expense_jpy", "REAL")],
         "sleep_intervention_log": [
             ("breathing", "BOOLEAN"), ("meditation", "BOOLEAN"), ("in_bed_at", "DATETIME"),
+            ("bedding", "VARCHAR(60)"),
         ],
         "caffeine_intake": [("dose_pct", "REAL DEFAULT 100")],
         "workout_review": [("exercises_json", "JSON")],
