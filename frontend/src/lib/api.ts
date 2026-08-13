@@ -1043,6 +1043,7 @@ export type SleepInterventionHistoryNight = SleepInterventionFlags & {
   date: string;
   display_label: string;
   sleep_score: number | null;
+  bedding: string | null;
 };
 export type SleepInterventionHistoryResp = { nights: SleepInterventionHistoryNight[] };
 

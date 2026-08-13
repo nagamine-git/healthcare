@@ -166,6 +166,7 @@ def get_history(days: int = 14) -> dict[str, Any]:
                 "mouth_tape": log.mouth_tape if log else None,
                 "breathing": log.breathing if log else None,
                 "meditation": log.meditation if log else None,
+                "bedding": log.bedding if log else None,
             })
     return {"nights": nights}
 

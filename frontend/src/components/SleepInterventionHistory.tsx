@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioWaveform, Brain, ChevronDown, Ear, Eye, VolumeX, Wind } from "lucide-react";
+import { AudioWaveform, BedDouble, Brain, ChevronDown, Ear, Eye, VolumeX, Wind } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import type {
@@ -42,6 +42,9 @@ export function SleepInterventionHistory() {
     queryFn: api.sleepInterventionHistory,
     enabled: open,
   });
+  const beddingQ = useQuery({
+    queryKey: ["bedding-options"], queryFn: api.beddingOptions, enabled: open,
+  });
 
   const save = useMutation({
     mutationFn: (body: SleepInterventionSet) => api.sleepInterventionSet(body),
@@ -54,9 +57,10 @@ export function SleepInterventionHistory() {
         return {
           nights: old.nights.map((n) => {
             if (n.date !== body.date) return n;
-            const patch: Partial<SleepInterventionFlags> = {};
+            const patch: Partial<SleepInterventionFlags> & { bedding?: string | null } = {};
             for (const { key } of ITEMS) if (body[key] != null) patch[key] = body[key];
             if (clearKey) patch[clearKey as Key] = null;
+            if (body.bedding !== undefined) patch.bedding = body.bedding || null;
             return { ...n, ...patch };
           }),
         };
@@ -70,6 +74,16 @@ export function SleepInterventionHistory() {
       qc.invalidateQueries({ queryKey: ["sleep-interventions"] });
     },
   });
+
+  // 布団: タップで 未記録 → 選択肢1 → 2 → … → 未記録 の順繰り。
+  // 過去分の一括入力は「同じ操作の連打」になるので、ドロップダウンよりタップ数が少ない。
+  const cycleBedding = (night: SleepInterventionHistoryNight) => {
+    const opts = (beddingQ.data?.items ?? []).map((o) => o.name);
+    if (opts.length === 0) return;
+    const i = night.bedding ? opts.indexOf(night.bedding) : -1;
+    const next = i + 1 >= opts.length ? "" : opts[i + 1];  // 最後の次は未記録に戻る
+    save.mutate({ date: night.date, bedding: next });
+  };
 
   const cycle = (night: SleepInterventionHistoryNight, key: Key) => {
     const nv = nextState(night[key]);
@@ -110,6 +124,20 @@ export function SleepInterventionHistory() {
                   {n.sleep_score != null ? `スコア ${Math.round(n.sleep_score)}` : "スコア —"}
                 </div>
               </div>
+              {(beddingQ.data?.items.length ?? 0) > 0 && (
+                <button
+                  onClick={() => cycleBedding(n)}
+                  title="タップで布団を切替"
+                  className={`press flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${
+                    n.bedding
+                      ? "border-prog-500 bg-prog-500/15 text-prog-300"
+                      : "border-dashed border-hairline text-ink-faint"
+                  }`}
+                >
+                  <BedDouble size={10} />
+                  {n.bedding ?? "布団?"}
+                </button>
+              )}
               <div className="flex flex-1 justify-end gap-1">
                 {ITEMS.map(({ key, label, icon: Icon }) => {
                   const v = n[key];

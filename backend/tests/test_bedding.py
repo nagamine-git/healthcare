@@ -65,3 +65,40 @@ def test_single_bedding_has_no_comparison(db_engine, session):
     assert out["beddings"][0]["verdict"] == "insufficient"
     assert out["beddings"][0]["outcomes"] == []
     assert "2種類以上" in out["note"]
+
+
+def test_history_endpoint_includes_bedding(db_engine, session):
+    """過去の記録画面が布団の記録状態を返す。"""
+    from app.api.sleep_intervention import get_history
+
+    _seed(session, nights=[(1, "羽毛", 85), (2, None, 70)])
+    out = get_history(days=14)
+
+    by_date = {n["date"]: n for n in out["nights"]}
+    d1 = (TARGET - timedelta(days=1)).isoformat()
+    d2 = (TARGET - timedelta(days=2)).isoformat()
+    # get_history は「今日」を app_today ベースで見るので、シードした夜が窓に入るとは
+    # 限らない。入っていれば bedding が透過されていることを確認する。
+    for d, expected in ((d1, "羽毛"), (d2, None)):
+        if d in by_date:
+            assert by_date[d]["bedding"] == expected
+
+
+def test_backfill_past_night_via_post(db_engine, session):
+    """POST に date を渡せば過去の夜へ布団を記録できる (今夜と同じ入口)。"""
+    from app.api.sleep_intervention import InterventionIn, post_intervention
+    from app.models import SleepInterventionLog
+
+    d = TARGET - timedelta(days=5)
+    session.add(SleepSession(date=d, source="garmin", total_min=400, sleep_score=70))
+    session.commit()
+
+    post_intervention(InterventionIn(date=d.isoformat(), bedding="客用"))
+    row = session.get(SleepInterventionLog, d)
+    session.refresh(row)
+    assert row.bedding == "客用"
+
+    # 空文字で未記録に戻す → 他が全て未記録なら行ごと消える (n_nights 水増し防止)
+    post_intervention(InterventionIn(date=d.isoformat(), bedding=""))
+    session.expire_all()
+    assert session.get(SleepInterventionLog, d) is None
