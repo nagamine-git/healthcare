@@ -90,6 +90,10 @@ _DRIVERS: list[tuple[str, str]] = [
     ("stress", "ストレス(主観)"),
     ("duration", "睡眠時間"),
     ("morning_light", "朝の光(推定・実測lux不可)"),
+    # 外気温を**室温の代理**として使う。暑さは睡眠の質 (特に深睡眠・中途覚醒) を強く
+    # 落とすことが知られており、室温そのものは測れないが外気温は日々の変動をよく追う。
+    # ⚠️ 代理指標であることをラベルに明示する (室温を測ったと誤解させない)。
+    ("temp_night", "夜間の外気温(室温の代理)"),
 ]
 
 
@@ -165,6 +169,32 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         # 朝の光 (推定 proxy): 「その夜の睡眠」に効くのは前日(prev)朝の光暴露。
         # steps/stress と同じ prev 起点の作法に揃える (就寝前の日中の話なので)。
         wake_hhmm = str(get_settings().target_wake_time)
+        # 夜間 (前日22時〜当日06時 JST) の外気温平均を「その夜」の値にする。
+        # ⚠️ ts は UTC 保存・日付は JST なので、UTC-9h の窓で切る (日単位の
+        # date(ts) で束ねると9時間ずれる)。窓は睡眠の中心帯に合わせている。
+        temp_night: dict[date_type, float] = {}
+        temp_rows = s.execute(
+            select(MetricSample.ts, MetricSample.value).where(
+                MetricSample.metric_key == "surface_temperature_c",
+                MetricSample.ts >= lo, MetricSample.ts < hi,
+            )
+        ).all()
+        _acc: dict[date_type, list[float]] = {}
+        for ts, val in temp_rows:
+            if val is None:
+                continue
+            jst = ts + timedelta(hours=9)
+            # 22:00-23:59 は「翌朝が起床日」の夜、00:00-05:59 はその日が起床日
+            if jst.hour >= 22:
+                night = (jst + timedelta(days=1)).date()
+            elif jst.hour < 6:
+                night = jst.date()
+            else:
+                continue
+            _acc.setdefault(night, []).append(float(val))
+        for d_, vs in _acc.items():
+            temp_night[d_] = sum(vs) / len(vs)
+
         morning_light: dict[date_type, float] = {}
         for pd in {d - timedelta(days=1) for d in sleep_rows}:
             score = compute_morning_light_score(s, pd, wake_hhmm=wake_hhmm).get("score")
@@ -208,6 +238,7 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
             "steps": steps.get(prev), "stress": checkin.get(prev, {}).get("stress"),
             "duration": total,
             "morning_light": morning_light.get(prev),
+            "temp_night": temp_night.get(d),
         })
     return rows
 

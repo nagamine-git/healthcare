@@ -76,24 +76,6 @@ function interventionRows(ivs: SleepInterventionResult[]): Row[] {
   return rows;
 }
 
-/** 布団 (one-vs-rest) を既存の Row に流し込む。tier/q/p のキーが同じなので安全に混ざる */
-function beddingRows(b: import("../lib/api").BeddingAnalysis | undefined): Row[] {
-  if (!b) return [];
-  const rows: Row[] = [];
-  for (const bed of b.beddings) {
-    for (const o of bed.outcomes) {
-      if (o.tier === "weak") continue;
-      rows.push({
-        kind: "intervention", name: `布団: ${bed.name}`, outcome_label: o.outcome_label,
-        direction: (o.diff ?? 0) >= 0 ? "改善" : "悪化",
-        diff: o.diff ?? 0, p: o.p, q: o.q, tier: o.tier,
-        nLabel: `この布団${o.n_with}/他${o.n_without}夜`,
-      });
-    }
-  }
-  return rows;
-}
-
 function driverRows(factors: SleepDriverFactor[]): Row[] {
   return factors
     .filter((f) => f.tier !== "weak")
@@ -191,7 +173,7 @@ export function SleepEffectivenessPanel() {
 
   const rows = [
     ...(ivReady ? interventionRows(iv!.interventions) : []),
-    ...(ivReady ? beddingRows(iv!.bedding) : []),
+
     ...(drReady ? driverRows([...dr!.quality, ...dr!.next_day]) : []),
   ].sort((a, b) => {
     const ka = confKey(a), kb = confKey(b);
@@ -199,6 +181,9 @@ export function SleepEffectivenessPanel() {
   });
   // 「効くもの」と「妨げるもの」は行動の意味が逆 (増やす vs 減らす) なので分けて見せる。
   // 各セクション内は既存の確度順 (rows のソート順) を保つ。
+  // ⚠️ 布団は helps/hurts の上位8件に混ぜない。記録が浅いうちは必ず暫定 (preliminary) で
+  // 圏外に落ち、「記録しているのに何も出てこない」状態になる。専用区画で常に見せる。
+  const beds = ivReady ? (iv!.bedding?.beddings ?? []) : [];
   const helps = rows.filter((r) => r.direction === "改善").slice(0, 8);
   const hurts = rows.filter((r) => r.direction === "悪化").slice(0, 8);
   const anyStrong = rows.some((r) => r.tier === "strong" || r.tier === "suggestive");
@@ -259,6 +244,44 @@ export function SleepEffectivenessPanel() {
       {helps.length === 0 && hurts.length === 0 && (
         <p className="text-[11px] text-ink-faint">有意な傾向はまだありません。記録が貯まると見えてきます。</p>
       )}
+      {beds.length > 0 && (
+        <section className="rounded-lg border border-hairline bg-panel/30 p-2.5">
+          <div className="mb-1.5 flex items-baseline gap-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-ink-dim">布団くらべ</span>
+            <span className="text-[9px] text-ink-faint">
+              その布団の夜 vs 他の布団の夜
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {beds.map((b) => {
+              const primary = b.outcomes.find((o) => o.outcome === "sleep_score") ?? b.outcomes[0];
+              return (
+                <li key={b.name} className="flex items-baseline gap-2 leading-tight">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{b.name}</span>
+                  <span className="shrink-0 text-[10px] text-ink-faint">{b.nights}夜</span>
+                  {primary ? (
+                    <>
+                      <span className={`shrink-0 text-[12px] font-semibold tabular-nums ${
+                        (primary.diff ?? 0) >= 0 ? "text-prog-300" : "text-risk"}`}>
+                        {(primary.diff ?? 0) >= 0 ? "+" : ""}{(primary.diff ?? 0).toFixed(1)}
+                      </span>
+                      <span className="shrink-0 text-[9px] text-ink-faint">
+                        {primary.outcome_label} / {TIER_LABEL[primary.tier] ?? primary.tier}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="shrink-0 text-[9px] text-ink-faint">比較にはあと数夜</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {iv!.bedding?.note && (
+            <p className="mt-1 text-[9px] text-ink-faint">{iv!.bedding.note}</p>
+          )}
+        </section>
+      )}
+
       {helps.length > 0 && (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">

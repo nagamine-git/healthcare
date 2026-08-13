@@ -24,13 +24,21 @@ from app.models import MetricSample
 logger = get_logger(__name__)
 
 METRIC_KEY = "surface_pressure_hpa"
+# 外気温。**室温の代理**として睡眠ドライバーに使う (暑さは睡眠の質を強く落とす)。
+# 気圧と同じ 1 リクエストで取れるので追加コストは無い。
+TEMP_METRIC_KEY = "surface_temperature_c"
 _ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 
 def store_pressure_samples(
-    session: Session, times: list[str], values: list[float | None]
+    session: Session, times: list[str], values: list[float | None],
+    *, metric_key: str = METRIC_KEY,
 ) -> int:
-    """ISO 時刻 (UTC, 例 '2026-06-01T00:00') と hPa 値の列を upsert。書いた件数を返す。"""
+    """ISO 時刻 (UTC, 例 '2026-06-01T00:00') と値の列を upsert。書いた件数を返す。
+
+    ``metric_key`` を差し替えれば気温 (TEMP_METRIC_KEY) も同じ経路で保存できる。
+    """
+    unit = "hPa" if metric_key == METRIC_KEY else "degC"
     payload: list[dict[str, Any]] = []
     for t, v in zip(times, values, strict=True):
         if v is None:
@@ -38,10 +46,10 @@ def store_pressure_samples(
         ts = datetime.fromisoformat(t).replace(tzinfo=None)
         payload.append({
             "source": "open-meteo",
-            "metric_key": METRIC_KEY,
+            "metric_key": metric_key,
             "ts": ts,
             "value": float(v),
-            "unit": "hPa",
+            "unit": unit,
         })
     if not payload:
         return 0
@@ -86,7 +94,7 @@ def _fetch_archive(lat: float, lon: float, start_date: str, end_date: str) -> di
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "pressure_msl",
+        "hourly": "pressure_msl,temperature_2m",
         "timezone": "GMT",  # UTC で受け取り、UTC naive 保存する
         "start_date": start_date,
         "end_date": end_date,
@@ -114,7 +122,11 @@ def backfill_pressure_history(days: int = 120) -> int:
     hourly = raw["hourly"]
     times = hourly.get("time") or []
     values = hourly.get("pressure_msl") or []
+    temps = hourly.get("temperature_2m") or []
     if not times:
         return 0
     with session_scope() as session:
-        return store_pressure_samples(session, times, values)
+        n = store_pressure_samples(session, times, values)
+        if temps:
+            n += store_pressure_samples(session, times, temps, metric_key=TEMP_METRIC_KEY)
+        return n
