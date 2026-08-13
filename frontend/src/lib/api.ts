@@ -2340,6 +2340,12 @@ export const api = {
   sleepPlanOverride: (date?: string) =>
     request<{ override: SleepPlanOverride | null }>(
       `/api/sleep-plan/override${date ? `?date=${date}` : ""}`),
+  homeLocation: () =>
+    request<{ postal_code: string | null; latitude: number; longitude: number;
+              label: string; is_default: boolean }>("/api/profile/home-location"),
+  homeLocationSet: (postal_code: string) =>
+    request<{ ok: boolean; postal_code: string; latitude: number; longitude: number; label: string }>(
+      "/api/profile/home-location", { method: "PUT", body: JSON.stringify({ postal_code }) }),
   beddingOptions: () => request<{ items: BeddingOption[] }>("/api/bedding-options"),
   beddingOptionAdd: (name: string) =>
     request<{ items: BeddingOption[] }>("/api/bedding-options", {

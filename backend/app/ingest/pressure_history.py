@@ -16,8 +16,8 @@ import httpx
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import session_scope
+from app.integrations.geocode import resolve_home_coords
 from app.logging import get_logger
 from app.models import MetricSample
 
@@ -106,10 +106,9 @@ def backfill_pressure_history(days: int = 120) -> int:
 
     Archive API は数日の反映遅れがあるため、終端は 2 日前にする。
     """
-    s = get_settings()
     end = (datetime.now(UTC) - timedelta(days=2)).date()
     start = end - timedelta(days=days)
-    raw = _fetch_archive(s.weather_latitude, s.weather_longitude, start.isoformat(), end.isoformat())
+    raw = _fetch_archive(*resolve_home_coords()[:2], start.isoformat(), end.isoformat())
     if not raw or "hourly" not in raw:
         return 0
     hourly = raw["hourly"]

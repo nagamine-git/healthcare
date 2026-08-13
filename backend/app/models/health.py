@@ -364,6 +364,12 @@ class UserProfile(Base):
     resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Karvonen 用上書き
     max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 実測上書き (無ければ式)
     # カフェイン消失半減期に効く CYP1A2 修飾因子 (トグル)
+    # 自宅の位置。郵便番号から引いた座標を保存する (天気・気圧の観測地点)。
+    # ⚠️ 既定は config の東京駅なので、設定しないと**別の場所の天気**で分析される。
+    home_postal_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    home_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    home_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    home_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     caffeine_smoker: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     caffeine_oral_contraceptives: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     caffeine_pregnant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

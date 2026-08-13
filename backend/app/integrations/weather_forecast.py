@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from app.config import get_settings
+from app.integrations.geocode import resolve_home_coords
 from app.logging import get_logger
 
 logger = get_logger(__name__)
@@ -589,9 +589,8 @@ def get_weather_forecast(
     now_jst: datetime | None = None,
 ) -> dict[str, Any] | None:
     """整形済みの天気予報 {summary, hourly[], daily[]} を返す。失敗時は None。"""
-    s = get_settings()
-    lat = latitude if latitude is not None else s.weather_latitude
-    lon = longitude if longitude is not None else s.weather_longitude
+    lat = latitude if latitude is not None else resolve_home_coords()[0]
+    lon = longitude if longitude is not None else resolve_home_coords()[1]
     key = f"{lat:.4f}_{lon:.4f}"
 
     mono = time.monotonic()

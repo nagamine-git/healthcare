@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.integrations.geocode import resolve_home_coords
 from app.logging import get_logger
 
 logger = get_logger(__name__)
@@ -109,9 +110,8 @@ def get_pressure_hourly(
 
     予報を含むので、未来数時間の気圧トレンド (片頭痛トリガー) を出せる。
     """
-    settings = get_settings()
-    lat = latitude if latitude is not None else settings.weather_latitude
-    lon = longitude if longitude is not None else settings.weather_longitude
+    lat = latitude if latitude is not None else resolve_home_coords()[0]
+    lon = longitude if longitude is not None else resolve_home_coords()[1]
     data = _fetch_open_meteo(lat, lon)
     if data is None or "hourly" not in data:
         return []
@@ -158,8 +158,8 @@ def get_pressure_snapshot(
     座標は小数 2 桁に丸めてキャッシュキーを生成 (~1km 精度)。
     """
     settings = get_settings()
-    lat = latitude if latitude is not None else settings.weather_latitude
-    lon = longitude if longitude is not None else settings.weather_longitude
+    lat = latitude if latitude is not None else resolve_home_coords()[0]
+    lon = longitude if longitude is not None else resolve_home_coords()[1]
     key = _cache_key(lat, lon)
     cached = _cache.get(key)
     if cached and cached["expires"] > time.time():
@@ -242,8 +242,8 @@ def get_pressure_snapshot(
         latitude is not None
         and longitude is not None
         and (
-            abs(latitude - settings.weather_latitude) > 0.01
-            or abs(longitude - settings.weather_longitude) > 0.01
+            abs(latitude - resolve_home_coords()[0]) > 0.01
+            or abs(longitude - resolve_home_coords()[1]) > 0.01
         )
     ):
         label = f"位置情報 ({latitude:.3f}, {longitude:.3f})"
@@ -363,8 +363,8 @@ def get_air_quality_snapshot(
     longitude: float | None = None,
 ) -> AirQualitySnapshot | None:
     settings = get_settings()
-    lat = latitude if latitude is not None else settings.weather_latitude
-    lon = longitude if longitude is not None else settings.weather_longitude
+    lat = latitude if latitude is not None else resolve_home_coords()[0]
+    lon = longitude if longitude is not None else resolve_home_coords()[1]
     key = _cache_key(lat, lon)
     cached = _air_cache.get(key)
     if cached and cached["expires"] > time.time():
@@ -389,8 +389,8 @@ def get_air_quality_snapshot(
         latitude is not None
         and longitude is not None
         and (
-            abs(latitude - settings.weather_latitude) > 0.01
-            or abs(longitude - settings.weather_longitude) > 0.01
+            abs(latitude - resolve_home_coords()[0]) > 0.01
+            or abs(longitude - resolve_home_coords()[1]) > 0.01
         )
     ):
         label = f"位置情報 ({latitude:.3f}, {longitude:.3f})"

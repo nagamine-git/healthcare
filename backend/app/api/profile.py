@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import UserProfile
@@ -230,3 +231,63 @@ def put_profile(body: ProfileIn) -> dict[str, Any]:
         pass
 
     return {**_profile_dict(), "assessment": a}
+
+
+# ===== 自宅の位置 (天気・気圧の観測地点) =====
+
+
+class HomePostalIn(BaseModel):
+    postal_code: str = Field(min_length=3, max_length=10)
+
+
+@router.put("/api/profile/home-location")
+def set_home_location(body: HomePostalIn) -> dict[str, Any]:
+    """郵便番号から自宅の座標を引いて保存する。
+
+    ⚠️ ここを設定しないと config の既定 (東京駅) で天気を引く。気圧は頭痛分析の
+    要因に入っているので、地点がずれると要因分析そのものが無意味になる。
+    """
+    from fastapi import HTTPException, status
+
+    from app.integrations.geocode import lookup_postal
+    from app.models import UserProfile
+
+    got = lookup_postal(body.postal_code)
+    if got is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "郵便番号から場所を特定できませんでした (7桁の日本の郵便番号を入れてください)",
+        )
+    with session_scope() as session:
+        row = session.execute(select(UserProfile)).scalars().first()
+        if row is None:
+            row = UserProfile()
+            session.add(row)
+        row.home_postal_code = got["postal_code"]
+        row.home_latitude = got["latitude"]
+        row.home_longitude = got["longitude"]
+        row.home_label = got["label"]
+    # 地点が変わったら天気のキャッシュを捨てる (前の地点の値を返し続けないため)
+    from app.integrations import weather as weather_mod
+
+    weather_mod._cache.clear()
+    weather_mod._air_cache.clear()
+    weather_mod._raw_cache.clear()
+    return {"ok": True, **got}
+
+
+@router.get("/api/profile/home-location")
+def get_home_location() -> dict[str, Any]:
+    """現在の観測地点。未設定なら config の既定を `is_default: true` で返す。"""
+    from app.integrations.geocode import resolve_home_coords
+    from app.models import UserProfile
+
+    with session_scope() as session:
+        row = session.execute(select(UserProfile)).scalars().first()
+        postal = row.home_postal_code if row else None
+        set_lat = row.home_latitude if row else None
+    lat, lon, label = resolve_home_coords()
+    return {
+        "postal_code": postal, "latitude": lat, "longitude": lon, "label": label,
+        "is_default": set_lat is None,
+    }

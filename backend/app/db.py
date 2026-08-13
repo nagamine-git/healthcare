@@ -146,6 +146,10 @@ def _apply_lightweight_migrations() -> None:
         "caffeine_intake": [("dose_pct", "REAL DEFAULT 100")],
         "workout_review": [("exercises_json", "JSON")],
         "user_profile": [
+            ("home_postal_code", "VARCHAR(8)"),
+            ("home_latitude", "REAL"),
+            ("home_longitude", "REAL"),
+            ("home_label", "VARCHAR(80)"),
             ("birth_date", "DATE"),
             ("age", "INTEGER"),
             ("resting_hr", "INTEGER"),

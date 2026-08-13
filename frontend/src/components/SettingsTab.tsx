@@ -9,8 +9,7 @@ import {
   Monitor,
   Sun,
   User,
-  Utensils,
-} from "lucide-react";
+  Utensils, MapPin} from "lucide-react";
 import { api } from "../lib/api";
 import type { SettingsDto, SettingsUpdate } from "../lib/api";
 import { PhysiqueTargetSection } from "./PhysiqueTargetSection";
@@ -160,6 +159,9 @@ export function SettingsTab({
           <Derived label="目標摂取量" value={`${d.caffeine_target_mg_per_kg} mg/kg`} />
         </div>
       </Group>
+
+      {/* 自宅の位置 (天気・気圧の観測地点) */}
+      <HomeLocationGroup />
 
       {/* 睡眠 */}
       <Group icon={<Moon size={14} className="text-indigo-300" />} title="睡眠"
@@ -387,5 +389,66 @@ function Derived({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-wider text-ink-faint">{label}</div>
       <div className="telemetry-num text-sm tabular-nums text-prog-300">{value}</div>
     </div>
+  );
+}
+
+
+/**
+ * 自宅の郵便番号 → 天気・気圧の観測地点。
+ *
+ * ⚠️ 未設定だと config の既定 (東京駅) の天気で分析される。気圧は頭痛分析の要因に
+ * 入っているので、地点がずれると要因分析そのものが無意味になる。既定のままの人には
+ * その旨をはっきり出す。
+ */
+function HomeLocationGroup() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["home-location"], queryFn: api.homeLocation });
+  const [postal, setPostal] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => api.homeLocationSet(postal),
+    onSuccess: () => {
+      setErr(null); setPostal("");
+      qc.invalidateQueries({ queryKey: ["home-location"] });
+      // 観測地点が変わったら天気・気圧を使う画面を全部作り直す
+      for (const k of ["weather", "forecast", "today", "migraine", "timeline"]) {
+        qc.invalidateQueries({ queryKey: [k] });
+      }
+    },
+    onError: (e) => setErr((e as Error).message),
+  });
+  const d = q.data;
+
+  return (
+    <Group icon={<MapPin size={14} className="text-sky-300" />} title="自宅の位置"
+      summary={d ? (d.is_default ? "未設定 (既定)" : d.label) : "…"}>
+      {d?.is_default && (
+        <p className="text-[11px] text-act-300">
+          未設定のため既定の地点 ({d.label}) の天気で分析しています。
+          気圧は頭痛の要因分析に使われるので、自宅の郵便番号を入れてください。
+        </p>
+      )}
+      {d && !d.is_default && (
+        <p className="text-[11px] text-ink-dim">
+          観測地点: <b className="text-ink">{d.label}</b>
+          <span className="ml-1 text-[10px] text-ink-faint">
+            〒{d.postal_code} ({d.latitude.toFixed(3)}, {d.longitude.toFixed(3)})
+          </span>
+        </p>
+      )}
+      <div className="flex items-center gap-1.5">
+        <input value={postal} onChange={(e) => setPostal(e.target.value)}
+          placeholder="郵便番号 (例: 100-0005)" inputMode="numeric" maxLength={10}
+          className="min-w-0 flex-1 rounded bg-hull px-2 py-1 text-[12px] tabular-nums text-ink" />
+        <button onClick={() => save.mutate()} disabled={save.isPending || postal.length < 7}
+          className="press rounded bg-act-500/20 px-2.5 py-1 text-[11px] text-act-300 disabled:opacity-40">
+          {save.isPending ? "検索中…" : "設定"}
+        </button>
+      </div>
+      {err && <p className="text-[10px] text-rose-300">{err}</p>}
+      <p className="text-[9px] text-ink-faint">
+        気圧・気温・大気質の取得地点になります。天気モデルの格子は数kmなので町丁の違いは影響しません。
+      </p>
+    </Group>
   );
 }
