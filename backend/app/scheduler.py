@@ -30,6 +30,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=settings.app_tz)
 
     # Lazy imports keep optional deps out of unit tests.
+    from app.ingest.bedroom_env import bedroom_env_job
     from app.ingest.freee_sync import freee_sync_job
     from app.ingest.garmin_sync import sync_garmin_job
     from app.ingest.github_sync import github_sync_job
@@ -125,6 +126,14 @@ def setup_scheduler() -> AsyncIOScheduler:
         perf_tick_job,
         _parse_cron(settings.scheduler_perf_tick_cron),
         id="perf_tick",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        bedroom_env_job,
+        _parse_cron(settings.scheduler_bedroom_env_cron),
+        id="bedroom_env",
         coalesce=True,
         max_instances=1,
         misfire_grace_time=300,

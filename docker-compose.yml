@@ -45,6 +45,11 @@ services:
       # TIDE (Garmin ウォッチアプリ) からの取り込み用。未設定だと POST /api/tide/ingest が
       # 500 を返し時計からの記録が一切通らない (必須ではないので optional にしてある)。
       TIDE_INGEST_TOKEN: ${TIDE_INGEST_TOKEN:-}
+      # SwitchBot (寝室の温度・湿度・CO2)。⚠️ ここに書き忘れるとコンテナに env が渡らず
+      # 「実装したのに動かない」になる (TIDE_INGEST_TOKEN で実際に踏んだ)。
+      SWITCHBOT_TOKEN: ${SWITCHBOT_TOKEN:-}
+      SWITCHBOT_SECRET: ${SWITCHBOT_SECRET:-}
+      SWITCHBOT_BEDROOM_DEVICE_ID: ${SWITCHBOT_BEDROOM_DEVICE_ID:-}
       EXERCISEDB_API_KEY: ${EXERCISEDB_API_KEY:-}
       FREEE_CLIENT_ID: ${FREEE_CLIENT_ID:-}
       FREEE_CLIENT_SECRET: ${FREEE_CLIENT_SECRET:-}

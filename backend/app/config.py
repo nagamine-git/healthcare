@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     garmin_password: str | None = None
     garmin_token_dir: Path | None = None
 
+    # SwitchBot API v1.1 (寝室の温度・湿度・CO2)。未設定なら機能ごと無効。
+    switchbot_token: str | None = None
+    switchbot_secret: str | None = None
+    switchbot_bedroom_device_id: str | None = None
+
     hae_ingest_token: str | None = None
     # TIDE (Garmin ウォッチアプリ) からの取り込み用。env TIDE_INGEST_TOKEN
     tide_ingest_token: str | None = None
@@ -623,6 +628,9 @@ class Settings(BaseSettings):
     scheduler_github_sync_cron: str = "20 * * * *"
     scheduler_perf_tick_cron: str = "*/10 * * * *"  # 監視: 10分毎に問題をflush
     scheduler_garden_recompute_cron: str = "25 * * * *"
+    # 寝室の環境。睡眠帯の変化を追うため 15 分毎 (SwitchBot の無料枠 1万回/日に対し
+    # 96回/日と十分軽い)。夜だけに絞らないのは、日中の室温推移も比較材料になるため。
+    scheduler_bedroom_env_cron: str = "*/15 * * * *"
     scheduler_freee_sync_cron: str = "0 7 * * *"  # 法人財務(freee試算表)を1日1回同期
 
     # --- Web Push 通知 ---

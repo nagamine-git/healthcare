@@ -94,6 +94,11 @@ _DRIVERS: list[tuple[str, str]] = [
     # 落とすことが知られており、室温そのものは測れないが外気温は日々の変動をよく追う。
     # ⚠️ 代理指標であることをラベルに明示する (室温を測ったと誤解させない)。
     ("temp_night", "夜間の外気温(室温の代理)"),
+    # 寝室の実測 (SwitchBot MeterPro)。外気温の代理より直接的。
+    # CO2 は換気の指標で、上昇すると睡眠の質と翌日の認知が落ちることが報告されている。
+    ("bedroom_temp", "寝室の温度(実測)"),
+    ("bedroom_humidity", "寝室の湿度"),
+    ("bedroom_co2", "寝室のCO2(換気)"),
 ]
 
 
@@ -172,28 +177,35 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
         # 夜間 (前日22時〜当日06時 JST) の外気温平均を「その夜」の値にする。
         # ⚠️ ts は UTC 保存・日付は JST なので、UTC-9h の窓で切る (日単位の
         # date(ts) で束ねると9時間ずれる)。窓は睡眠の中心帯に合わせている。
-        temp_night: dict[date_type, float] = {}
-        temp_rows = s.execute(
-            select(MetricSample.ts, MetricSample.value).where(
-                MetricSample.metric_key == "surface_temperature_c",
-                MetricSample.ts >= lo, MetricSample.ts < hi,
-            )
-        ).all()
-        _acc: dict[date_type, list[float]] = {}
-        for ts, val in temp_rows:
-            if val is None:
-                continue
-            jst = ts + timedelta(hours=9)
-            # 22:00-23:59 は「翌朝が起床日」の夜、00:00-05:59 はその日が起床日
-            if jst.hour >= 22:
-                night = (jst + timedelta(days=1)).date()
-            elif jst.hour < 6:
-                night = jst.date()
-            else:
-                continue
-            _acc.setdefault(night, []).append(float(val))
-        for d_, vs in _acc.items():
-            temp_night[d_] = sum(vs) / len(vs)
+        def _night_mean(metric_key: str) -> dict[date_type, float]:
+            """前日22時〜当日6時 (JST) の平均を「その夜」の値として返す。
+
+            ⚠️ ts は UTC 保存・日付は JST なので date(ts) で束ねると9時間ずれる。
+            ここで明示的に +9h してから夜の窓に振り分ける。
+            """
+            acc: dict[date_type, list[float]] = {}
+            for ts, val in s.execute(
+                select(MetricSample.ts, MetricSample.value).where(
+                    MetricSample.metric_key == metric_key,
+                    MetricSample.ts >= lo, MetricSample.ts < hi,
+                )
+            ).all():
+                if val is None:
+                    continue
+                jst = ts + timedelta(hours=9)
+                if jst.hour >= 22:
+                    night = (jst + timedelta(days=1)).date()  # 22時台は翌朝が起床日
+                elif jst.hour < 6:
+                    night = jst.date()
+                else:
+                    continue
+                acc.setdefault(night, []).append(float(val))
+            return {d_: sum(v) / len(v) for d_, v in acc.items()}
+
+        temp_night = _night_mean("surface_temperature_c")
+        bedroom_temp = _night_mean("bedroom_temp_c")
+        bedroom_humidity = _night_mean("bedroom_humidity_pct")
+        bedroom_co2 = _night_mean("bedroom_co2_ppm")
 
         morning_light: dict[date_type, float] = {}
         for pd in {d - timedelta(days=1) for d in sleep_rows}:
@@ -239,6 +251,9 @@ def _collect(target: date_type) -> list[dict[str, Any]]:
             "duration": total,
             "morning_light": morning_light.get(prev),
             "temp_night": temp_night.get(d),
+            "bedroom_temp": bedroom_temp.get(d),
+            "bedroom_humidity": bedroom_humidity.get(d),
+            "bedroom_co2": bedroom_co2.get(d),
         })
     return rows
 
