@@ -70,6 +70,11 @@ def today(
         hrv = session.get(HrvDaily, d)
         bb = session.get(BodyBatteryDaily, d)
         summary = session.get(DailySummary, d)
+        # 歩数は Garmin と Apple Health の合流値を唯一の入口から取る
+        # (画面・AI助言・羅針盤で定義がずれないようにする)
+        from app.scoring.activity_signal import resolve_steps
+
+        steps_merged = resolve_steps(session, d)
         weight_row = session.execute(
             select(WeightSample).order_by(WeightSample.ts.desc()).limit(1)
         ).scalar_one_or_none()
@@ -292,7 +297,7 @@ def today(
                     current=bb_latest.value if bb_latest else None,
                     current_ts=bb_latest.ts if bb_latest else None,
                 ),
-                "summary": _summary_to_dict(summary),
+                "summary": _summary_to_dict(summary, steps_merged),
                 "weight": _weight_to_dict(weight_row),
             },
             "advice": _comment_to_dict(comment),
@@ -962,15 +967,21 @@ def _bb_to_dict(
     }
 
 
-def _summary_to_dict(s: DailySummary | None) -> dict[str, Any] | None:
-    if s is None:
+def _summary_to_dict(
+    s: DailySummary | None, steps_merged: float | None = None
+) -> dict[str, Any] | None:
+    if s is None and steps_merged is None:
         return None
+    # ⚠️ 画面に出す歩数は合流値。Garmin 単独だと当日が極端に小さく出る
+    # (実測 195 歩 / 実際 14,043 歩)。
     return {
-        "steps": s.steps,
-        "active_kcal": s.active_kcal,
-        "resting_hr": s.resting_hr,
-        "vo2max": s.vo2max,
-        "training_status": s.training_status,
+        "steps": (
+            int(steps_merged) if steps_merged is not None else (s.steps if s else None)
+        ),
+        "active_kcal": s.active_kcal if s else None,
+        "resting_hr": s.resting_hr if s else None,
+        "vo2max": s.vo2max if s else None,
+        "training_status": s.training_status if s else None,
     }
 
 

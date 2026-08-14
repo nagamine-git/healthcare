@@ -30,6 +30,10 @@ HABITS: list[dict[str, Any]] = [
     # その日の総量が同期時刻にまとめて計上される)
     {"key": "water", "label": "水分", "metric": hydration.PRIMARY_KEYS, "unit": "ml",
      "emoji": "💧", "verb": "1杯 (250ml) 飲もう", "push": True},
+    # ⚠️ ここは HAE 単独で**正しい**。activity_signal.resolve_steps (Garmin と合流) に
+    # 寄せないこと。Garmin の DailySummary はその日の総数が1点で入るだけで時刻分布を
+    # 持たないため、「今の時刻までの累積」を出すこの機能では時間配分ができない。
+    # 日次の合計 (画面・AI助言・羅針盤) は resolve_steps を使う — 用途が違う。
     {"key": "steps", "label": "歩数", "metric": "step_count", "unit": "歩",
      "emoji": "👣", "verb": "少し歩こう", "push": True},
     {"key": "active", "label": "活動", "metric": "active_energy", "unit": "kcal",

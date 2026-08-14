@@ -106,9 +106,14 @@ def _gather_today_activity(target: date_type) -> dict[str, Any]:
 
     with session_scope() as session:
         ds = session.get(DailySummary, target)
+        # ⚠️ ds.steps (Garmin単独) を渡さない。時計が未同期の当日は極端に小さく
+        # (実測 195 歩 / 実際 14,043 歩)、その値を前提に助言が作られてしまう。
+        from app.scoring.activity_signal import resolve_steps
+
+        steps_merged = resolve_steps(session, target)
         out["daily_summary"] = (
             {
-                "steps": ds.steps,
+                "steps": int(steps_merged) if steps_merged is not None else ds.steps,
                 "active_kcal": ds.active_kcal,
                 "resting_hr_bpm": ds.resting_hr,
                 "vo2max": ds.vo2max,

@@ -20,7 +20,6 @@ from app.models.health import (
     BodyCompositionSample,
     CaffeineIntake,
     DailyScore,
-    DailySummary,
     FitnessTestResult,
     HealthCheckup,
     WeightSample,
@@ -323,16 +322,18 @@ def _learning_leaf(target: date_type) -> dict[str, Any]:
 
 
 def _learning_activity_branch(session: Session, target: date_type) -> dict[str, Any]:
-    summary = session.execute(
-        select(DailySummary).order_by(DailySummary.date.desc()).limit(1)
-    ).scalars().first()
-    steps = summary.steps if summary else None
+    # ⚠️ DailySummary.steps (Garmin単独) ではなく合流値を使う。
+    # 直近30日ぶんも同じ入口を通す (グラフと現在値の定義がずれないように)。
+    from app.scoring.activity_signal import resolve_steps
+
+    steps = resolve_steps(session, target)
     sstart = target - timedelta(days=30)
-    srows = session.execute(
-        select(DailySummary.date, DailySummary.steps)
-        .where(DailySummary.date >= sstart, DailySummary.date <= target).order_by(DailySummary.date)
-    ).all()
-    step_series = [{"date": d.isoformat(), "value": v} for d, v in srows if v is not None]
+    step_series = []
+    for i in range((target - sstart).days + 1):
+        d = sstart + timedelta(days=i)
+        v = resolve_steps(session, d)
+        if v is not None:
+            step_series.append({"date": d.isoformat(), "value": v})
     return _branch("life", "学習・活動", [
         _learning_leaf(target),
         _leaf("steps", "歩数 (直近)", unit="歩", current=steps,

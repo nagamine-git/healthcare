@@ -91,23 +91,38 @@ def classify(ev: DayEvidence) -> dict:
     }
 
 
+def _jst_day_bounds(day: date_type) -> tuple[datetime, datetime]:
+    """JST のその1日を、**UTC naive** の [開始, 終了) に変換する。
+
+    ⚠️ MetricSample.ts は UTC 保存、アプリの日付は JST。``func.date(ts)`` で束ねると
+    **9時間ずれる** (JST 00:00-09:00 が前日に落ち、翌日の同時間帯が混入する)。
+    実測でこのズレにより歩数が 14,043 → 5,061 と別物になっていた。
+    """
+    start = datetime.combine(day, datetime.min.time()) - timedelta(hours=9)
+    return start, start + timedelta(days=1)
+
+
 def _sum_metric(session, day: date_type, source: str, key: str) -> float | None:
-    """その日 (date(ts)) の指定ソース・指標の合計。無ければ None。"""
+    """その日 (JST) の指定ソース・指標の合計。無ければ None。"""
+    lo, hi = _jst_day_bounds(day)
     total = session.execute(
         select(func.sum(MetricSample.value)).where(
             MetricSample.source == source,
             MetricSample.metric_key == key,
-            func.date(MetricSample.ts) == day.isoformat(),
+            MetricSample.ts >= lo,
+            MetricSample.ts < hi,
         )
     ).scalar()
     return float(total) if total is not None else None
 
 
 def _has_hr(session, day: date_type) -> bool:
+    lo, hi = _jst_day_bounds(day)   # ⚠️ 同上: date(ts) だと 9 時間ずれる
     row = session.execute(
         select(MetricSample.id).where(
             MetricSample.metric_key == "heart_rate_avg",
-            func.date(MetricSample.ts) == day.isoformat(),
+            MetricSample.ts >= lo,
+            MetricSample.ts < hi,
         ).limit(1)
     ).first()
     return row is not None
@@ -121,8 +136,7 @@ def gather_day(session, day: date_type) -> DayEvidence:
     ds = session.get(DailySummary, day)
     ds_steps = float(ds.steps) if ds and ds.steps is not None else None
     hae_steps = _sum_metric(session, day, "hae", "step_count")
-    step_vals = [s for s in (ds_steps, hae_steps) if s is not None]
-    steps = max(step_vals) if step_vals else None
+    steps = resolve_steps(session, day)
     if ds_steps is not None:
         sources.add("daily_summary")
     if hae_steps is not None:
@@ -193,3 +207,23 @@ def recent_signals(days: int = 14) -> list[dict]:
             day = today - timedelta(days=i)
             out.append(classify(gather_day(session, day)))
     return out
+
+
+def resolve_steps(session, day: date_type) -> float | None:
+    """その日 (JST) の歩数の**唯一の入口**。
+
+    ⚠️ `DailySummary.steps` (Garmin) を直接読まないこと。Garmin の日次サマリは
+    時計が Garmin Connect に同期するまで当日分が伸びず、実測で 195 歩を返している
+    日に Apple Health は 14,043 歩あった。逆に Apple Health は端末を持たずに
+    動いた分を取りこぼす。**どちらも取りこぼす方向にしか外れない**ので最大値を採る
+    (合算は同じ歩行の二重計上になる)。
+
+    この関数を経由しない歩数の読み方を増やさないこと。過去に
+    「AIアドバイスは Garmin 単独」「habit_pace は HAE 単独」「/api/activity だけ合流」
+    と3つの定義が並立し、助言が 10 倍違う値を前提に作られていた。
+    """
+    ds = session.get(DailySummary, day)
+    ds_steps = float(ds.steps) if ds and ds.steps is not None else None
+    hae_steps = _sum_metric(session, day, "hae", "step_count")
+    vals = [v for v in (ds_steps, hae_steps) if v is not None]
+    return max(vals) if vals else None
