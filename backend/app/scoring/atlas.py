@@ -508,4 +508,43 @@ def build_atlas(session: Session) -> dict[str, Any]:
     ) | {"series": total_series, "dynamic_goal": dynamic_daily_goal(total_series)}
     weights = {r.domain: r.weight for r in session.execute(select(DomainWeight)).scalars()}
     _attach_weights(tree, weights)
+    _apply_weights_to_root(tree)
     return tree
+
+
+def _apply_weights_to_root(tree: dict[str, Any]) -> None:
+    """重みを**総合点と並び順にだけ**効かせる (優先度としての解釈)。
+
+    ⚠️ 各ドメインのスコアは**素のまま**にする。ドメインのスコアは「目標にどれだけ
+    近いか」という客観的な量であり、そこに主観の優先度を掛けると、体型が何も変わって
+    いないのに優先度を変えただけで数字が動き、推移グラフが意味を失う。
+    優先度は「どこから手をつけるか」の話なので、総合点と並び順に効かせるのが素直。
+
+    重み 0 は「今は対象外」として集計から外す (0点として引きずり下ろさない)。
+    """
+    # ⚠️ `c.get("weight") or 1.0` と書かないこと。重み 0 は falsy なので 1.0 に化け、
+    # 「対象外」にしたはずのドメインが集計に戻ってくる (テストで検出済み)。
+    def _w(c: dict[str, Any]) -> float:
+        v = c.get("weight")
+        return 1.0 if v is None else float(v)
+
+    children = tree.get("children") or []
+    scored = [(c, _w(c)) for c in children if c.get("score") is not None and _w(c) > 0]
+    if scored:
+        wsum = sum(w for _, w in scored)
+        tree["score_weighted"] = round(
+            sum(c["score"] * w for c, w in scored) / wsum, 1
+        )
+        # 重みを外した素の平均も返す (比較して「優先度でどれだけ変わるか」を見せる)
+        tree["score_unweighted"] = round(
+            sum(c["score"] for c, _ in scored) / len(scored), 1
+        )
+    # 並び順: 「伸びしろ × 優先度」が大きい順 = 次に手をつける価値が高い順。
+    # 従来はスコア昇順だったので、優先度の低いドメインが上に来てしまっていた。
+    tree["children"] = sorted(
+        children,
+        key=lambda c: (
+            c.get("score") is None,
+            -((100.0 - (c.get("score") or 0.0)) * _w(c)),
+        ),
+    )

@@ -152,6 +152,14 @@ function DomainSection({ n, onWeight }: { n: AtlasNode; onWeight?: OnWeight }) {
         <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <span className="text-ink-faint">{open ? "▾" : "▸"}</span>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{n.label}</span>
+          {n.score_weighted != null && n.score_unweighted != null &&
+            Math.abs(n.score_weighted - n.score_unweighted) >= 0.05 && (
+            <span className="mr-1.5 text-[10px] text-ink-faint">
+              優先度反映 <b className="tabular-nums text-act-300">{Math.round(n.score_weighted)}</b>
+              <span className="mx-0.5">/</span>
+              素 <b className="tabular-nums">{Math.round(n.score_unweighted)}</b>
+            </span>
+          )}
           {n.score != null && (
             <span className="telemetry-num text-sm font-bold text-prog-300" title="ドメイン総合点 (0-100)">
               {Math.round(n.score)}

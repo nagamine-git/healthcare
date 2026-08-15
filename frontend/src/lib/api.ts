@@ -1913,6 +1913,10 @@ export type AtlasNode = {
   target: number | null;
   dynamic_goal?: number | null; // 「ギリギリ達成できる」動的な日次目標 (root のみ)
   score: number | null;
+  /** 優先度で重み付けした総合点 (root のみ)。各ドメインの score は素のまま */
+  score_weighted?: number | null;
+  /** 重みを外した素の平均 (root のみ)。比較用 */
+  score_unweighted?: number | null;
   score_pop: number | null;
   series: { date: string; value: number }[];
   weight?: number;
