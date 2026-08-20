@@ -51,7 +51,23 @@ export default defineConfig({
         // Tailscale 外/圏外でも「最後に取れたデータ」が見える (オフライン対応)。
         // runtimeCaching の既定 method は GET なので、POST 系ミューテーションは対象外。
         // (ストリーミング/SSE エンドポイントは存在しないため全 GET を対象にして安全)
+        // 古いキャッシュは必ず捨てる (死んだ資産を指す precache を残さない)
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            // ⚠️ ナビゲーション (HTML) は**ネットワーク優先**。precache された古い
+            // index.html を返し続けると、そこが参照する JS が入れ替わって 404 になった
+            // 瞬間にアプリが起動不能になり、SW が自分を更新できない限り復帰しない
+            // (実際に発生した)。オンラインなら常に最新の HTML を取り、落ちている時だけ
+            // キャッシュに落とす。tailnet 内なので通常は数十 ms で返る。
+            urlPattern: ({ request }: { request: Request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "ascend-html",
+              networkTimeoutSeconds: 5,
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: /\/api\/.*$/,
             handler: "StaleWhileRevalidate",

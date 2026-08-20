@@ -34,6 +34,46 @@
         }
       })();
     </script>
+    <!--
+      起動ガード: Service Worker が**古い index.html** を返し、そこが参照する JS が
+      サーバから消えている (404) と、アプリは何も描画できず「開かない」ように見える。
+      実際に発生した: 端末の PWA が index-C-SfVG-5.js を要求し続けたが、サーバ側は
+      index-Cgm2AqCE.js に入れ替わっており 404。SW は自分を更新できない限りこの状態から
+      永久に抜けられない。
+
+      そこで「一定時間たっても React が #root に何も描かなかった」場合だけ、
+      SW を登録解除しキャッシュを捨てて**1回だけ**リロードする。
+      ⚠️ sessionStorage で1回に制限する。無条件だとリロードループになり、
+      本当に描画が遅いだけの端末を無限に再読み込みさせてしまう。
+    -->
+    <script>
+      (function () {
+        var KEY = "ascend:boot-recovered";
+        function looksDead() {
+          var r = document.getElementById("root");
+          return !r || r.childElementCount === 0;
+        }
+        window.addEventListener("load", function () {
+          setTimeout(function () {
+            if (!looksDead()) { try { sessionStorage.removeItem(KEY); } catch (e) {} return; }
+            try { if (sessionStorage.getItem(KEY)) return; sessionStorage.setItem(KEY, "1"); } catch (e) { return; }
+            var done = function () { location.reload(); };
+            var jobs = [];
+            if (window.caches && caches.keys) {
+              jobs.push(caches.keys().then(function (ks) {
+                return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+              }));
+            }
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister(); }));
+              }));
+            }
+            Promise.all(jobs).then(done, done);
+          }, 8000);
+        });
+      })();
+    </script>
   </head>
   <body class="bg-void text-ink">
     <div id="root"></div>
